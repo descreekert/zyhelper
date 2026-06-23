@@ -81,7 +81,7 @@
             <button @click="store.viewMode = (store.viewMode==='voluntary' ? 'table' : 'voluntary')"
                     class="px-2 py-1 rounded border hover:bg-slate-100"
                     :class="{ 'bg-blue-100 border-blue-300 text-blue-700': store.viewMode==='voluntary' }"
-                    title="我的志愿单">📋 志愿({{ store.voluntary.length }})</button>
+                    title="我的志愿单">📋 志愿({{ voluntary.length }})</button>
             <!-- 次要 (mobile 隐藏, 进 more 菜单) -->
             <button @click="copyShareLink" class="hide-mobile px-2 py-1 rounded border hover:bg-slate-100 no-print no-screenshot" title="复制分享链接">🔗</button>
             <button @click="takeScreenshot" :disabled="ui.screenshotting" class="hide-mobile px-2 py-1 rounded border hover:bg-slate-100 disabled:opacity-50 no-print no-screenshot" title="截图保存">{{ ui.screenshotting ? '⏳' : '📷' }}</button>
@@ -240,17 +240,31 @@
 
           <!-- Top sort + count bar -->
           <div class="flex items-center gap-3 mb-3 flex-wrap">
-            <!-- voluntary 视图: 显示志愿单标题 + 配额 + 清空 -->
-            <div v-if="store.viewMode === 'voluntary'" class="text-sm text-slate-600">
-              <span class="font-bold text-lg text-blue-600">📋 我的志愿单 · {{ store.voluntary.length }} 项</span>
-              <span v-if="cwb && voluntaryTierCounts" class="text-xs ml-3">
+            <!-- voluntary 视图: 列表选择 + 配额 + 清空 -->
+            <div v-if="store.viewMode === 'voluntary'" class="text-sm text-slate-600 flex items-center gap-2 flex-wrap">
+              <span class="font-bold">📋</span>
+              <select :value="store.activeVoluntaryName"
+                      @change="switchVoluntaryList($event.target.value)"
+                      class="border rounded px-2 py-1 text-sm font-bold text-blue-600">
+                <option v-for="name in Object.keys(store.voluntaryLists)" :key="name" :value="name">
+                  {{ name }} ({{ (store.voluntaryLists[name] || []).length }})
+                </option>
+              </select>
+              <button @click="newVoluntaryList()" class="text-xs px-1.5 py-1 border rounded hover:bg-blue-50 text-blue-600" title="新建志愿单">+ 新建</button>
+              <button @click="renameVoluntaryList" class="text-xs px-1.5 py-1 border rounded hover:bg-slate-50" title="重命名">✎</button>
+              <button @click="duplicateVoluntaryList" class="text-xs px-1.5 py-1 border rounded hover:bg-slate-50" title="复制">📋</button>
+              <button @click="deleteVoluntaryList" class="text-xs px-1.5 py-1 border rounded hover:bg-red-50 text-red-500"
+                      :disabled="Object.keys(store.voluntaryLists).length === 1"
+                      title="删除当前">🗑</button>
+              <span class="text-slate-500 ml-2">· {{ voluntary.length }} 项</span>
+              <span v-if="cwb && voluntaryTierCounts" class="text-xs">
                 (<span class="text-red-600">冲 {{ voluntaryTierCounts.chong }}/{{ paneTargets.chong }}</span>,
                 <span class="text-amber-600">稳 {{ voluntaryTierCounts.wen }}/{{ paneTargets.wen }}</span>,
                 <span class="text-green-600">保 {{ voluntaryTierCounts.bao }}/{{ paneTargets.bao }}</span>)
               </span>
-              <button @click="exportVoluntaryHtml" v-if="store.voluntary.length" class="text-xs ml-3 text-blue-600 hover:underline">📤 导出志愿 HTML</button>
-              <button @click="exportVoluntaryByTier" class="text-xs ml-2 text-amber-600 hover:underline">📥 按档 CSV</button>
-              <button @click="clearVoluntary" v-if="store.voluntary.length" class="text-xs ml-2 text-red-500 hover:underline">清空</button>
+              <button @click="exportVoluntaryHtml" v-if="voluntary.length" class="text-xs ml-2 text-blue-600 hover:underline">📤 HTML</button>
+              <button @click="exportVoluntaryByTier" class="text-xs ml-1 text-amber-600 hover:underline">📥 按档 CSV</button>
+              <button @click="clearVoluntary" v-if="voluntary.length" class="text-xs ml-1 text-red-500 hover:underline">清空</button>
             </div>
             <!-- 其它视图: 显示筛后计数 -->
             <div v-else class="text-sm text-slate-600">
@@ -340,7 +354,7 @@
             :sort-keys="store.sortKeys"
             :cwb="cwb"
             :pane-targets="paneTargets"
-            :voluntary="store.voluntary"
+            :voluntary="voluntary"
             :voluntary-set="voluntarySet"
             :column-widths="store.columnWidths"
             :plan-overrides="store.planOverrides"

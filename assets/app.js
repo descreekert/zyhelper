@@ -6,7 +6,9 @@ const { createApp, ref, reactive, computed, watch, onMounted, onUnmounted, nextT
 // ========== 工具函数 ==========
 
 const LS_KEY_FAV   = "zyhelper_favorites_v1";
-const LS_KEY_VOL   = "zyhelper_voluntary_v1";
+const LS_KEY_VOL   = "zyhelper_voluntary_v1";        // 旧 (单列表)
+const LS_KEY_VOL_LISTS = "zyhelper_voluntary_lists_v2";  // 新 (多列表 {name: ids[]})
+const LS_KEY_VOL_ACTIVE = "zyhelper_voluntary_active_v2";
 const LS_KEY_PRIORITY_OVR = "zyhelper_priority_overrides_v1";
 const LS_KEY_PLAN_OVR = "zyhelper_plan_overrides_v1";
 const LS_KEY_PRESET= "zyhelper_presets_v2";   // v2: 含 subjects + allowed 关键词维度
@@ -467,8 +469,16 @@ const store = reactive({
   columnOrder: layoutInit.columnOrder || null,   // null = 默认顺序
   columnWidths: layoutInit.columnWidths || {},    // {key: px}, 用户拖拽后持久化
   favorites: new Set(loadLS(LS_KEY_FAV, [])),
-  // 志愿单: ordered array of plan ids (取代 favorites 的语义, favorites 保留为兼容)
-  voluntary: loadLS(LS_KEY_VOL, null) || loadLS(LS_KEY_FAV, []),   // 首次加载从 favorites 迁移
+  // 志愿单 (多列表): { 列表名: [ids] }
+  voluntaryLists: (() => {
+    const newFormat = loadLS(LS_KEY_VOL_LISTS, null);
+    if (newFormat && Object.keys(newFormat).length) return newFormat;
+    // 迁移: 旧单列表 → "默认"
+    const oldSingle = loadLS(LS_KEY_VOL, null);
+    const oldFav = loadLS(LS_KEY_FAV, []);
+    return { "默认": oldSingle || oldFav || [] };
+  })(),
+  activeVoluntaryName: loadLS(LS_KEY_VOL_ACTIVE, "默认"),
   // 用户自定义排序覆盖 (null = 用 priority.json 默认; Array<name> = 自定义顺序)
   priorityOverrides: loadLS(LS_KEY_PRIORITY_OVR, { schools: null, cities: null, majorClasses: null, majors: null }),
   // 用户手动修改的 plan 字段 (e.g. ref25Score) — { [planId]: { ref25Score, ref25Rank } }
@@ -514,7 +524,15 @@ const ui = reactive({
 });
 
 watch(() => Array.from(store.favorites), v => saveLS(LS_KEY_FAV, v));
-watch(() => [...store.voluntary], v => saveLS(LS_KEY_VOL, v));
+watch(() => store.voluntaryLists, v => saveLS(LS_KEY_VOL_LISTS, v), { deep: true });
+watch(() => store.activeVoluntaryName, v => saveLS(LS_KEY_VOL_ACTIVE, v));
+// 保证 active 名字总是 valid (lists 为空时建一个 "默认")
+if (!store.voluntaryLists || !Object.keys(store.voluntaryLists).length) {
+  store.voluntaryLists = { "默认": [] };
+}
+if (!store.voluntaryLists[store.activeVoluntaryName]) {
+  store.activeVoluntaryName = Object.keys(store.voluntaryLists)[0];
+}
 watch(() => store.priorityOverrides, v => saveLS(LS_KEY_PRIORITY_OVR, v), { deep: true });
 watch(() => store.planOverrides, v => saveLS(LS_KEY_PLAN_OVR, v), { deep: true });
 watch(ui, v => saveLS(LS_KEY_UI, { ...v, detailPlan: null }), { deep: true });
@@ -2664,7 +2682,7 @@ createApp({
       // voluntary 视图: 用志愿单 array 作为数据源 (按用户志愿顺序)
       if (store.viewMode === "voluntary") {
         const m = planByIdMap.value;
-        return store.voluntary.map(id => m[id]).filter(Boolean);
+        return voluntary.value.map(id => m[id]).filter(Boolean);
       }
       if (!store.pageSize) return sorted.value;
       const start = (currentPage.value - 1) * store.pageSize;
@@ -2685,7 +2703,7 @@ createApp({
       const c = { chong: 0, wen: 0, bao: 0 };
       if (!cwb.value) return c;
       const m = planByIdMap.value;
-      for (const id of store.voluntary) {
+      for (const id of voluntary.value) {
         const p = m[id];
         if (!p) continue;
         const t = planTier(p, cwb.value);
@@ -2695,7 +2713,7 @@ createApp({
     });
     // 志愿单 HTML 导出 (志愿填报标准 6 列格式)
     async function exportVoluntaryHtml() {
-      if (!store.voluntary.length) { alert("志愿单为空"); return; }
+      if (!voluntary.value.length) { alert("志愿单为空"); return; }
       let templateHtml;
       try {
         const resp = await fetch("assets/voluntary_template.html");
@@ -2705,7 +2723,7 @@ createApp({
         return;
       }
       const m = planByIdMap.value;
-      const items = store.voluntary.map(id => m[id]).filter(Boolean);
+      const items = voluntary.value.map(id => m[id]).filter(Boolean);
       const dt = new Date();
       const dateStr = `${dt.getFullYear()}_${dt.getMonth()+1}_${dt.getDate()}_${dt.getHours()}_${dt.getMinutes()}_${dt.getSeconds()}`;
       const esc = s => String(s ?? "").replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
@@ -2739,14 +2757,15 @@ createApp({
       const blob = new Blob([out], { type: "text/html;charset=utf-8" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a'); a.href = url;
-      a.download = `志愿_${dateStr}.html`;
+      const safeName = (store.activeVoluntaryName || "志愿").replace(/[\/\\:*?"<>|]/g, "_");
+      a.download = `${safeName}_${dateStr}.html`;
       a.click();
       URL.revokeObjectURL(url);
     }
 
     // 志愿单按档导出
     function exportVoluntaryByTier() {
-      if (!store.voluntary.length) { alert("志愿单为空"); return; }
+      if (!voluntary.value.length) { alert("志愿单为空"); return; }
       const m = planByIdMap.value;
       const cols = ["schoolName", "majorName26", "majorName25", "city", "schoolTag",
                     "ref25Score", "ref25Rank", "score25", "rank25",
@@ -2763,8 +2782,8 @@ createApp({
       // 按 tier 分组, 但保持志愿单内顺序
       const groups = { chong: [], wen: [], bao: [], other: [] };
       const orderMap = new Map();
-      store.voluntary.forEach((id, i) => orderMap.set(id, i + 1));
-      for (const id of store.voluntary) {
+      voluntary.value.forEach((id, i) => orderMap.set(id, i + 1));
+      for (const id of voluntary.value) {
         const p = m[id];
         if (!p) continue;
         const t = cwb.value ? planTier(p, cwb.value) : null;
@@ -2834,55 +2853,110 @@ createApp({
       else store.favorites.add(id);
       store.favorites = new Set(store.favorites);
     }
-    // 志愿单操作
-    const voluntarySet = computed(() => new Set(store.voluntary));
+    // 当前激活志愿单 (computed, 2-way 代理到 voluntaryLists[activeName])
+    const voluntary = computed({
+      get() { return store.voluntaryLists[store.activeVoluntaryName] || []; },
+      set(arr) { store.voluntaryLists[store.activeVoluntaryName] = arr; },
+    });
+    // 多列表管理
+    function newVoluntaryList(name) {
+      if (!name) {
+        name = prompt("新志愿单名 (建议: '650 分志愿' 之类):", `${ui.myScore || ''}分志愿`);
+        if (!name) return;
+      }
+      if (store.voluntaryLists[name]) { alert(`"${name}" 已存在`); return; }
+      store.voluntaryLists = { ...store.voluntaryLists, [name]: [] };
+      store.activeVoluntaryName = name;
+    }
+    function renameVoluntaryList() {
+      const oldName = store.activeVoluntaryName;
+      const newName = prompt("新名:", oldName);
+      if (!newName || newName === oldName) return;
+      if (store.voluntaryLists[newName]) { alert("已存在"); return; }
+      const newLists = {};
+      for (const k of Object.keys(store.voluntaryLists)) {
+        newLists[k === oldName ? newName : k] = store.voluntaryLists[k];
+      }
+      store.voluntaryLists = newLists;
+      store.activeVoluntaryName = newName;
+    }
+    function duplicateVoluntaryList() {
+      const oldName = store.activeVoluntaryName;
+      const newName = prompt("复制为新志愿单名:", `${oldName} 副本`);
+      if (!newName) return;
+      if (store.voluntaryLists[newName]) { alert("已存在"); return; }
+      store.voluntaryLists = {
+        ...store.voluntaryLists,
+        [newName]: [...(store.voluntaryLists[oldName] || [])],
+      };
+      store.activeVoluntaryName = newName;
+    }
+    function deleteVoluntaryList() {
+      const name = store.activeVoluntaryName;
+      const keys = Object.keys(store.voluntaryLists);
+      if (keys.length === 1) { alert("至少保留 1 个志愿单"); return; }
+      const cnt = store.voluntaryLists[name]?.length || 0;
+      if (!confirm(`删除志愿单 "${name}" (${cnt} 项)?`)) return;
+      const newLists = { ...store.voluntaryLists };
+      delete newLists[name];
+      store.voluntaryLists = newLists;
+      store.activeVoluntaryName = Object.keys(newLists)[0];
+    }
+    function switchVoluntaryList(name) {
+      if (store.voluntaryLists[name]) store.activeVoluntaryName = name;
+    }
+
+    // 志愿单操作 (基于当前激活列表)
+    const voluntarySet = computed(() => new Set(voluntary.value));
     function isInVoluntary(id) { return voluntarySet.value.has(id); }
     function voluntaryIndex(id) {
-      const i = store.voluntary.indexOf(id);
+      const i = voluntary.value.indexOf(id);
       return i >= 0 ? i + 1 : 0;
     }
     function toggleVoluntary(id) {
-      const i = store.voluntary.indexOf(id);
-      if (i >= 0) store.voluntary.splice(i, 1);
-      else store.voluntary.push(id);
+      const arr = [...voluntary.value];
+      const i = arr.indexOf(id);
+      if (i >= 0) arr.splice(i, 1);
+      else arr.push(id);
+      voluntary.value = arr;
     }
     function moveVoluntaryUp(id) {
-      const i = store.voluntary.indexOf(id);
+      const i = voluntary.value.indexOf(id);
       if (i > 0) {
-        const arr = [...store.voluntary];
+        const arr = [...voluntary.value];
         [arr[i-1], arr[i]] = [arr[i], arr[i-1]];
-        store.voluntary = arr;
+        voluntary.value = arr;
       }
     }
     function moveVoluntaryDown(id) {
-      const i = store.voluntary.indexOf(id);
-      if (i >= 0 && i < store.voluntary.length - 1) {
-        const arr = [...store.voluntary];
+      const i = voluntary.value.indexOf(id);
+      if (i >= 0 && i < voluntary.value.length - 1) {
+        const arr = [...voluntary.value];
         [arr[i+1], arr[i]] = [arr[i], arr[i+1]];
-        store.voluntary = arr;
+        voluntary.value = arr;
       }
     }
     function moveVoluntaryToTop(id) {
-      const i = store.voluntary.indexOf(id);
+      const i = voluntary.value.indexOf(id);
       if (i > 0) {
-        const arr = [...store.voluntary];
+        const arr = [...voluntary.value];
         const [item] = arr.splice(i, 1);
         arr.unshift(item);
-        store.voluntary = arr;
+        voluntary.value = arr;
       }
     }
     function moveVoluntaryToBottom(id) {
-      const i = store.voluntary.indexOf(id);
-      if (i >= 0 && i < store.voluntary.length - 1) {
-        const arr = [...store.voluntary];
+      const i = voluntary.value.indexOf(id);
+      if (i >= 0 && i < voluntary.value.length - 1) {
+        const arr = [...voluntary.value];
         const [item] = arr.splice(i, 1);
         arr.push(item);
-        store.voluntary = arr;
+        voluntary.value = arr;
       }
     }
     function clearVoluntary() {
-      if (confirm(`确认清空当前志愿单 (${store.voluntary.length} 项)?`)) {
-        store.voluntary = [];
+      if (confirm(`确认清空当前志愿单 "${store.activeVoluntaryName}" (${voluntary.value.length} 项)?`)) {
+        voluntary.value = [];
       }
     }
     function toggleExpand(id) {
@@ -3200,8 +3274,9 @@ createApp({
       ratioSumOk, resetRatios,
       filtered, sorted, paged, planByIdMap, compareIdSet, keywordCandidatePool,
       openDetail, toggleCompare, toggleFavorite, toggleExpand, saveFavorites, currentExpandedRows,
-      voluntarySet, isInVoluntary, voluntaryIndex, toggleVoluntary,
+      voluntary, voluntarySet, isInVoluntary, voluntaryIndex, toggleVoluntary,
       moveVoluntaryUp, moveVoluntaryDown, moveVoluntaryToTop, moveVoluntaryToBottom, clearVoluntary,
+      newVoluntaryList, renameVoluntaryList, duplicateVoluntaryList, deleteVoluntaryList, switchVoluntaryList,
       voluntaryTierCounts, exportVoluntaryByTier, exportVoluntaryHtml,
       resetFilters, onApplyTier, reloadData,
       exportCsv, toggleDark,
