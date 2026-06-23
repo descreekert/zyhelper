@@ -6,6 +6,7 @@ const { createApp, ref, reactive, computed, watch, onMounted, onUnmounted } = Vu
 // ========== 工具函数 ==========
 
 const LS_KEY_FAV   = "zyhelper_favorites_v1";
+const LS_KEY_VOL   = "zyhelper_voluntary_v1";
 const LS_KEY_PRESET= "zyhelper_presets_v2";   // v2: 含 subjects + allowed 关键词维度
 const LS_KEY_UI    = "zyhelper_ui_v1";
 
@@ -449,6 +450,8 @@ const store = reactive({
   hiddenColumns: new Set(layoutInit.hiddenColumns || []),
   columnOrder: layoutInit.columnOrder || null,   // null = 默认顺序
   favorites: new Set(loadLS(LS_KEY_FAV, [])),
+  // 志愿单: ordered array of plan ids (取代 favorites 的语义, favorites 保留为兼容)
+  voluntary: loadLS(LS_KEY_VOL, null) || loadLS(LS_KEY_FAV, []),   // 首次加载从 favorites 迁移
   compareList: [],
   expandedRows: new Set(),
   // P2.1: 筛选预设 [{name, filters: serialized}, ...]
@@ -487,6 +490,7 @@ const ui = reactive({
 });
 
 watch(() => Array.from(store.favorites), v => saveLS(LS_KEY_FAV, v));
+watch(() => [...store.voluntary], v => saveLS(LS_KEY_VOL, v));
 watch(ui, v => saveLS(LS_KEY_UI, { ...v, detailPlan: null }), { deep: true });
 
 // ========== 组件 ==========
@@ -1159,11 +1163,11 @@ const ConfBadge = {
                   :class="'conf-'+conf">{{ conf }}</span>`,
 };
 
-// 单条结果卡片 (Item 10: 加变化; Item 6: 按 tier 左边框颜色)
+// 单条结果卡片 (Item 10: 加变化; Item 6: 按 tier 左边框颜色; V6: 加 voluntary badge)
 const PlanCard = {
   components: { TierBadge, ConfBadge },
-  props: ["plan", "isCompared", "isFav", "tier"],
-  emits: ["open-detail", "toggle-compare", "toggle-favorite"],
+  props: ["plan", "isCompared", "isFav", "tier", "volIndex"],
+  emits: ["open-detail", "toggle-compare", "toggle-favorite", "toggle-voluntary"],
   template: `
     <div class="plan-card bg-white border border-slate-200 rounded-lg p-3 cursor-pointer"
          :class="tier ? 'tier-border-'+tier : ''"
@@ -1217,9 +1221,11 @@ const PlanCard = {
           </div>
         </div>
         <div class="flex flex-col items-end gap-1">
-          <button @click.stop="$emit('toggle-favorite', plan.id)"
-                  class="text-lg"
-                  :class="isFav ? 'text-rose-500' : 'text-slate-300 hover:text-rose-300'">♥</button>
+          <button @click.stop="$emit('toggle-voluntary', plan.id)"
+                  :class="volIndex ? 'vol-badge vol-in' : 'vol-badge vol-out'"
+                  :title="volIndex ? '点击移出志愿单' : '加入志愿单'">
+            {{ volIndex ? '#' + volIndex : '+ 志愿' }}
+          </button>
           <button @click.stop="$emit('toggle-compare', plan.id)"
                   class="text-xs px-2 py-1 rounded border"
                   :class="isCompared ? 'bg-amber-100 border-amber-400 text-amber-700' : 'border-slate-300 hover:bg-slate-50'">
@@ -1231,17 +1237,23 @@ const PlanCard = {
   `,
 };
 
-// 结果列表 (Items 6/7/8/9/10 第 3 轮; V5: 加 pane 模式)
+// 结果列表 (Items 6/7/8/9/10 第 3 轮; V5: 加 pane 模式; V6: 加 voluntary 模式)
 const ResultList = {
   components: { PlanCard, TierBadge, ConfBadge },
   props: ["plans", "total", "currentPage", "pageSize", "compareSet", "favorites",
           "viewMode", "expandedRows", "tierMap",
-          "columns", "sortKeys", "cwb", "paneTargets"],
+          "columns", "sortKeys", "cwb", "paneTargets",
+          "voluntary", "voluntarySet"],
   emits: ["page-change", "open-detail", "toggle-compare", "toggle-favorite", "toggle-expand",
-          "sort-col", "col-drop"],
+          "sort-col", "col-drop",
+          "toggle-voluntary", "vol-up", "vol-down", "vol-top", "vol-bottom"],
   setup(props, { emit }) {
     function fmtDuration(p) { return formatDuration(p.duration || p.duration25); }
     function formatDur25(p) { return formatDuration(p.duration25 || p.duration); }
+    function volIdx(id) {
+      const i = props.voluntary?.indexOf(id);
+      return (i !== undefined && i >= 0) ? i + 1 : 0;
+    }
     function rowTier(p) {
       return props.tierMap ? (props.tierMap.get(p.id) || null) : null;
     }
@@ -1314,7 +1326,7 @@ const ResultList = {
     }));
     return { fmtDuration, formatDur25, rowTier, isExpanded, cellValue, sortIndicator,
              onColDragStart, onColDrop, startResize,
-             paneLists, paneCounts };
+             paneLists, paneCounts, volIdx };
   },
   computed: {
     totalPages() {
@@ -1328,6 +1340,92 @@ const ResultList = {
         <div class="text-4xl mb-2">🤔</div>
         <div>未找到符合条件的招生计划</div>
         <div class="text-sm mt-1">尝试调整左侧筛选条件</div>
+      </div>
+
+      <!-- 志愿单视图 (V6: 加序号 + 上下移 + 不可排序) -->
+      <div v-else-if="viewMode==='voluntary'" class="overflow-x-auto">
+        <div v-if="plans.length === 0" class="text-center text-slate-400 py-16">
+          <div class="text-4xl mb-2">📋</div>
+          <div>志愿单为空</div>
+          <div class="text-sm mt-1">回到查询页, 点击 "+ 志愿" 加入招生计划</div>
+        </div>
+        <table v-else class="resizable-table w-full bg-white border text-xs">
+          <thead>
+            <tr>
+              <th style="width:40px" class="text-center">#</th>
+              <template v-for="c in columns" :key="c.key">
+                <th v-if="c.key !== 'actions'"
+                    :class="['col-'+c.key, c.fixed ? 'fixed-col' : '']"
+                    :style="{ width: c.width + 'px' }">
+                  <span>{{ c.label }}</span>
+                </th>
+              </template>
+              <th style="width:130px" class="text-center">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            <template v-for="(p, idx) in plans" :key="p.id">
+              <tr class="hover:bg-slate-50 cursor-pointer"
+                  :class="[rowTier(p) ? 'tier-row-'+rowTier(p) : '', isExpanded(p.id) ? 'main-row-expanded' : '']"
+                  @click="$emit('toggle-expand', p.id)">
+                <th class="vol-num-cell text-center">{{ idx + 1 }}</th>
+                <template v-for="c in columns" :key="c.key">
+                  <td v-if="c.key==='actions'"></td>
+                  <td v-else-if="c.key==='tier'" :class="'col-'+c.key">
+                    <span v-if="rowTier(p)" class="tier-cell" :class="'tier-cell-'+rowTier(p)">
+                      {{ rowTier(p) === 'chong' ? '冲' : rowTier(p) === 'wen' ? '稳' : '保' }}
+                    </span>
+                  </td>
+                  <td v-else-if="c.key==='school'" :class="'col-'+c.key">
+                    <tier-badge :tag="p.schoolTag"></tier-badge>
+                    <span class="ml-1">{{ p.schoolName }}</span>
+                    <span v-if="p.schoolRank" class="text-slate-400 ml-1">#{{ p.schoolRank }}</span>
+                  </td>
+                  <td v-else-if="c.key==='major'" :class="['col-'+c.key, 'truncate']" :title="p.majorName26 || p.majorName25">
+                    <span v-if="p.isNew==='新增'" class="badge-new">新</span>
+                    <span v-if="p.isStopped" class="badge-stop">停</span>
+                    <span v-if="p.diff && !p.isStopped && p.isNew !== '新增'"
+                          class="badge-diff" :title="p.diff">变</span>
+                    <span v-if="p.isMidOutside" class="badge-mid">中外</span>
+                    {{ p.majorName26 || p.majorName25 || '—' }}
+                  </td>
+                  <td v-else-if="c.key==='score'" :class="['col-'+c.key, 'font-bold text-blue-700 text-right']">
+                    {{ cellValue(p, c.key) }}
+                  </td>
+                  <td v-else-if="c.key==='rank' || c.key==='tuition'" :class="['col-'+c.key, 'text-right']">{{ cellValue(p, c.key) }}</td>
+                  <td v-else-if="c.key==='conf'" :class="'col-'+c.key"><conf-badge :conf="cellValue(p, c.key)"></conf-badge></td>
+                  <td v-else-if="c.key==='num' || c.key==='dur' || c.key==='sp' || c.key==='mp'"
+                      :class="['col-'+c.key, 'text-center']">{{ cellValue(p, c.key) }}</td>
+                  <td v-else :class="['col-'+c.key, 'truncate']" :title="cellValue(p, c.key)">{{ cellValue(p, c.key) }}</td>
+                </template>
+                <td class="text-center vol-actions">
+                  <button @click.stop="$emit('vol-top', p.id)" :disabled="idx === 0"
+                          class="px-1 hover:text-blue-600 disabled:opacity-30" title="置顶">⬆⬆</button>
+                  <button @click.stop="$emit('vol-up', p.id)" :disabled="idx === 0"
+                          class="px-1 hover:text-blue-600 disabled:opacity-30" title="上移">⬆</button>
+                  <button @click.stop="$emit('vol-down', p.id)" :disabled="idx === plans.length-1"
+                          class="px-1 hover:text-blue-600 disabled:opacity-30" title="下移">⬇</button>
+                  <button @click.stop="$emit('vol-bottom', p.id)" :disabled="idx === plans.length-1"
+                          class="px-1 hover:text-blue-600 disabled:opacity-30" title="置底">⬇⬇</button>
+                  <button @click.stop="$emit('toggle-voluntary', p.id)"
+                          class="px-1 text-red-500 hover:text-red-700" title="移除">✕</button>
+                </td>
+              </tr>
+              <!-- 展开行 (复用主表格的展开行) -->
+              <tr v-if="isExpanded(p.id)" class="expanded-row">
+                <td :colspan="columns.length + 1" class="bg-slate-50 p-3">
+                  <div class="text-sm">
+                    <div><b>所在省:</b> {{ p.province }} · {{ p.cityTier }} · <b>类型:</b> {{ p.schoolType }} · <b>主管:</b> {{ p.managing || '—' }}</div>
+                    <div class="mt-1"><b>学科评估:</b> {{ p.rankEval || p.rankEval25 || '—' }}</div>
+                    <div class="mt-1"><b>软科评级:</b> {{ p.rankSoftware || '—' }}</div>
+                    <div class="mt-1" v-if="p.remarks"><b class="text-amber-700">📌 备注:</b> {{ p.remarks }}</div>
+                    <div class="mt-1" v-if="p.diffSummary"><b class="text-orange-700">📈 变化:</b> {{ p.diffSummary }}</div>
+                  </div>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
       </div>
 
       <!-- 三栏冲稳保 (3.16.1) -->
@@ -1363,9 +1461,11 @@ const ResultList = {
                    :is-compared="compareSet.has(p.id)"
                    :is-fav="favorites.has(p.id)"
                    :tier="rowTier(p)"
+                   :vol-index="volIdx(p.id)"
                    @open-detail="$emit('open-detail', $event)"
                    @toggle-compare="$emit('toggle-compare', $event)"
-                   @toggle-favorite="$emit('toggle-favorite', $event)"></plan-card>
+                   @toggle-favorite="$emit('toggle-favorite', $event)"
+                   @toggle-voluntary="$emit('toggle-voluntary', $event)"></plan-card>
       </div>
 
       <!-- 表格视图: 数据驱动 (V4: drag/sort/resize 拆子元素, sticky header) -->
@@ -1428,12 +1528,15 @@ const ResultList = {
                   <td v-else-if="c.key==='num' || c.key==='dur' || c.key==='sp' || c.key==='mp'"
                       :class="['col-'+c.key, 'text-center']">{{ cellValue(p, c.key) }}</td>
                   <td v-else-if="c.key==='actions'" :class="'col-'+c.key">
-                    <button @click.stop="$emit('toggle-favorite', p.id)"
-                            :class="favorites.has(p.id) ? 'text-rose-500' : 'text-slate-300'">♥</button>
+                    <button @click.stop="$emit('toggle-voluntary', p.id)"
+                            :class="volIdx(p.id) ? 'vol-badge vol-in' : 'vol-badge vol-out'"
+                            :title="volIdx(p.id) ? '点击移出志愿单 (序号 ' + volIdx(p.id) + ')' : '加入志愿单'">
+                      {{ volIdx(p.id) ? '#' + volIdx(p.id) : '+志愿' }}
+                    </button>
                     <button @click.stop="$emit('toggle-compare', p.id)"
                             class="ml-1 px-1 border rounded text-xs"
                             :class="compareSet.has(p.id) ? 'bg-amber-100 border-amber-400 text-amber-700' : ''">
-                      {{ compareSet.has(p.id) ? '✓' : '+' }}
+                      {{ compareSet.has(p.id) ? '✓' : '+对' }}
                     </button>
                     <button @click.stop="$emit('open-detail', p)"
                             class="ml-1 text-blue-500 hover:underline text-xs">详</button>
@@ -2252,7 +2355,12 @@ createApp({
     });
     const sorted = computed(() => applySort(filtered.value, store.sortKeys));
     const paged = computed(() => {
-      if (!store.pageSize) return sorted.value;   // pageSize=0 表示不分页
+      // voluntary 视图: 用志愿单 array 作为数据源 (按用户志愿顺序)
+      if (store.viewMode === "voluntary") {
+        const m = planByIdMap.value;
+        return store.voluntary.map(id => m[id]).filter(Boolean);
+      }
+      if (!store.pageSize) return sorted.value;
       const start = (currentPage.value - 1) * store.pageSize;
       return sorted.value.slice(start, start + store.pageSize);
     });
@@ -2266,6 +2374,63 @@ createApp({
       wen:   Math.round(ui.totalVolunteers * ui.ratioWen),
       bao:   Math.round(ui.totalVolunteers * ui.ratioBao),
     }));
+    // 志愿单各档计数 (供 voluntary 视图顶部显示)
+    const voluntaryTierCounts = computed(() => {
+      const c = { chong: 0, wen: 0, bao: 0 };
+      if (!cwb.value) return c;
+      const m = planByIdMap.value;
+      for (const id of store.voluntary) {
+        const p = m[id];
+        if (!p) continue;
+        const t = planTier(p, cwb.value);
+        if (t) c[t]++;
+      }
+      return c;
+    });
+    // 志愿单按档导出
+    function exportVoluntaryByTier() {
+      if (!store.voluntary.length) { alert("志愿单为空"); return; }
+      const m = planByIdMap.value;
+      const cols = ["schoolName", "majorName26", "majorName25", "city", "schoolTag",
+                    "ref25Score", "ref25Rank", "score25", "rank25",
+                    "enrollNum26", "tuition", "subjectReq", "duration",
+                    "rankEval", "rankSoftware", "baoyanDetail", "remarks", "diffSummary"];
+      const head = ["学校","26招生专业","25招生专业","城市","标签",
+                    "25参考分","25参考位次","25实际分","25实际位次",
+                    "26计划数","学费","选科","学制","学科评估","软科评级","保研率","备注","变化"];
+      const esc = v => {
+        if (v == null) return "";
+        const s = String(v).replace(/"/g, '""');
+        return /[",\n]/.test(s) ? `"${s}"` : s;
+      };
+      // 按 tier 分组, 但保持志愿单内顺序
+      const groups = { chong: [], wen: [], bao: [], other: [] };
+      const orderMap = new Map();
+      store.voluntary.forEach((id, i) => orderMap.set(id, i + 1));
+      for (const id of store.voluntary) {
+        const p = m[id];
+        if (!p) continue;
+        const t = cwb.value ? planTier(p, cwb.value) : null;
+        (groups[t] || groups.other).push({ p, idx: orderMap.get(id) });
+      }
+      const lines = ["档,志愿序号," + head.join(",")];
+      const labels = { chong: "冲档", wen: "稳档", bao: "保档", other: "未分类" };
+      for (const tier of ["chong", "wen", "bao", "other"]) {
+        const g = groups[tier];
+        if (!g.length) continue;
+        lines.push(`${labels[tier]} (${g.length} 条):`);
+        for (const { p, idx } of g) {
+          lines.push(`${labels[tier]},#${idx},` + cols.map(c => esc(p[c])).join(","));
+        }
+      }
+      const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url;
+      a.download = `志愿单_${new Date().toISOString().slice(0,10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
     // 当前筛后各档计数 (供表格头显示)
     const filteredTierCounts = computed(() => {
       const c = { chong: 0, wen: 0, bao: 0 };
@@ -2309,6 +2474,57 @@ createApp({
       if (store.favorites.has(id)) store.favorites.delete(id);
       else store.favorites.add(id);
       store.favorites = new Set(store.favorites);
+    }
+    // 志愿单操作
+    const voluntarySet = computed(() => new Set(store.voluntary));
+    function isInVoluntary(id) { return voluntarySet.value.has(id); }
+    function voluntaryIndex(id) {
+      const i = store.voluntary.indexOf(id);
+      return i >= 0 ? i + 1 : 0;
+    }
+    function toggleVoluntary(id) {
+      const i = store.voluntary.indexOf(id);
+      if (i >= 0) store.voluntary.splice(i, 1);
+      else store.voluntary.push(id);
+    }
+    function moveVoluntaryUp(id) {
+      const i = store.voluntary.indexOf(id);
+      if (i > 0) {
+        const arr = [...store.voluntary];
+        [arr[i-1], arr[i]] = [arr[i], arr[i-1]];
+        store.voluntary = arr;
+      }
+    }
+    function moveVoluntaryDown(id) {
+      const i = store.voluntary.indexOf(id);
+      if (i >= 0 && i < store.voluntary.length - 1) {
+        const arr = [...store.voluntary];
+        [arr[i+1], arr[i]] = [arr[i], arr[i+1]];
+        store.voluntary = arr;
+      }
+    }
+    function moveVoluntaryToTop(id) {
+      const i = store.voluntary.indexOf(id);
+      if (i > 0) {
+        const arr = [...store.voluntary];
+        const [item] = arr.splice(i, 1);
+        arr.unshift(item);
+        store.voluntary = arr;
+      }
+    }
+    function moveVoluntaryToBottom(id) {
+      const i = store.voluntary.indexOf(id);
+      if (i >= 0 && i < store.voluntary.length - 1) {
+        const arr = [...store.voluntary];
+        const [item] = arr.splice(i, 1);
+        arr.push(item);
+        store.voluntary = arr;
+      }
+    }
+    function clearVoluntary() {
+      if (confirm(`确认清空当前志愿单 (${store.voluntary.length} 项)?`)) {
+        store.voluntary = [];
+      }
     }
     function toggleExpand(id) {
       // V4 Item 8: 单展开模式. 点击其他行自动关闭当前展开行.
@@ -2572,6 +2788,9 @@ createApp({
       ratioSumOk, resetRatios,
       filtered, sorted, paged, planByIdMap, compareIdSet, keywordCandidatePool,
       openDetail, toggleCompare, toggleFavorite, toggleExpand, saveFavorites,
+      voluntarySet, isInVoluntary, voluntaryIndex, toggleVoluntary,
+      moveVoluntaryUp, moveVoluntaryDown, moveVoluntaryToTop, moveVoluntaryToBottom, clearVoluntary,
+      voluntaryTierCounts, exportVoluntaryByTier,
       resetFilters, onApplyTier, reloadData,
       exportCsv, toggleDark,
       savePreset, loadPreset, deletePreset, renamePreset, copyShareLink,

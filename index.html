@@ -78,10 +78,10 @@
                     class="px-2 py-1 rounded border hover:bg-slate-100"
                     :class="{ 'bg-amber-100 border-amber-300': ui.showCompare }"
                     title="对比">对比({{ store.compareList.length }})</button>
-            <button @click="ui.showFavorites = !ui.showFavorites"
+            <button @click="store.viewMode = (store.viewMode==='voluntary' ? 'table' : 'voluntary')"
                     class="px-2 py-1 rounded border hover:bg-slate-100"
-                    :class="{ 'bg-rose-100 border-rose-300': ui.showFavorites }"
-                    title="收藏">♥({{ store.favorites.size }})</button>
+                    :class="{ 'bg-blue-100 border-blue-300 text-blue-700': store.viewMode==='voluntary' }"
+                    title="我的志愿单">📋 志愿({{ store.voluntary.length }})</button>
             <!-- 次要 (mobile 隐藏, 进 more 菜单) -->
             <button @click="copyShareLink" class="hide-mobile px-2 py-1 rounded border hover:bg-slate-100 no-print no-screenshot" title="复制分享链接">🔗</button>
             <button @click="takeScreenshot" :disabled="ui.screenshotting" class="hide-mobile px-2 py-1 rounded border hover:bg-slate-100 disabled:opacity-50 no-print no-screenshot" title="截图保存">{{ ui.screenshotting ? '⏳' : '📷' }}</button>
@@ -233,20 +233,22 @@
             :plans="planByIdMap"
           ></compare-bar>
 
-          <!-- Favorites bar -->
-          <favorites-bar
-            v-if="ui.showFavorites"
-            :store="store"
-            :plans="planByIdMap"
-            :ui="ui"
-            :cwb="cwb"
-            @open-detail="openDetail"
-            @clear="store.favorites.clear(); saveFavorites()"
-          ></favorites-bar>
 
           <!-- Top sort + count bar -->
           <div class="flex items-center gap-3 mb-3 flex-wrap">
-            <div class="text-sm text-slate-600">
+            <!-- voluntary 视图: 显示志愿单标题 + 配额 + 清空 -->
+            <div v-if="store.viewMode === 'voluntary'" class="text-sm text-slate-600">
+              <span class="font-bold text-lg text-blue-600">📋 我的志愿单 · {{ store.voluntary.length }} 项</span>
+              <span v-if="cwb && voluntaryTierCounts" class="text-xs ml-3">
+                (<span class="text-red-600">冲 {{ voluntaryTierCounts.chong }}/{{ paneTargets.chong }}</span>,
+                <span class="text-amber-600">稳 {{ voluntaryTierCounts.wen }}/{{ paneTargets.wen }}</span>,
+                <span class="text-green-600">保 {{ voluntaryTierCounts.bao }}/{{ paneTargets.bao }}</span>)
+              </span>
+              <button @click="exportVoluntaryByTier" class="text-xs ml-3 text-amber-600 hover:underline">📥 按档导出</button>
+              <button @click="clearVoluntary" v-if="store.voluntary.length" class="text-xs ml-2 text-red-500 hover:underline">清空</button>
+            </div>
+            <!-- 其它视图: 显示筛后计数 -->
+            <div v-else class="text-sm text-slate-600">
               <span class="font-bold text-lg text-blue-600">{{ filtered.length }}</span> 条结果
               <span v-if="cwb" class="text-xs ml-1">
                 (<span class="text-red-600">冲 {{ filteredTierCounts.chong }}/{{ paneTargets.chong }}</span>,
@@ -258,8 +260,8 @@
               </span>
             </div>
 
-            <!-- Sort tags (Item 6.1: 多列排序) -->
-            <div class="flex items-center gap-1 flex-wrap">
+            <!-- Sort tags (Item 6.1: 多列排序) - voluntary 模式不显示 -->
+            <div v-if="store.viewMode !== 'voluntary'" class="flex items-center gap-1 flex-wrap">
               <label class="text-xs text-slate-500">排序:</label>
               <template v-for="(k, i) in store.sortKeys" :key="k.field">
                 <span class="sort-chip"
@@ -333,6 +335,8 @@
             :sort-keys="store.sortKeys"
             :cwb="cwb"
             :pane-targets="paneTargets"
+            :voluntary="store.voluntary"
+            :voluntary-set="voluntarySet"
             @page-change="currentPage = $event"
             @open-detail="openDetail"
             @toggle-compare="toggleCompare"
@@ -340,6 +344,11 @@
             @toggle-expand="toggleExpand"
             @sort-col="onSortCol"
             @col-drop="onColDrop"
+            @toggle-voluntary="toggleVoluntary"
+            @vol-up="moveVoluntaryUp"
+            @vol-down="moveVoluntaryDown"
+            @vol-top="moveVoluntaryToTop"
+            @vol-bottom="moveVoluntaryToBottom"
           ></result-list>
         </main>
       </div>

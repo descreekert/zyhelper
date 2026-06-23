@@ -432,6 +432,52 @@ tr.main-row-expanded td { background: rgba(59, 130, 246, 0.04); }
 .preset-chip:hover { background: #dbeafe; }
 .preset-chip button { background: transparent; cursor: pointer; padding: 0 2px; }
 
+/* === V6: 志愿单 === */
+/* 行内志愿 badge: 加入 / 已在 (序号) */
+.vol-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  font-size: 11px;
+  font-weight: bold;
+  border-radius: 3px;
+  border: 1px solid;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.vol-badge.vol-out {
+  background: white;
+  color: #2563eb;
+  border-color: #93c5fd;
+}
+.vol-badge.vol-out:hover { background: #eff6ff; }
+.vol-badge.vol-in {
+  background: #2563eb;
+  color: white;
+  border-color: #1d4ed8;
+}
+.vol-badge.vol-in:hover { background: #dc2626; border-color: #b91c1c; }
+
+/* 志愿单视图: 序号列 + 操作列 */
+.vol-num-cell {
+  background: #eff6ff;
+  font-weight: bold;
+  font-size: 13px;
+  color: #1e40af;
+  border-right: 2px solid #93c5fd;
+}
+.vol-actions button {
+  font-size: 11px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+.vol-actions button:not(:disabled):hover { background: #f1f5f9; border-radius: 2px; }
+
+.dark .vol-badge.vol-out { background: #1e293b; color: #60a5fa; border-color: #1e40af; }
+.dark .vol-badge.vol-in { background: #1d4ed8; }
+.dark .vol-num-cell { background: #1e293b; color: #60a5fa; border-right-color: #1e40af; }
+
 /* === 3.16.1: 三栏并排 === */
 .pane-col {
   background: white;
