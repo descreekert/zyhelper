@@ -192,6 +192,8 @@ body {
   text-overflow: ellipsis;
 }
 .resizable-table td.truncate { max-width: 0; }
+.resizable-table td.col-actions { white-space: nowrap; overflow: visible; }
+.resizable-table td.col-actions button { display: inline-block; }
 
 /* 表头三组子元素布局: drag(左) | text(中) | resize(右) */
 .resizable-table th { display: table-cell; }

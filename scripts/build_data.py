@@ -422,10 +422,26 @@ def load_priority(wb):
                 "sort": to_int(r[15]),
             })
 
+    # 专业优先次序: col 21-27
+    # 专业门类, 专业类, 专业代码, 专业名称, 专业类排序, 热门排序, 专业排序
+    majors = []
+    for r in rows[2:]:
+        if len(r) > 27 and r[24]:    # 专业名称
+            majors.append({
+                "category": to_str(r[21]),
+                "majorClass": to_str(r[22]),
+                "code": to_str(r[23]),
+                "name": to_str(r[24]),
+                "classSort": to_int(r[25]),
+                "hotSort": to_int(r[26]),
+                "sort": to_int(r[27]),
+            })
+
     return {
         "cities": cities,
         "schools": schools,
         "majorClasses": classes,
+        "majors": majors,
     }
 
 
@@ -512,6 +528,7 @@ def build_priority_json(wb, out_dir):
     print(f"  城市 {len(priority['cities'])} 个")
     print(f"  学校 {len(priority['schools'])} 所")
     print(f"  专业类 {len(priority['majorClasses'])} 个")
+    print(f"  专业 {len(priority['majors'])} 个")
     p = out_dir / "priority.json"
     p.write_text(json.dumps(priority, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     print(f"  写入 {p} ({p.stat().st_size // 1024} KB)")

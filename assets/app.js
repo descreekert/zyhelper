@@ -259,7 +259,7 @@ const COLUMNS = [
   { key: "baoyan",  label: "专业保研", width: 140, sortable: false },
   { key: "sp",      label: "校优",     width: 50,  sortable: true,  sortField: "schoolPriority" },
   { key: "mp",      label: "类优",     width: 50,  sortable: true,  sortField: "majorPriority" },
-  { key: "actions", label: "",         width: 70,  sortable: false, fixed: true },
+  { key: "actions", label: "",         width: 130, sortable: false, fixed: true },
 ];
 const DEFAULT_HIDDEN_COLS = new Set(["sp", "mp"]); // 默认隐藏 (avoid clutter)
 const COL_LABEL = Object.fromEntries(COLUMNS.map(c => [c.key, c.label]));
@@ -419,6 +419,8 @@ const initialFilters = () => ({
   // 专业类优先 (单端)
   majorClassPriorityMax: 16,
   selectedMajorClasses: null,
+  // 专业优先 (单端, 仅展示用; 默认值大, 不主动过滤)
+  majorPriorityMax: 50,
   // 城市优先 (单端, V4: 默认 Top 10)
   cityPriorityMax: 10,
   selectedCities: null,
@@ -455,7 +457,7 @@ const store = reactive({
   // 志愿单: ordered array of plan ids (取代 favorites 的语义, favorites 保留为兼容)
   voluntary: loadLS(LS_KEY_VOL, null) || loadLS(LS_KEY_FAV, []),   // 首次加载从 favorites 迁移
   // 用户自定义排序覆盖 (null = 用 priority.json 默认; Array<name> = 自定义顺序)
-  priorityOverrides: loadLS(LS_KEY_PRIORITY_OVR, { schools: null, cities: null, majorClasses: null }),
+  priorityOverrides: loadLS(LS_KEY_PRIORITY_OVR, { schools: null, cities: null, majorClasses: null, majors: null }),
   compareList: [],
   expandedRows: new Set(),
   // P2.1: 筛选预设 [{name, filters: serialized}, ...]
@@ -2199,10 +2201,11 @@ const PrioritySettings = {
       { key: "schools",      label: "学校",   nameKey: "name", filterKey: "schoolPriorityRange", mode: "range" },
       { key: "cities",       label: "城市",   nameKey: "city", filterKey: "cityPriorityMax",     mode: "max" },
       { key: "majorClasses", label: "专业类", nameKey: "name", filterKey: "majorClassPriorityMax", mode: "max" },
+      { key: "majors",       label: "专业",   nameKey: "name", filterKey: "majorPriorityMax",     mode: "max" },
     ];
 
     // 编辑中的列表 (复制原 priority 数据 + 应用现有 override)
-    const editing = reactive({ schools: [], cities: [], majorClasses: [] });
+    const editing = reactive({ schools: [], cities: [], majorClasses: [], majors: [] });
     function initEditing() {
       if (!props.priority) return;
       for (const tab of tabs) {
@@ -2278,6 +2281,7 @@ const PrioritySettings = {
       if (tabKey === "schools") return `[${(item.tag || '').split('/')[0]}] ${item.city} · 排名 ${item.rank}`;
       if (tabKey === "cities") return ``;
       if (tabKey === "majorClasses") return `[${item.category}]`;
+      if (tabKey === "majors") return `[${item.category}/${item.majorClass}] ${item.code || ''}`;
       return "";
     }
     return { tabs, activeTab, editing, currentTab, currentItems, currentTopN,
@@ -2518,6 +2522,7 @@ createApp({
         schools: applyOv(priority.value.schools, ov.schools, "name"),
         cities:  applyOv(priority.value.cities, ov.cities, "city"),
         majorClasses: applyOv(priority.value.majorClasses, ov.majorClasses, "name"),
+        majors:  applyOv(priority.value.majors || [], ov.majors, "name"),
       };
     });
 
@@ -2870,7 +2875,7 @@ createApp({
     }
     function resetPriorityOverrides() {
       if (!confirm("重置所有优先次序为默认 (priority.json 自带顺序)?")) return;
-      store.priorityOverrides = { schools: null, cities: null, majorClasses: null };
+      store.priorityOverrides = { schools: null, cities: null, majorClasses: null, majors: null };
       ui.showPrioritySettings = false;
     }
     function onColDrop({ from, to }) {
