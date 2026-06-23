@@ -72,6 +72,9 @@
               <button @click="store.viewMode = 'pane'" :disabled="!cwb"
                       :title="cwb ? '三栏冲稳保' : '请先输入 26 分数'"
                       class="px-1.5 py-1 border-l" :class="store.viewMode==='pane' ? 'bg-blue-600 text-white' : 'hover:bg-slate-100 disabled:opacity-40'">⫷</button>
+              <button @click="store.viewMode = 'recommend'" :disabled="!cwb"
+                      :title="cwb ? '推荐: 按学校+专业类聚合' : '请先输入 26 分数'"
+                      class="px-1.5 py-1 border-l" :class="store.viewMode==='recommend' ? 'bg-blue-600 text-white' : 'hover:bg-slate-100 disabled:opacity-40'">🎯</button>
             </div>
             <!-- 常用 (mobile 也显示) -->
             <button @click="ui.showCompare = !ui.showCompare"
@@ -358,6 +361,7 @@
             :voluntary-set="voluntarySet"
             :column-widths="store.columnWidths"
             :plan-overrides="store.planOverrides"
+            :recommend-data="recommendData"
             @page-change="currentPage = $event"
             @open-detail="openDetail"
             @toggle-compare="toggleCompare"

@@ -433,6 +433,20 @@ tr.main-row-expanded td { background: rgba(59, 130, 246, 0.04); }
 .preset-chip:hover { background: #dbeafe; }
 .preset-chip button { background: transparent; cursor: pointer; padding: 0 2px; }
 
+/* === V8: 推荐视图 === */
+.recommend-table { font-size: 11px; }
+.recommend-table th { background: #eff6ff; }
+.recommend-table td { padding: 6px 8px; vertical-align: top; }
+.recommend-majors {
+  line-height: 1.7;
+  word-break: break-word;
+  white-space: normal;
+}
+.recommend-major-item {
+  display: inline-block;
+  margin-right: 4px;
+}
+
 /* === V7: cell 在线编辑 === */
 .cell-edited {
   background: #fef3c7 !important;
