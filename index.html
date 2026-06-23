@@ -88,6 +88,10 @@
             <button @click="printPage" class="hide-mobile px-2 py-1 rounded border hover:bg-slate-100 no-print no-screenshot" title="打印">🖨</button>
             <button @click="exportCsv" class="hide-mobile px-2 py-1 rounded border hover:bg-slate-100 no-print no-screenshot" title="导出 CSV">📥</button>
             <button @click="toggleDark" class="hide-mobile px-2 py-1 rounded border hover:bg-slate-100" title="切换暗色">{{ ui.dark ? '☀' : '🌙' }}</button>
+            <!-- 排序设置 (desktop 也可见) -->
+            <button @click="ui.showPrioritySettings = true"
+                    class="px-2 py-1 rounded border hover:bg-slate-100"
+                    title="排序设置 (学校/城市/专业类)">⚙ 排序</button>
             <!-- More 菜单 (仅 mobile 显示) -->
             <div class="show-mobile-only relative more-menu">
               <button @click="ui.showMoreMenu = !ui.showMoreMenu"
@@ -354,6 +358,17 @@
           ></result-list>
         </main>
       </div>
+
+      <!-- 排序设置 modal -->
+      <priority-settings
+        v-if="ui.showPrioritySettings && priority"
+        :priority="priority"
+        :overrides="store.priorityOverrides"
+        :filters="store.filters"
+        @close="ui.showPrioritySettings = false"
+        @save="savePriorityOverrides"
+        @reset="resetPriorityOverrides"
+      ></priority-settings>
 
       <!-- Detail drawer -->
       <detail-drawer

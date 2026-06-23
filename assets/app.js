@@ -7,6 +7,7 @@ const { createApp, ref, reactive, computed, watch, onMounted, onUnmounted } = Vu
 
 const LS_KEY_FAV   = "zyhelper_favorites_v1";
 const LS_KEY_VOL   = "zyhelper_voluntary_v1";
+const LS_KEY_PRIORITY_OVR = "zyhelper_priority_overrides_v1";
 const LS_KEY_PRESET= "zyhelper_presets_v2";   // v2: 含 subjects + allowed 关键词维度
 const LS_KEY_UI    = "zyhelper_ui_v1";
 
@@ -453,6 +454,8 @@ const store = reactive({
   favorites: new Set(loadLS(LS_KEY_FAV, [])),
   // 志愿单: ordered array of plan ids (取代 favorites 的语义, favorites 保留为兼容)
   voluntary: loadLS(LS_KEY_VOL, null) || loadLS(LS_KEY_FAV, []),   // 首次加载从 favorites 迁移
+  // 用户自定义排序覆盖 (null = 用 priority.json 默认; Array<name> = 自定义顺序)
+  priorityOverrides: loadLS(LS_KEY_PRIORITY_OVR, { schools: null, cities: null, majorClasses: null }),
   compareList: [],
   expandedRows: new Set(),
   // P2.1: 筛选预设 [{name, filters: serialized}, ...]
@@ -479,6 +482,7 @@ const ui = reactive({
   showColSettings: false,
   showRatioPanel: false,
   showMoreMenu: false,
+  showPrioritySettings: false,
   detailPlan: null,
   myScore: 0,
   myRank: 0,
@@ -493,6 +497,7 @@ const ui = reactive({
 
 watch(() => Array.from(store.favorites), v => saveLS(LS_KEY_FAV, v));
 watch(() => [...store.voluntary], v => saveLS(LS_KEY_VOL, v));
+watch(() => store.priorityOverrides, v => saveLS(LS_KEY_PRIORITY_OVR, v), { deep: true });
 watch(ui, v => saveLS(LS_KEY_UI, { ...v, detailPlan: null }), { deep: true });
 
 // ========== 组件 ==========
@@ -2184,11 +2189,168 @@ const FavoritesBar = {
   `,
 };
 
+// === 排序设置 modal ===
+const PrioritySettings = {
+  props: ["priority", "overrides", "filters"],
+  emits: ["close", "save", "reset"],
+  setup(props, { emit }) {
+    const activeTab = ref("schools");
+    const tabs = [
+      { key: "schools",      label: "学校",   nameKey: "name", filterKey: "schoolPriorityRange", mode: "range" },
+      { key: "cities",       label: "城市",   nameKey: "city", filterKey: "cityPriorityMax",     mode: "max" },
+      { key: "majorClasses", label: "专业类", nameKey: "name", filterKey: "majorClassPriorityMax", mode: "max" },
+    ];
+
+    // 编辑中的列表 (复制原 priority 数据 + 应用现有 override)
+    const editing = reactive({ schools: [], cities: [], majorClasses: [] });
+    function initEditing() {
+      if (!props.priority) return;
+      for (const tab of tabs) {
+        const items = props.priority[tab.key] || [];
+        const ov = props.overrides[tab.key];
+        if (ov && ov.length) {
+          const m = new Map(items.map(it => [it[tab.nameKey], it]));
+          const ordered = ov.map(n => m.get(n)).filter(Boolean);
+          const used = new Set(ov);
+          for (const it of items) if (!used.has(it[tab.nameKey])) ordered.push(it);
+          editing[tab.key] = ordered;
+        } else {
+          editing[tab.key] = [...items].sort((a, b) => (a.sort ?? 999) - (b.sort ?? 999));
+        }
+      }
+    }
+    initEditing();
+    watch(() => props.priority, initEditing);
+
+    const currentTab = computed(() => tabs.find(t => t.key === activeTab.value));
+    const currentItems = computed(() => editing[activeTab.value]);
+    const currentTopN = computed(() => {
+      const t = currentTab.value;
+      if (!t) return 0;
+      if (t.mode === "range") {
+        // 学校用第二端值作为 top N (默认 18)
+        return props.filters[t.filterKey]?.[1] || 18;
+      }
+      return props.filters[t.filterKey] || 0;
+    });
+
+    function move(idx, delta) {
+      const arr = editing[activeTab.value];
+      const j = idx + delta;
+      if (j < 0 || j >= arr.length) return;
+      [arr[idx], arr[j]] = [arr[j], arr[idx]];
+    }
+    function moveToTop(idx) {
+      const arr = editing[activeTab.value];
+      if (idx > 0) {
+        const [item] = arr.splice(idx, 1);
+        arr.unshift(item);
+      }
+    }
+    function moveToBottom(idx) {
+      const arr = editing[activeTab.value];
+      if (idx < arr.length - 1) {
+        const [item] = arr.splice(idx, 1);
+        arr.push(item);
+      }
+    }
+    function moveToPosition(idx) {
+      const arr = editing[activeTab.value];
+      const target = prompt(`把 "${arr[idx][currentTab.value.nameKey]}" 移到第几位? (1-${arr.length})`, idx + 1);
+      const n = parseInt(target, 10);
+      if (!n || n < 1 || n > arr.length) return;
+      const [item] = arr.splice(idx, 1);
+      arr.splice(n - 1, 0, item);
+    }
+    function resetTab() {
+      if (!confirm(`重置 "${currentTab.value.label}" 排序为默认?`)) return;
+      const items = props.priority[activeTab.value] || [];
+      editing[activeTab.value] = [...items].sort((a, b) => (a.sort ?? 999) - (b.sort ?? 999));
+    }
+    function save() {
+      const out = {};
+      for (const tab of tabs) {
+        out[tab.key] = editing[tab.key].map(it => it[tab.nameKey]);
+      }
+      emit("save", out);
+    }
+    function chipSubLabel(item, tabKey) {
+      if (tabKey === "schools") return `[${(item.tag || '').split('/')[0]}] ${item.city} · 排名 ${item.rank}`;
+      if (tabKey === "cities") return ``;
+      if (tabKey === "majorClasses") return `[${item.category}]`;
+      return "";
+    }
+    return { tabs, activeTab, editing, currentTab, currentItems, currentTopN,
+             move, moveToTop, moveToBottom, moveToPosition, resetTab, save, chipSubLabel };
+  },
+  template: `
+    <div class="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+         @click.self="$emit('close')">
+      <div class="bg-white rounded-lg shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+        <div class="flex items-center justify-between p-3 border-b">
+          <h3 class="font-bold text-lg">⚙ 排序设置</h3>
+          <button @click="$emit('close')" class="text-2xl leading-none text-slate-400 hover:text-red-500">×</button>
+        </div>
+        <!-- Tabs -->
+        <div class="flex border-b">
+          <button v-for="t in tabs" :key="t.key"
+                  @click="activeTab = t.key"
+                  class="px-4 py-2 text-sm border-b-2"
+                  :class="activeTab === t.key ? 'border-blue-600 text-blue-600 font-bold' : 'border-transparent text-slate-500 hover:bg-slate-50'">
+            {{ t.label }} ({{ editing[t.key].length }})
+          </button>
+        </div>
+        <!-- 列表 -->
+        <div class="flex-1 overflow-y-auto p-3">
+          <div class="text-xs text-slate-500 mb-2">
+            当前 Top {{ currentTopN }} 在分隔线之上。点击 ↑/↓ 调整顺序, 或点击序号 # 跳位。
+            <button @click="resetTab" class="ml-2 text-amber-600 hover:underline">重置当前 tab 为默认</button>
+          </div>
+          <div class="space-y-0.5">
+            <template v-for="(item, idx) in currentItems" :key="item[currentTab.nameKey] + idx">
+              <!-- 分隔线 -->
+              <div v-if="idx === currentTopN" class="text-center text-xs text-slate-400 my-2 border-t pt-1">
+                ── Top {{ currentTopN }} 分隔线 ──
+              </div>
+              <div class="priority-row flex items-center gap-2 p-1.5 hover:bg-slate-50 border-b">
+                <button @click="moveToPosition(idx)"
+                        class="w-10 text-right text-xs text-slate-500 hover:text-blue-600"
+                        title="点击跳位">#{{ idx + 1 }}</button>
+                <span class="flex-1 text-sm">
+                  {{ item[currentTab.nameKey] }}
+                  <span class="text-xs text-slate-400 ml-2">{{ chipSubLabel(item, currentTab.key) }}</span>
+                </span>
+                <button @click="moveToTop(idx)" :disabled="idx === 0"
+                        class="px-1 disabled:opacity-30 hover:bg-blue-50" title="置顶">⇈</button>
+                <button @click="move(idx, -1)" :disabled="idx === 0"
+                        class="px-1 disabled:opacity-30 hover:bg-blue-50" title="上移">↑</button>
+                <button @click="move(idx, 1)" :disabled="idx === currentItems.length - 1"
+                        class="px-1 disabled:opacity-30 hover:bg-blue-50" title="下移">↓</button>
+                <button @click="moveToBottom(idx)" :disabled="idx === currentItems.length - 1"
+                        class="px-1 disabled:opacity-30 hover:bg-blue-50" title="置底">⇊</button>
+              </div>
+            </template>
+          </div>
+        </div>
+        <!-- Footer -->
+        <div class="flex items-center justify-between p-3 border-t">
+          <button @click="$emit('reset')" class="text-sm text-red-500 hover:underline">重置全部默认</button>
+          <div class="flex gap-2">
+            <button @click="$emit('close')" class="px-3 py-1 border rounded text-sm hover:bg-slate-100">取消</button>
+            <button @click="save" class="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700">保存并应用</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `,
+};
+
 // ========== 主 App ==========
 
 createApp({
   components: {
     ScoreTool, FilterPanel, ResultList, PlanCard, DetailDrawer, CompareBar, FavoritesBar,
+    PrioritySettings,
   },
   setup() {
     const loading = ref(true);
@@ -2336,17 +2498,41 @@ createApp({
       }
     });
 
-    // V5 bug fix: 从 priority.json 算 allowed 集合 (严格过滤)
-    const allowedSets = computed(() => {
+    // 排序后的 priority 数据 (overrides 优先, 否则用 priority.json 默认 sort 字段)
+    const sortedPriority = computed(() => {
       if (!priority.value) return null;
-      const f = store.filters;
+      const ov = store.priorityOverrides || {};
+      function applyOv(items, override, nameKey) {
+        if (!override || !override.length) {
+          // 默认: 按 sort 字段升序 (priority.json 已基本按 sort 排, 但显式保险)
+          return [...items].sort((a, b) => (a.sort ?? 999) - (b.sort ?? 999));
+        }
+        // override 是名字数组, 按这个顺序; 未在 override 中的追加末尾
+        const m = new Map(items.map(it => [it[nameKey], it]));
+        const ordered = override.map(n => m.get(n)).filter(Boolean);
+        const used = new Set(override);
+        for (const it of items) if (!used.has(it[nameKey])) ordered.push(it);
+        return ordered;
+      }
       return {
-        schools: priorityNamesInRange(priority.value.schools, "name",
-                                       f.schoolPriorityRange[0], f.schoolPriorityRange[1]),
-        cities:  priorityNamesInRange(priority.value.cities, "city",
-                                       1, f.cityPriorityMax),
-        majorClasses: priorityNamesInRange(priority.value.majorClasses, "name",
-                                            1, f.majorClassPriorityMax),
+        schools: applyOv(priority.value.schools, ov.schools, "name"),
+        cities:  applyOv(priority.value.cities, ov.cities, "city"),
+        majorClasses: applyOv(priority.value.majorClasses, ov.majorClasses, "name"),
+      };
+    });
+
+    // V5 bug fix + V7: 用 sortedPriority 的索引位置 (而非 sort 字段) 算 allowed 集合
+    const allowedSets = computed(() => {
+      if (!sortedPriority.value) return null;
+      const f = store.filters;
+      const sp = sortedPriority.value;
+      // 学校: 双端范围 → 取 sp.schools 的 [lo-1, hi) 索引切片
+      const sLo = Math.max(0, (f.schoolPriorityRange[0] || 1) - 1);
+      const sHi = f.schoolPriorityRange[1] || sp.schools.length;
+      return {
+        schools: new Set(sp.schools.slice(sLo, sHi).map(s => s.name)),
+        cities:  new Set(sp.cities.slice(0, f.cityPriorityMax).map(c => c.city)),
+        majorClasses: new Set(sp.majorClasses.slice(0, f.majorClassPriorityMax).map(c => c.name)),
       };
     });
     // 筛选 / 排序
@@ -2677,6 +2863,16 @@ createApp({
     function onColResize({ key, width }) {
       store.columnWidths = { ...store.columnWidths, [key]: width };
     }
+    // 排序设置 modal handlers
+    function savePriorityOverrides(out) {
+      store.priorityOverrides = out;
+      ui.showPrioritySettings = false;
+    }
+    function resetPriorityOverrides() {
+      if (!confirm("重置所有优先次序为默认 (priority.json 自带顺序)?")) return;
+      store.priorityOverrides = { schools: null, cities: null, majorClasses: null };
+      ui.showPrioritySettings = false;
+    }
     function onColDrop({ from, to }) {
       const order = store.columnOrder || COLUMNS.map(c => c.key);
       const next = [...order];
@@ -2811,6 +3007,7 @@ createApp({
       takeScreenshot, printPage,
       // Items 6.x: 排序 / 列设置
       visibleColumns, allColumns, toggleColumn, resetColumns, onColDrop, onColResize,
+      savePriorityOverrides, resetPriorityOverrides,
       onSortCol, sortFieldLabel, toggleSortDir, removeSortKey,
       onSortDragStart, onSortDrop,
     };
