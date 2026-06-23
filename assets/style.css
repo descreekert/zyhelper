@@ -253,12 +253,8 @@ tr.main-row-expanded td { background: rgba(59, 130, 246, 0.04); }
 .badge-diff { background: #ffedd5; color: #c2410c; cursor: help; }
 .badge-mid  { background: #ede9fe; color: #6d28d9; }
 
-/* hover: 单元格展开显示完整内容 (Item 3) */
-.resizable-table tbody tr:hover td.truncate {
-  white-space: normal;
-  word-break: break-word;
-}
-.resizable-table tbody tr td.truncate:hover {
+/* hover: 仅当 cell 内容被截断 (JS 检测后加 data-truncated="1") 时, hover 才展开 */
+.resizable-table tbody tr td.truncate[data-truncated="1"]:hover {
   position: relative;
   z-index: 4;
   background: #fff;
@@ -266,6 +262,9 @@ tr.main-row-expanded td { background: rgba(59, 130, 246, 0.04); }
   max-width: 500px;
   white-space: normal;
   word-break: break-word;
+}
+.dark .resizable-table tbody tr td.truncate[data-truncated="1"]:hover {
+  background: #1e293b !important;
 }
 .expanded-row td {
   border-top: 2px solid #cbd5e1;

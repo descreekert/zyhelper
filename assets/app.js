@@ -148,7 +148,7 @@ function computeChongWenBao(score26, scoreRank, equivSource = "25") {
   return { equivScore25: Y, equivRank25: equivRank, ranges };
 }
 
-// 判断 plan 落入哪档 (冲/稳/保/null)
+// 判断 plan 落入哪档 (冲/稳/保/null) - 严格版 (用于主表/三栏的着色)
 // 用分数判, 停招用 25 实际分数 (score25), 非停招用 25 参考分 (ref25Score)
 function planTier(plan, cwb) {
   if (!cwb) return null;
@@ -159,6 +159,16 @@ function planTier(plan, cwb) {
   if (s >= R.wen.scoreLow   && s <= R.wen.scoreHigh)   return "wen";
   if (s >= R.bao.scoreLow   && s <= R.bao.scoreHigh)   return "bao";
   return null;
+}
+// 放宽版 (用于志愿单视图): 每个 plan 都归一档, 超出 冲档高分仍归冲, 低于保档低分仍归保
+function planTierRelaxed(plan, cwb) {
+  if (!cwb) return null;
+  const s = plan.isStopped ? plan.score25 : plan.ref25Score;
+  if (s == null) return null;
+  const R = cwb.ranges;
+  if (s >= R.chong.scoreLow) return "chong";
+  if (s >= R.wen.scoreLow)   return "wen";
+  return "bao";
 }
 
 // 学科评估 多评级 字符串解析: "通信工程(A+),计算机科学与技术(A)" -> ["A+", "A"]
@@ -464,7 +474,8 @@ const store = reactive({
   // 用户手动修改的 plan 字段 (e.g. ref25Score) — { [planId]: { ref25Score, ref25Rank } }
   planOverrides: loadLS(LS_KEY_PLAN_OVR, {}),
   compareList: [],
-  expandedRows: new Set(),
+  expandedRows: new Set(),           // 主表/list/pane
+  expandedRowsVol: new Set(),        // voluntary 独立
   // P2.1: 筛选预设 [{name, filters: serialized}, ...]
   presets: loadLS(LS_KEY_PRESET, []),
 });
@@ -1343,6 +1354,23 @@ const ResultList = {
       const i = props.voluntary?.indexOf(id);
       return (i !== undefined && i >= 0) ? i + 1 : 0;
     }
+    // hover 仅在真正截断的 cell 上展开 (JS 检测 scrollWidth > clientWidth)
+    onMounted(() => {
+      document.addEventListener("mouseover", (ev) => {
+        const td = ev.target.closest?.(".resizable-table td.truncate");
+        if (td && !td.dataset.truncated) {
+          td.dataset.truncated = (td.scrollWidth > td.clientWidth) ? "1" : "0";
+        }
+      });
+      document.addEventListener("mouseout", (ev) => {
+        const td = ev.target.closest?.(".resizable-table td.truncate");
+        // 离开时清掉, 下次重新检测 (因列宽可变)
+        if (td && ev.relatedTarget && !td.contains(ev.relatedTarget)) {
+          delete td.dataset.truncated;
+        }
+      });
+    });
+
     // 双击 编辑 25 参考分
     const editingScore = ref(null);   // plan id
     const editingValue = ref("");
@@ -2654,55 +2682,49 @@ createApp({
       return c;
     });
     // 志愿单 HTML 导出 (志愿填报标准 6 列格式)
-    function exportVoluntaryHtml() {
+    async function exportVoluntaryHtml() {
       if (!store.voluntary.length) { alert("志愿单为空"); return; }
+      let templateHtml;
+      try {
+        const resp = await fetch("assets/voluntary_template.html");
+        templateHtml = await resp.text();
+      } catch (e) {
+        alert("无法加载导出模板: " + e.message);
+        return;
+      }
       const m = planByIdMap.value;
       const items = store.voluntary.map(id => m[id]).filter(Boolean);
       const dt = new Date();
       const dateStr = `${dt.getFullYear()}_${dt.getMonth()+1}_${dt.getDate()}_${dt.getHours()}_${dt.getMinutes()}_${dt.getSeconds()}`;
       const esc = s => String(s ?? "").replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
-      const rowsHtml = items.map((p, i) => `
-        <tr>
-          <td class="num">${i + 1}</td>
-          <td>${esc(p.schoolCode || '')}</td>
-          <td>${esc(p.schoolName || '')}</td>
-          <td>${esc(p.majorCode26 || '')}</td>
-          <td class="major">${esc(p.majorName26 || p.majorName25 || '')}</td>
-          <td class="remarks">${esc(p.remarks || '')}</td>
-        </tr>
-      `).join("");
-      const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
-<title>志愿单 ${dateStr}</title>
-<style>
-  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; padding: 20px; max-width: 1000px; margin: 0 auto; }
-  h1 { font-size: 18px; text-align: center; margin: 0 0 12px; }
-  .info { font-size: 12px; color: #555; text-align: center; margin-bottom: 16px; }
-  table { width: 100%; border-collapse: collapse; font-size: 12px; }
-  th { background: #edf5fe; color: #333; padding: 8px 4px; border: 1px solid #999; font-weight: bold; }
-  td { padding: 6px 4px; border: 1px solid #999; text-align: center; vertical-align: middle; }
-  td.num { background: #f8fafc; font-weight: bold; }
-  td.major { text-align: left; }
-  td.remarks { text-align: left; color: #555; font-size: 11px; }
-  @media print { body { padding: 10px; } }
-</style>
-</head><body>
-  <h1>2026 物理类 志愿单 (共 ${items.length} 个志愿)</h1>
-  <div class="info">生成时间: ${dt.toLocaleString('zh-CN')}</div>
-  <table>
-    <thead>
-      <tr>
-        <th style="width:50px">序号</th>
-        <th style="width:90px">院校代号</th>
-        <th style="width:180px">院校名称</th>
-        <th style="width:80px">专业代号</th>
-        <th>专业名称</th>
-        <th style="width:200px">专业备注</th>
-      </tr>
-    </thead>
-    <tbody>${rowsHtml}</tbody>
-  </table>
-</body></html>`;
-      const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+      // 解析模板, 替换 tbody 与 title
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(templateHtml, "text/html");
+      const tbody = doc.querySelector(".el-table__body-wrapper tbody");
+      if (!tbody) { alert("模板格式不对"); return; }
+      const TOTAL = 112;
+      const buildRow = (i, p) => {
+        const serial = i + 1;
+        const sCode = p ? esc(p.schoolCode || '') : '';
+        const sName = p ? esc(p.schoolName || '') : '';
+        const mCode = p ? esc(p.majorCode26 || '') : '';
+        const mName = p ? esc(p.majorName26 || p.majorName25 || '') : '';
+        const rem   = p ? esc(p.remarks || '') : '';
+        return `<tr class="el-table__row">`
+          + `<td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">\n          ${serial}\n        </div></td>`
+          + `<td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">\n            ${sCode}\n          </div> <!----></div></td>`
+          + `<td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">${sName}</div></td>`
+          + `<td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">\n            ${mCode}\n          </div> <!----></div></td>`
+          + `<td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">${mName}</div></td>`
+          + `<td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;">${rem}</div></td>`
+          + `</tr>`;
+      };
+      let rowsHtml = "";
+      for (let i = 0; i < TOTAL; i++) rowsHtml += buildRow(i, items[i]);
+      tbody.innerHTML = rowsHtml;
+      // 序列化输出
+      const out = "<!DOCTYPE html>\n" + doc.documentElement.outerHTML;
+      const blob = new Blob([out], { type: "text/html;charset=utf-8" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a'); a.href = url;
       a.download = `志愿_${dateStr}.html`;
@@ -2766,11 +2788,13 @@ createApp({
     });
 
     // tier 映射 (id -> 'chong'|'wen'|'bao'|null)
+    // voluntary 模式用 relaxed (每条都归一档); 其它模式用 strict
     const tierMap = computed(() => {
       const m = new Map();
       if (!cwb.value) return m;
+      const fn = store.viewMode === "voluntary" ? planTierRelaxed : planTier;
       for (const p of paged.value) {
-        const t = planTier(p, cwb.value);
+        const t = fn(p, cwb.value);
         if (t) m.set(p.id, t);
       }
       return m;
@@ -2850,10 +2874,14 @@ createApp({
       }
     }
     function toggleExpand(id) {
-      // V4 Item 8: 单展开模式. 点击其他行自动关闭当前展开行.
-      const wasOpen = store.expandedRows.has(id);
-      store.expandedRows = wasOpen ? new Set() : new Set([id]);
+      // 单展开模式; voluntary 与主表独立
+      const key = store.viewMode === "voluntary" ? "expandedRowsVol" : "expandedRows";
+      const wasOpen = store[key].has(id);
+      store[key] = wasOpen ? new Set() : new Set([id]);
     }
+    // 给 ResultList 用的当前 expanded set
+    const currentExpandedRows = computed(() =>
+      store.viewMode === "voluntary" ? store.expandedRowsVol : store.expandedRows);
     function saveFavorites() { saveLS(LS_KEY_FAV, Array.from(store.favorites)); }
     function resetFilters() {
       Object.assign(store.filters, initialFilters());
@@ -3150,7 +3178,7 @@ createApp({
       scoreRank, meta, priority, currentPage, cwb, tierMap, paneTargets, activeTier, filteredTierCounts,
       ratioSumOk, resetRatios,
       filtered, sorted, paged, planByIdMap, compareIdSet, keywordCandidatePool,
-      openDetail, toggleCompare, toggleFavorite, toggleExpand, saveFavorites,
+      openDetail, toggleCompare, toggleFavorite, toggleExpand, saveFavorites, currentExpandedRows,
       voluntarySet, isInVoluntary, voluntaryIndex, toggleVoluntary,
       moveVoluntaryUp, moveVoluntaryDown, moveVoluntaryToTop, moveVoluntaryToBottom, clearVoluntary,
       voluntaryTierCounts, exportVoluntaryByTier, exportVoluntaryHtml,

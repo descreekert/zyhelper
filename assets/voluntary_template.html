@@ -1,0 +1,901 @@
+<!DOCTYPE html><html>
+  <head>
+  <meta charset="utf-8"><meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1"><meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <style>
+    body{
+      width: 1000px;
+      position: relative;
+    }
+    .volunteerTable{
+      position:absolute;
+    }
+    .volunteerTable>div{
+      margin-top: 0px!important;
+    }
+    table  td{
+      border-right:1px solid #999;
+      border-bottom:1px solid #999;
+    }
+    table  th{
+      border-right:1px solid #999;
+    }
+    table  th>div{
+      min-height:40px;
+      line-height:40px;
+    }
+    table{
+      text-align: center;
+      border-top: 1px solid #999;
+      border-left: 1px solid #999;
+      border-spacing: 0;/*去掉单元格间隙*/
+      width: 100%!important;
+    }
+    .el-table__header-wrapper table{
+      border-top: none;
+    }
+    .el-radio-group{
+      font-size: 14px;
+    }
+    .el-radio{
+      width: 70px;
+      display: inline-block;
+    }
+    .table-bottom{
+      position: absolute;
+      bottom: -42px;
+      left: 0;
+      border: 1px solid #999;
+      border-top: none;
+      width: calc(100% - 2px);
+    }
+    .table-bottom-left{
+      width: 210px;
+      height: 40px;
+      display: inline-block;
+      line-height: 40px;
+      text-align:center;
+      border-right:1px solid #999;
+    }
+    .table-bottom-right{
+      display: inline-block;
+      height: 40px;
+      line-height: 40px;
+    }
+    .info-wrap{
+      display: inline-block;
+      overflow: hidden;
+      height: 34px;
+      border: 1px solid #999;
+      margin-left: 12px;
+    }
+    .info-wrap>div{
+      float: left;
+      box-sizing: border-box;
+    }
+    .info-left,.info-title{
+      border-right:1px solid #999;
+    }
+    .info-left>div,.info-right>div{
+      display: inline-block;
+      text-align: center;
+      padding: 0 50px;
+      float: left;
+      box-sizing: border-box;
+      line-height: 34px;
+    }
+    .info-title{
+      background-color: rgb(230, 239, 250)
+    }
+    .el-radio__input {
+      white-space: nowrap;
+      cursor: pointer;
+      outline: none;
+      display: inline-block;
+      line-height: 1;
+      position: relative;
+      vertical-align: middle;
+      margin-right:5px;
+    }
+    .el-radio__inner {
+      border: 1px solid #DCDFE6;
+      border-radius: 100%;
+      width: 14px;
+      height: 14px;
+      background-color: #fff;
+      position: relative;
+      cursor: pointer;
+      display: inline-block;
+      -webkit-box-sizing: border-box;
+      box-sizing: border-box;
+    }
+    .el-radio__input.is-checked .el-radio__inner {
+      border-color: #1890FF;
+      background: #1890FF;
+    }
+    .el-radio__input.is-checked+.el-radio__label {
+      color: #1890FF;
+    }
+    .el-radio__original {
+      opacity: 0;
+      outline: none;
+      position: absolute;
+      z-index: -1;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      margin: 0;
+    }
+    .el-radio__input.is-checked .el-radio__inner::after {
+      -webkit-transform: translate(-50%, -50%) scale(1);
+      transform: translate(-50%, -50%) scale(1);
+    }
+    .el-radio__inner::after {
+      width: 4px;
+      height: 4px;
+      border-radius: 100%;
+      background-color: #fff;
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      -webkit-transform: translate(-50%, -50%) scale(0);
+      transform: translate(-50%, -50%) scale(0);
+      -webkit-transition: -webkit-transform .15s ease-in;
+      transition: -webkit-transform .15s ease-in;
+      transition: transform .15s ease-in;
+      transition: transform .15s ease-in, -webkit-transform .15s ease-in;
+    }
+    .el-radio:focus{
+      outline:none;
+    }
+    .el-table__header, .el-table__body{
+      min-width:900px;
+    }
+    .el-table th, .el-table td {
+      padding: 5px 0;
+      min-width: 0;
+      -webkit-box-sizing: border-box;
+      box-sizing: border-box;
+      text-overflow: ellipsis;
+      vertical-align: middle;
+      position: relative;
+    }
+    .el-table th>.cell {
+      display: inline-block;
+      -webkit-box-sizing: border-box;
+      box-sizing: border-box;
+      position: relative;
+      vertical-align: middle;
+      padding-left: 10px;
+      padding-right: 10px;
+      width: 100%;
+    }
+    .el-table td .cell {
+      -webkit-box-sizing: border-box;
+      box-sizing: border-box;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: normal;
+      word-break: break-all;
+      line-height: 23px;
+      padding-left: 10px;
+      padding-right: 10px;
+    }
+    table th>div{
+      min-height: auto!important;
+      line-height: normal!important;
+    }
+    .el-table th{
+      padding: 0px!important;
+      font-weight:normal!important;
+      color:#000!important;
+    }
+    .info-table td{
+      line-height:30px;
+    }
+    .el-table__header-wrapper th{
+      background:#fff!important;
+    }
+  </style>
+  </head>
+  <body>
+    <table cellspacing="0" cellpadding="0" border="0" width="1331px" class="info-table">
+      <tbody>
+        <tr>
+          <td style="width:59px;">考生号</td>
+          <td style="width:377px;">
+            <div style="padding:0 5px; text-overflow: ellipsis;overflow: hidden;word-break: break-all;">xxxxxxxxxxxx</div>
+          </td>
+          <td>姓名</td>
+          <td>xxx</td>
+          <td>性别</td>
+          <td style="width:186px;">x</td>
+        </tr>
+        <tr>
+          <td>批次</td>
+          <td>普通类本科批</td>
+          <td>报考科类</td>
+          <td>(5)物理学科类</td>
+          <td>报名点代码及名称</td>
+          <td>xxxxxxxx</td>
+        </tr>
+      </tbody>
+    </table>
+  <div data-v-107f0f56="" class="volunteerTable loadingClass"><div data-v-107f0f56="" class="el-table el-table--fit el-table--border el-table--enable-row-hover" element-loading-text="拼命加载中" align="center" style="margin-top: 20px;"><div class="hidden-columns"><div data-v-107f0f56=""></div> <!----> <div data-v-107f0f56=""></div> <div data-v-107f0f56=""></div> <!----> <div data-v-107f0f56=""></div> <div data-v-107f0f56=""></div> <div data-v-107f0f56=""></div> <!----> <!----></div><div class="el-table__header-wrapper"><table cellspacing="0" cellpadding="0" border="0" class="el-table__header" style="width: 999px;"><colgroup><col name="el-table_6_column_42" width="60"><col name="el-table_6_column_43" width="191"><col name="el-table_6_column_44" width="187"><col name="el-table_6_column_45" width="187"><col name="el-table_6_column_46" width="187"><col name="el-table_6_column_47" width="187"></colgroup><thead class=""><tr class=""><th colspan="1" rowspan="1" class="el-table_6_column_42  is-center indexColumnStyle  is-leaf" style="background-color: rgb(237, 245, 254); color: rgb(124, 124, 124);"><div class="cell">序号</div></th><th colspan="1" rowspan="1" class="el-table_6_column_43  is-center   is-leaf" style="background-color: rgb(237, 245, 254); color: rgb(124, 124, 124);"><div class="cell">院校代号</div></th><th colspan="1" rowspan="1" class="el-table_6_column_44  is-center   is-leaf" style="background-color: rgb(237, 245, 254); color: rgb(124, 124, 124);"><div class="cell">院校名称</div></th><th colspan="1" rowspan="1" class="el-table_6_column_45  is-center   is-leaf" style="background-color: rgb(237, 245, 254); color: rgb(124, 124, 124);"><div class="cell">专业代号</div></th><th colspan="1" rowspan="1" class="el-table_6_column_46  is-center   is-leaf" style="background-color: rgb(237, 245, 254); color: rgb(124, 124, 124);"><div class="cell">专业名称</div></th><th colspan="1" rowspan="1" class="el-table_6_column_47  is-center   is-leaf" style="background-color: rgb(237, 245, 254); color: rgb(124, 124, 124);"><div class="cell">专业备注</div></th></tr></thead></table></div><div class="el-table__body-wrapper is-scrolling-none"><table cellspacing="0" cellpadding="0" border="0" class="el-table__body" style="width: 999px;"><colgroup><col name="el-table_6_column_42" width="60"><col name="el-table_6_column_43" width="191"><col name="el-table_6_column_44" width="187"><col name="el-table_6_column_45" width="187"><col name="el-table_6_column_46" width="187"><col name="el-table_6_column_47" width="187"></colgroup><tbody><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          1
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0286
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">东南大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            02
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">工科试验班(智能制造与智能系统)(机器人工程、自动化、智能感知工程、智能车辆工程、测控技术与仪器、机械工程、医疗器械与装备工程)</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          2
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0286
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">东南大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            06
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">电子信息类(信息工程、电子科学与技术、海洋信息工程)</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          3
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0558
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">中山大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            3E
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">机械工程</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;">(深圳校区)</div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          4
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0558
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">中山大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            3G
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">网络空间安全</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;">(深圳校区)</div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          5
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0269
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">华东师范大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            65
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">数据科学与大数据技术</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          6
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0269
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">华东师范大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            62
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">微电子科学与工程</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          7
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0269
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">华东师范大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            59
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">电子信息科学与技术</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          8
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0269
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">华东师范大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            63
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">计算机科学与技术</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          9
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0141
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">大连理工大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            01
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">人工智能(新工科大师班)</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;">(一生一策导师制培养,全校理工类专业任选,按所选专业收学费)</div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          10
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0141
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">大连理工大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            03
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">电子信息类(创新班)(电子信息工程、计算机科学与技术、未来机器人、人工智能、自动化、电气工程及其自动化、光电信息科学与工程、生物医学工程)</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;">(本专业类内分流任选。计算机科学与技术入选教育部“101计划”)</div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          11
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0141
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">大连理工大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            04
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">智能制造工程(创新班)</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;">(含智能制造工程、机械设计制造及其自动化、智能车辆工程、测控技术与仪器,上述四个专业分流任选)</div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          12
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0141
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">大连理工大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            05
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">人工智能(未来卓越班)</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;">(全校理工类专业任选,按所选专业收学费)</div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          13
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0141
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">大连理工大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            09
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">工程力学(创新班)</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;">[含工程力学(钱令希力学创新班)、工程力学(智算力学创新班),上述两个专业分流任选]</div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          14
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0141
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">大连理工大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            14
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">电子信息类(电子信息工程、计算机科学与技术、未来机器人、自动化、电气工程及其自动化、光电信息科学与工程、生物医学工程)</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;">(本专业类内分流任选)</div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          15
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0141
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">大连理工大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            25
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">数学类(数学与应用数学、信息与计算科学)</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;">(含信息与计算科学+人工智能双学位班、数学与应用数学+人工智能双学位班,上述专业分流任选,可选拔进华罗庚数学拔尖计划班)</div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          16
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0141
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">大连理工大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            29
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">工程力学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;">(含工程力学、飞行器设计与工程、低空技术与工程,上述三个专业分流任选)</div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          17
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0533
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">中南大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            32
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">光电信息科学与工程</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          18
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0533
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">中南大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            77
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">人工智能</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          19
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0533
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">中南大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            B1
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">机械类(车辆工程、机械设计制造及其自动化、微电子科学与工程)</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          20
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0533
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">中南大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            B3
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">电子信息类(电子信息科学与技术、通信工程、电子信息工程)</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          21
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0533
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">中南大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            Z5
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">计算机科学与技术(拔尖基地班)</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          22
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0533
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">中南大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            E3
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">机械设计制造及其自动化(智能制造卓越人才培养计划实验班)</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          23
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0533
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">中南大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            B4
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">自动化类(自动化与电气类)(电气工程及其自动化、自动化、测控技术与仪器)</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          24
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0533
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">中南大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            B5
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">计算机类(计算机科学与技术、信息安全、数据科学与大数据技术)</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          25
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0532
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">湖南大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            24
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">智能制造工程</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;">(含智能制造工程、机械设计制造及其自动化,专业分流时在上述专业内任选)[入校后可选拔进入工科试验班(人工智能类)、能源与动力工程专业(未来能源与动力创新实验班)]</div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          26
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0532
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">湖南大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            28
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">电子信息工程</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;">(含电子信息工程、测控技术与仪器,专业分流时在上述专业内任选)[入校后可选拔进入工科试验班(人工智能类)]</div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          27
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0532
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">湖南大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            36
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">计算机科学与技术(智能实验班)</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;">(含智能科学与技术、物联网工程、数字媒体技术、数据科学与大数据技术,专业分流时在上述专业内任选)[入校后可选拔进入工科试验班(人工智能类)]</div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          28
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0532
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">湖南大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            34
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">自动化</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;">(含人工智能、机器人工程、自动化,专业分流时在上述专业内任选)[入校后可选拔进入工科试验班(人工智能类)]</div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          29
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0532
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">湖南大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            33
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">人工智能</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;">(含人工智能、机器人工程、自动化,专业分流时在上述专业内任选)[入校后可选拔进入工科试验班(人工智能类)]</div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          30
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0532
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">湖南大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            32
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">集成电路设计与集成系统</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;">[入校后可选拔进入工科试验班(人工智能类)]</div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          31
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0532
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">湖南大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            31
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">微电子科学与工程</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;">[入校后可选拔进入工科试验班(人工智能类)]</div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          32
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0532
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">湖南大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            30
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">通信工程</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;">[入校后可选拔进入工科试验班(人工智能类)]</div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          33
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0532
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">湖南大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            29
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">电子科学与技术</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;">[入校后可选拔进入工科试验班(人工智能类)]</div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          34
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0145
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">东北大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            AQ
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">人工智能(知行英才班)</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;">(入学后部分课程采用英文教材和英语授课,外语语种为非英语的考生请慎重报考)</div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          35
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0145
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">东北大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            AP
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">电子信息类(电子信息工程、通信工程)</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;">(入学后部分课程采用英文教材和英语授课,外语语种为非英语的考生请慎重报考)</div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          36
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0145
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">东北大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            AK
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">智能制造工程</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          37
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0145
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">东北大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            AL
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">自动化类(自动化、工业智能、电气工程及其自动化、测控技术与仪器、电子科学与技术)</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;">(入学后部分课程采用英文教材和英语授课,外语语种为非英语的考生请慎重报考)</div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          38
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0145
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">东北大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            AY
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">具身智能</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;">(入学后部分课程采用英文教材和英语授课,外语语种为非英语的考生请慎重报考)</div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          39
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0145
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">东北大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            AX
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">机器人工程</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;">(入学后部分课程采用英文教材和英语授课,外语语种为非英语的考生请慎重报考)</div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          40
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0145
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">东北大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            AZ
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">人工智能(未来技术学院)</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;">(入学后部分课程采用英文教材和英语授课,外语语种为非英语的考生请慎重报考)</div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          41
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0287
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">南京航空航天大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0A
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">航空航天类(长空创新班)(飞行器设计与工程、飞行器环境与生命保障工程、飞行器动力工程、飞行器制造工程、航空航天工程)</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          42
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0287
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">南京航空航天大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0H
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">机器人工程(拔尖创新班)</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          43
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0287
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">南京航空航天大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0Q
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">飞行器设计与工程(航空工业集团定制班)</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          44
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0287
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">南京航空航天大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0R
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">机械工程(航空工业集团定制班)</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          45
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0287
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">南京航空航天大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            1B
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">工程力学(钱伟长班)</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          46
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0287
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">南京航空航天大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            1A
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">航空航天类(飞行器设计与工程、飞行器环境与生命保障工程、飞行器动力工程、飞行器制造工程、航空航天工程)</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          47
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0287
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">南京航空航天大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            1C
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">智能飞行器技术</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          48
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0287
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">南京航空航天大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            2A
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">光电信息科学与工程</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          49
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0287
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">南京航空航天大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            1S
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">机器人工程</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          50
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0287
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">南京航空航天大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            1Q
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">机械工程</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          51
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0288
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">南京理工大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            11
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">电子信息类(鼎新创新人才班)(通信工程、电子信息工程、电子科学与技术、光电信息科学与工程)</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;">(大学四年在南京校区学习)</div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          52
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0288
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">南京理工大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            13
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">计算机类(大成创新人才班)(计算机科学与技术、软件工程)</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;">(大学四年在南京校区学习)</div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          53
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0288
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">南京理工大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            14
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">电子信息类(大成创新人才班)(电子信息工程、电子科学与技术、光电信息科学与工程、通信工程)</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;">(大学四年在南京校区学习)</div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          54
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            0141
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell">大连理工大学</div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            06
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell">工程力学(力学工科基础拔尖计划班)</div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          55
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          56
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          57
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          58
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          59
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          60
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          61
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          62
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          63
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          64
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          65
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          66
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          67
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          68
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          69
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          70
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          71
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          72
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          73
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          74
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          75
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          76
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          77
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          78
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          79
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          80
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          81
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          82
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          83
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          84
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          85
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          86
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          87
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          88
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          89
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          90
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          91
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          92
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          93
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          94
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          95
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          96
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          97
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          98
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          99
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          100
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          101
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          102
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          103
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          104
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          105
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          106
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          107
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          108
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          109
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          110
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          111
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><tr class="el-table__row"><td rowspan="1" colspan="1" class="el-table_6_column_42 is-center indexColumnStyle "><div class="cell">
+          112
+        </div></td><td rowspan="1" colspan="1" class="el-table_6_column_43 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_44 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_45 is-center  "><div class="cell"><!----> <div data-v-107f0f56="" class="" style="min-height: 23px;">
+            
+          </div> <!----></div></td><td rowspan="1" colspan="1" class="el-table_6_column_46 is-center  "><div class="cell"></div></td><td rowspan="1" colspan="1" class="el-table_6_column_47 is-center  "><div class="cell el-tooltip" style="width: 185px;"></div></td></tr><!----></tbody></table><!----><!----></div><!----><!----><!----><!----><div class="el-table__column-resize-proxy" style="display: none;"></div></div> <!----></div>
+  <script id="json">
+    {"id":"88d16a3c27a4e7631d24cf986cf55879","batch":"3","list":[{"planId":"1_3_0286_5_02","collegeVolunteerNum":1,"collegeCode":"0286","collegeName":"东南大学","majorVolunteerSort":1,"professionalName":"工科试验班(智能制造与智能系统)(机器人工程、自动化、智能感知工程、智能车辆工程、测控技术与仪器、机械工程、医疗器械与装备工程)","professionalDescribe":null,"isObeyMajor":"3","isObeyBatch":"3","professionalCode":"02","collegeType":"公办","collegeProvinceName":"江苏","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"10","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"6380","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0286_5_06","collegeVolunteerNum":2,"collegeCode":"0286","collegeName":"东南大学","majorVolunteerSort":1,"professionalName":"电子信息类(信息工程、电子科学与技术、海洋信息工程)","professionalDescribe":null,"isObeyMajor":"3","isObeyBatch":"3","professionalCode":"06","collegeType":"公办","collegeProvinceName":"江苏","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"10","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"6380","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0558_5_3E","collegeVolunteerNum":3,"collegeCode":"0558","collegeName":"中山大学","majorVolunteerSort":1,"professionalName":"机械工程","professionalDescribe":"(深圳校区)","isObeyMajor":"3","isObeyBatch":"3","professionalCode":"3E","collegeType":"公办","collegeProvinceName":"广东","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"5","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"6850","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0558_5_3G","collegeVolunteerNum":4,"collegeCode":"0558","collegeName":"中山大学","majorVolunteerSort":1,"professionalName":"网络空间安全","professionalDescribe":"(深圳校区)","isObeyMajor":"3","isObeyBatch":"3","professionalCode":"3G","collegeType":"公办","collegeProvinceName":"广东","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"4","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"6850","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0269_5_65","collegeVolunteerNum":5,"collegeCode":"0269","collegeName":"华东师范大学","majorVolunteerSort":1,"professionalName":"数据科学与大数据技术","professionalDescribe":null,"isObeyMajor":"3","isObeyBatch":"3","professionalCode":"65","collegeType":"公办","collegeProvinceName":"上海","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"5","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"7000","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0269_5_62","collegeVolunteerNum":6,"collegeCode":"0269","collegeName":"华东师范大学","majorVolunteerSort":1,"professionalName":"微电子科学与工程","professionalDescribe":null,"isObeyMajor":"3","isObeyBatch":"3","professionalCode":"62","collegeType":"公办","collegeProvinceName":"上海","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"4","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"7000","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0269_5_59","collegeVolunteerNum":7,"collegeCode":"0269","collegeName":"华东师范大学","majorVolunteerSort":1,"professionalName":"电子信息科学与技术","professionalDescribe":null,"isObeyMajor":"3","isObeyBatch":"3","professionalCode":"59","collegeType":"公办","collegeProvinceName":"上海","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"2","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"7000","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0269_5_63","collegeVolunteerNum":8,"collegeCode":"0269","collegeName":"华东师范大学","majorVolunteerSort":1,"professionalName":"计算机科学与技术","professionalDescribe":null,"isObeyMajor":"3","isObeyBatch":"3","professionalCode":"63","collegeType":"公办","collegeProvinceName":"上海","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"8","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"7000","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0141_5_01","collegeVolunteerNum":9,"collegeCode":"0141","collegeName":"大连理工大学","majorVolunteerSort":1,"professionalName":"人工智能(新工科大师班)","professionalDescribe":"(一生一策导师制培养,全校理工类专业任选,按所选专业收学费)","isObeyMajor":"3","isObeyBatch":"3","professionalCode":"01","collegeType":"公办","collegeProvinceName":"辽宁","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"2","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"6240","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0141_5_03","collegeVolunteerNum":10,"collegeCode":"0141","collegeName":"大连理工大学","majorVolunteerSort":1,"professionalName":"电子信息类(创新班)(电子信息工程、计算机科学与技术、未来机器人、人工智能、自动化、电气工程及其自动化、光电信息科学与工程、生物医学工程)","professionalDescribe":"(本专业类内分流任选。计算机科学与技术入选教育部“101计划”)","isObeyMajor":"3","isObeyBatch":"3","professionalCode":"03","collegeType":"公办","collegeProvinceName":"辽宁","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"2","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"6240","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0141_5_04","collegeVolunteerNum":11,"collegeCode":"0141","collegeName":"大连理工大学","majorVolunteerSort":1,"professionalName":"智能制造工程(创新班)","professionalDescribe":"(含智能制造工程、机械设计制造及其自动化、智能车辆工程、测控技术与仪器,上述四个专业分流任选)","isObeyMajor":"3","isObeyBatch":"3","professionalCode":"04","collegeType":"公办","collegeProvinceName":"辽宁","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"2","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"6240","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0141_5_05","collegeVolunteerNum":12,"collegeCode":"0141","collegeName":"大连理工大学","majorVolunteerSort":1,"professionalName":"人工智能(未来卓越班)","professionalDescribe":"(全校理工类专业任选,按所选专业收学费)","isObeyMajor":"3","isObeyBatch":"3","professionalCode":"05","collegeType":"公办","collegeProvinceName":"辽宁","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"25","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"6240","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0141_5_09","collegeVolunteerNum":13,"collegeCode":"0141","collegeName":"大连理工大学","majorVolunteerSort":1,"professionalName":"工程力学(创新班)","professionalDescribe":"[含工程力学(钱令希力学创新班)、工程力学(智算力学创新班),上述两个专业分流任选]","isObeyMajor":"3","isObeyBatch":"3","professionalCode":"09","collegeType":"公办","collegeProvinceName":"辽宁","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"16","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"6240","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0141_5_14","collegeVolunteerNum":14,"collegeCode":"0141","collegeName":"大连理工大学","majorVolunteerSort":1,"professionalName":"电子信息类(电子信息工程、计算机科学与技术、未来机器人、自动化、电气工程及其自动化、光电信息科学与工程、生物医学工程)","professionalDescribe":"(本专业类内分流任选)","isObeyMajor":"3","isObeyBatch":"3","professionalCode":"14","collegeType":"公办","collegeProvinceName":"辽宁","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"140","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"6240","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0141_5_25","collegeVolunteerNum":15,"collegeCode":"0141","collegeName":"大连理工大学","majorVolunteerSort":1,"professionalName":"数学类(数学与应用数学、信息与计算科学)","professionalDescribe":"(含信息与计算科学+人工智能双学位班、数学与应用数学+人工智能双学位班,上述专业分流任选,可选拔进华罗庚数学拔尖计划班)","isObeyMajor":"3","isObeyBatch":"3","professionalCode":"25","collegeType":"公办","collegeProvinceName":"辽宁","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"36","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"6240","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0141_5_29","collegeVolunteerNum":16,"collegeCode":"0141","collegeName":"大连理工大学","majorVolunteerSort":1,"professionalName":"工程力学","professionalDescribe":"(含工程力学、飞行器设计与工程、低空技术与工程,上述三个专业分流任选)","isObeyMajor":"3","isObeyBatch":"3","professionalCode":"29","collegeType":"公办","collegeProvinceName":"辽宁","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"49","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"6240","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0533_5_32","collegeVolunteerNum":17,"collegeCode":"0533","collegeName":"中南大学","majorVolunteerSort":1,"professionalName":"光电信息科学与工程","professionalDescribe":null,"isObeyMajor":"3","isObeyBatch":"3","professionalCode":"32","collegeType":"公办","collegeProvinceName":"湖南","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"4","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"6500","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0533_5_77","collegeVolunteerNum":18,"collegeCode":"0533","collegeName":"中南大学","majorVolunteerSort":1,"professionalName":"人工智能","professionalDescribe":null,"isObeyMajor":"3","isObeyBatch":"3","professionalCode":"77","collegeType":"公办","collegeProvinceName":"湖南","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"5","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"6500","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0533_5_B1","collegeVolunteerNum":19,"collegeCode":"0533","collegeName":"中南大学","majorVolunteerSort":1,"professionalName":"机械类(车辆工程、机械设计制造及其自动化、微电子科学与工程)","professionalDescribe":null,"isObeyMajor":"3","isObeyBatch":"3","professionalCode":"B1","collegeType":"公办","collegeProvinceName":"湖南","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"8","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"6500","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0533_5_B3","collegeVolunteerNum":20,"collegeCode":"0533","collegeName":"中南大学","majorVolunteerSort":1,"professionalName":"电子信息类(电子信息科学与技术、通信工程、电子信息工程)","professionalDescribe":null,"isObeyMajor":"3","isObeyBatch":"3","professionalCode":"B3","collegeType":"公办","collegeProvinceName":"湖南","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"8","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"5300","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0533_5_Z5","collegeVolunteerNum":21,"collegeCode":"0533","collegeName":"中南大学","majorVolunteerSort":1,"professionalName":"计算机科学与技术(拔尖基地班)","professionalDescribe":null,"isObeyMajor":"3","isObeyBatch":"3","professionalCode":"Z5","collegeType":"公办","collegeProvinceName":"湖南","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"2","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"6500","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0533_5_E3","collegeVolunteerNum":22,"collegeCode":"0533","collegeName":"中南大学","majorVolunteerSort":1,"professionalName":"机械设计制造及其自动化(智能制造卓越人才培养计划实验班)","professionalDescribe":null,"isObeyMajor":"3","isObeyBatch":"3","professionalCode":"E3","collegeType":"公办","collegeProvinceName":"湖南","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"5","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"6500","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0533_5_B4","collegeVolunteerNum":23,"collegeCode":"0533","collegeName":"中南大学","majorVolunteerSort":1,"professionalName":"自动化类(自动化与电气类)(电气工程及其自动化、自动化、测控技术与仪器)","professionalDescribe":null,"isObeyMajor":"3","isObeyBatch":"3","professionalCode":"B4","collegeType":"公办","collegeProvinceName":"湖南","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"6","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"6500","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0533_5_B5","collegeVolunteerNum":24,"collegeCode":"0533","collegeName":"中南大学","majorVolunteerSort":1,"professionalName":"计算机类(计算机科学与技术、信息安全、数据科学与大数据技术)","professionalDescribe":null,"isObeyMajor":"3","isObeyBatch":"3","professionalCode":"B5","collegeType":"公办","collegeProvinceName":"湖南","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"4","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"6500","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0532_5_24","collegeVolunteerNum":25,"collegeCode":"0532","collegeName":"湖南大学","majorVolunteerSort":1,"professionalName":"智能制造工程","professionalDescribe":"(含智能制造工程、机械设计制造及其自动化,专业分流时在上述专业内任选)[入校后可选拔进入工科试验班(人工智能类)、能源与动力工程专业(未来能源与动力创新实验班)]","isObeyMajor":"3","isObeyBatch":"3","professionalCode":"24","collegeType":"公办","collegeProvinceName":"湖南","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"8","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"6500","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0532_5_28","collegeVolunteerNum":26,"collegeCode":"0532","collegeName":"湖南大学","majorVolunteerSort":1,"professionalName":"电子信息工程","professionalDescribe":"(含电子信息工程、测控技术与仪器,专业分流时在上述专业内任选)[入校后可选拔进入工科试验班(人工智能类)]","isObeyMajor":"3","isObeyBatch":"3","professionalCode":"28","collegeType":"公办","collegeProvinceName":"湖南","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"3","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"6500","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0532_5_36","collegeVolunteerNum":27,"collegeCode":"0532","collegeName":"湖南大学","majorVolunteerSort":1,"professionalName":"计算机科学与技术(智能实验班)","professionalDescribe":"(含智能科学与技术、物联网工程、数字媒体技术、数据科学与大数据技术,专业分流时在上述专业内任选)[入校后可选拔进入工科试验班(人工智能类)]","isObeyMajor":"3","isObeyBatch":"3","professionalCode":"36","collegeType":"公办","collegeProvinceName":"湖南","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"4","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"6500","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0532_5_34","collegeVolunteerNum":28,"collegeCode":"0532","collegeName":"湖南大学","majorVolunteerSort":1,"professionalName":"自动化","professionalDescribe":"(含人工智能、机器人工程、自动化,专业分流时在上述专业内任选)[入校后可选拔进入工科试验班(人工智能类)]","isObeyMajor":"3","isObeyBatch":"3","professionalCode":"34","collegeType":"公办","collegeProvinceName":"湖南","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"4","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"6500","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0532_5_33","collegeVolunteerNum":29,"collegeCode":"0532","collegeName":"湖南大学","majorVolunteerSort":1,"professionalName":"人工智能","professionalDescribe":"(含人工智能、机器人工程、自动化,专业分流时在上述专业内任选)[入校后可选拔进入工科试验班(人工智能类)]","isObeyMajor":"3","isObeyBatch":"3","professionalCode":"33","collegeType":"公办","collegeProvinceName":"湖南","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"6","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"6500","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0532_5_32","collegeVolunteerNum":30,"collegeCode":"0532","collegeName":"湖南大学","majorVolunteerSort":1,"professionalName":"集成电路设计与集成系统","professionalDescribe":"[入校后可选拔进入工科试验班(人工智能类)]","isObeyMajor":"3","isObeyBatch":"3","professionalCode":"32","collegeType":"公办","collegeProvinceName":"湖南","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"2","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"6500","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0532_5_31","collegeVolunteerNum":31,"collegeCode":"0532","collegeName":"湖南大学","majorVolunteerSort":1,"professionalName":"微电子科学与工程","professionalDescribe":"[入校后可选拔进入工科试验班(人工智能类)]","isObeyMajor":"3","isObeyBatch":"3","professionalCode":"31","collegeType":"公办","collegeProvinceName":"湖南","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"2","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"6500","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0532_5_30","collegeVolunteerNum":32,"collegeCode":"0532","collegeName":"湖南大学","majorVolunteerSort":1,"professionalName":"通信工程","professionalDescribe":"[入校后可选拔进入工科试验班(人工智能类)]","isObeyMajor":"3","isObeyBatch":"3","professionalCode":"30","collegeType":"公办","collegeProvinceName":"湖南","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"4","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"6500","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0532_5_29","collegeVolunteerNum":33,"collegeCode":"0532","collegeName":"湖南大学","majorVolunteerSort":1,"professionalName":"电子科学与技术","professionalDescribe":"[入校后可选拔进入工科试验班(人工智能类)]","isObeyMajor":"3","isObeyBatch":"3","professionalCode":"29","collegeType":"公办","collegeProvinceName":"湖南","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"4","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"6500","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0145_5_AQ","collegeVolunteerNum":34,"collegeCode":"0145","collegeName":"东北大学","majorVolunteerSort":1,"professionalName":"人工智能(知行英才班)","professionalDescribe":"(入学后部分课程采用英文教材和英语授课,外语语种为非英语的考生请慎重报考)","isObeyMajor":"3","isObeyBatch":"3","professionalCode":"AQ","collegeType":"公办","collegeProvinceName":"辽宁","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"28","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"6240","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0145_5_AP","collegeVolunteerNum":35,"collegeCode":"0145","collegeName":"东北大学","majorVolunteerSort":1,"professionalName":"电子信息类(电子信息工程、通信工程)","professionalDescribe":"(入学后部分课程采用英文教材和英语授课,外语语种为非英语的考生请慎重报考)","isObeyMajor":"3","isObeyBatch":"3","professionalCode":"AP","collegeType":"公办","collegeProvinceName":"辽宁","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"60","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"6240","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0145_5_AK","collegeVolunteerNum":36,"collegeCode":"0145","collegeName":"东北大学","majorVolunteerSort":1,"professionalName":"智能制造工程","professionalDescribe":null,"isObeyMajor":"3","isObeyBatch":"3","professionalCode":"AK","collegeType":"公办","collegeProvinceName":"辽宁","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"40","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"6240","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0145_5_AL","collegeVolunteerNum":37,"collegeCode":"0145","collegeName":"东北大学","majorVolunteerSort":1,"professionalName":"自动化类(自动化、工业智能、电气工程及其自动化、测控技术与仪器、电子科学与技术)","professionalDescribe":"(入学后部分课程采用英文教材和英语授课,外语语种为非英语的考生请慎重报考)","isObeyMajor":"3","isObeyBatch":"3","professionalCode":"AL","collegeType":"公办","collegeProvinceName":"辽宁","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"160","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"6240","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0145_5_AY","collegeVolunteerNum":38,"collegeCode":"0145","collegeName":"东北大学","majorVolunteerSort":1,"professionalName":"具身智能","professionalDescribe":"(入学后部分课程采用英文教材和英语授课,外语语种为非英语的考生请慎重报考)","isObeyMajor":"3","isObeyBatch":"3","professionalCode":"AY","collegeType":"公办","collegeProvinceName":"辽宁","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"15","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"6240","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0145_5_AX","collegeVolunteerNum":39,"collegeCode":"0145","collegeName":"东北大学","majorVolunteerSort":1,"professionalName":"机器人工程","professionalDescribe":"(入学后部分课程采用英文教材和英语授课,外语语种为非英语的考生请慎重报考)","isObeyMajor":"3","isObeyBatch":"3","professionalCode":"AX","collegeType":"公办","collegeProvinceName":"辽宁","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"15","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"6240","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0145_5_AZ","collegeVolunteerNum":40,"collegeCode":"0145","collegeName":"东北大学","majorVolunteerSort":1,"professionalName":"人工智能(未来技术学院)","professionalDescribe":"(入学后部分课程采用英文教材和英语授课,外语语种为非英语的考生请慎重报考)","isObeyMajor":"3","isObeyBatch":"3","professionalCode":"AZ","collegeType":"公办","collegeProvinceName":"辽宁","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"25","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"6240","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0287_5_0A","collegeVolunteerNum":41,"collegeCode":"0287","collegeName":"南京航空航天大学","majorVolunteerSort":1,"professionalName":"航空航天类(长空创新班)(飞行器设计与工程、飞行器环境与生命保障工程、飞行器动力工程、飞行器制造工程、航空航天工程)","professionalDescribe":null,"isObeyMajor":"3","isObeyBatch":"3","professionalCode":"0A","collegeType":"公办","collegeProvinceName":"江苏","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"2","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"6380","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0287_5_0H","collegeVolunteerNum":42,"collegeCode":"0287","collegeName":"南京航空航天大学","majorVolunteerSort":1,"professionalName":"机器人工程(拔尖创新班)","professionalDescribe":null,"isObeyMajor":"3","isObeyBatch":"3","professionalCode":"0H","collegeType":"公办","collegeProvinceName":"江苏","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"2","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"5800","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0287_5_0Q","collegeVolunteerNum":43,"collegeCode":"0287","collegeName":"南京航空航天大学","majorVolunteerSort":1,"professionalName":"飞行器设计与工程(航空工业集团定制班)","professionalDescribe":null,"isObeyMajor":"3","isObeyBatch":"3","professionalCode":"0Q","collegeType":"公办","collegeProvinceName":"江苏","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"2","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"6380","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0287_5_0R","collegeVolunteerNum":44,"collegeCode":"0287","collegeName":"南京航空航天大学","majorVolunteerSort":1,"professionalName":"机械工程(航空工业集团定制班)","professionalDescribe":null,"isObeyMajor":"3","isObeyBatch":"3","professionalCode":"0R","collegeType":"公办","collegeProvinceName":"江苏","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"2","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"6380","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0287_5_1B","collegeVolunteerNum":45,"collegeCode":"0287","collegeName":"南京航空航天大学","majorVolunteerSort":1,"professionalName":"工程力学(钱伟长班)","professionalDescribe":null,"isObeyMajor":"3","isObeyBatch":"3","professionalCode":"1B","collegeType":"公办","collegeProvinceName":"江苏","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"2","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"6380","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0287_5_1A","collegeVolunteerNum":46,"collegeCode":"0287","collegeName":"南京航空航天大学","majorVolunteerSort":1,"professionalName":"航空航天类(飞行器设计与工程、飞行器环境与生命保障工程、飞行器动力工程、飞行器制造工程、航空航天工程)","professionalDescribe":null,"isObeyMajor":"3","isObeyBatch":"3","professionalCode":"1A","collegeType":"公办","collegeProvinceName":"江苏","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"38","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"6380","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0287_5_1C","collegeVolunteerNum":47,"collegeCode":"0287","collegeName":"南京航空航天大学","majorVolunteerSort":1,"professionalName":"智能飞行器技术","professionalDescribe":null,"isObeyMajor":"3","isObeyBatch":"3","professionalCode":"1C","collegeType":"公办","collegeProvinceName":"江苏","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"2","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"6380","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0287_5_2A","collegeVolunteerNum":48,"collegeCode":"0287","collegeName":"南京航空航天大学","majorVolunteerSort":1,"professionalName":"光电信息科学与工程","professionalDescribe":null,"isObeyMajor":"3","isObeyBatch":"3","professionalCode":"2A","collegeType":"公办","collegeProvinceName":"江苏","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"2","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"5800","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0287_5_1S","collegeVolunteerNum":49,"collegeCode":"0287","collegeName":"南京航空航天大学","majorVolunteerSort":1,"professionalName":"机器人工程","professionalDescribe":null,"isObeyMajor":"3","isObeyBatch":"3","professionalCode":"1S","collegeType":"公办","collegeProvinceName":"江苏","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"5","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"5800","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0287_5_1Q","collegeVolunteerNum":50,"collegeCode":"0287","collegeName":"南京航空航天大学","majorVolunteerSort":1,"professionalName":"机械工程","professionalDescribe":null,"isObeyMajor":"3","isObeyBatch":"3","professionalCode":"1Q","collegeType":"公办","collegeProvinceName":"江苏","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"2","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"6380","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0288_5_11","collegeVolunteerNum":51,"collegeCode":"0288","collegeName":"南京理工大学","majorVolunteerSort":1,"professionalName":"电子信息类(鼎新创新人才班)(通信工程、电子信息工程、电子科学与技术、光电信息科学与工程)","professionalDescribe":"(大学四年在南京校区学习)","isObeyMajor":"3","isObeyBatch":"3","professionalCode":"11","collegeType":"公办","collegeProvinceName":"江苏","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"1","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"6380","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0288_5_13","collegeVolunteerNum":52,"collegeCode":"0288","collegeName":"南京理工大学","majorVolunteerSort":1,"professionalName":"计算机类(大成创新人才班)(计算机科学与技术、软件工程)","professionalDescribe":"(大学四年在南京校区学习)","isObeyMajor":"3","isObeyBatch":"3","professionalCode":"13","collegeType":"公办","collegeProvinceName":"江苏","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"2","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"6380","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0288_5_14","collegeVolunteerNum":53,"collegeCode":"0288","collegeName":"南京理工大学","majorVolunteerSort":1,"professionalName":"电子信息类(大成创新人才班)(电子信息工程、电子科学与技术、光电信息科学与工程、通信工程)","professionalDescribe":"(大学四年在南京校区学习)","isObeyMajor":"3","isObeyBatch":"3","professionalCode":"14","collegeType":"公办","collegeProvinceName":"江苏","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"2","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"6380","trainingDirection":null,"remark":null,"professionNameProperty":" "},{"planId":"1_3_0141_5_06","collegeVolunteerNum":54,"collegeCode":"0141","collegeName":"大连理工大学","majorVolunteerSort":1,"professionalName":"工程力学(力学工科基础拔尖计划班)","professionalDescribe":null,"isObeyMajor":"3","isObeyBatch":"3","professionalCode":"06","collegeType":"公办","collegeProvinceName":"辽宁","mainSubjectRequireCode":"04","minorSubjectRequireCode":"A","minorSubjectDescribeCode":null,"planStudentNum":"5","educationalSystemName":"四年","educationalSystemCode":"4","tuition":"6240","trainingDirection":null,"remark":null,"professionNameProperty":" "}]}
+  </script>
+  </body></html>
