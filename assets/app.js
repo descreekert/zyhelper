@@ -449,6 +449,7 @@ const store = reactive({
   sidebarCollapsed: layoutInit.sidebarCollapsed || false,
   hiddenColumns: new Set(layoutInit.hiddenColumns || []),
   columnOrder: layoutInit.columnOrder || null,   // null = 默认顺序
+  columnWidths: layoutInit.columnWidths || {},    // {key: px}, 用户拖拽后持久化
   favorites: new Set(loadLS(LS_KEY_FAV, [])),
   // 志愿单: ordered array of plan ids (取代 favorites 的语义, favorites 保留为兼容)
   voluntary: loadLS(LS_KEY_VOL, null) || loadLS(LS_KEY_FAV, []),   // 首次加载从 favorites 迁移
@@ -466,6 +467,7 @@ watch(() => ({
   sidebarCollapsed: store.sidebarCollapsed,
   hiddenColumns: Array.from(store.hiddenColumns),
   columnOrder: store.columnOrder,
+  columnWidths: store.columnWidths,
 }), v => saveLS(LS_KEY_LAYOUT, v), { deep: true });
 
 const isMobile = () => window.matchMedia("(max-width: 767px)").matches;
@@ -1243,9 +1245,9 @@ const ResultList = {
   props: ["plans", "total", "currentPage", "pageSize", "compareSet", "favorites",
           "viewMode", "expandedRows", "tierMap",
           "columns", "sortKeys", "cwb", "paneTargets",
-          "voluntary", "voluntarySet"],
+          "voluntary", "voluntarySet", "columnWidths"],
   emits: ["page-change", "open-detail", "toggle-compare", "toggle-favorite", "toggle-expand",
-          "sort-col", "col-drop",
+          "sort-col", "col-drop", "col-resize",
           "toggle-voluntary", "vol-up", "vol-down", "vol-top", "vol-bottom"],
   setup(props, { emit }) {
     function fmtDuration(p) { return formatDuration(p.duration || p.duration25); }
@@ -1291,7 +1293,7 @@ const ResultList = {
       emit("col-drop", { from: dragSourceKey, to: col.key });
       dragSourceKey = null;
     }
-    // 列宽 resize: mousedown 在 .th-resize → 跟踪 mousemove 计算 width
+    // 列宽 resize: mousedown 在 .th-resize → 跟踪 mousemove → 写入 store (持久化)
     function startResize(col, ev) {
       ev.preventDefault();
       ev.stopPropagation();
@@ -1300,14 +1302,21 @@ const ResultList = {
       const startW = th.offsetWidth;
       function onMove(e) {
         const w = Math.max(30, startW + (e.clientX - startX));
+        // 临时直接 set DOM 让用户看到拖拽实时效果
         th.style.width = w + "px";
       }
-      function onUp() {
+      function onUp(e) {
         document.removeEventListener("mousemove", onMove);
         document.removeEventListener("mouseup", onUp);
+        const w = Math.max(30, startW + (e.clientX - startX));
+        // 提交到 state, 持久化
+        emit("col-resize", { key: col.key, width: w });
       }
       document.addEventListener("mousemove", onMove);
       document.addEventListener("mouseup", onUp);
+    }
+    function colWidth(c) {
+      return (props.columnWidths && props.columnWidths[c.key]) || c.width;
     }
     // 3.16.1: 三栏分桶
     const paneLists = computed(() => {
@@ -1325,7 +1334,7 @@ const ResultList = {
       bao:   paneLists.value.bao.length,
     }));
     return { fmtDuration, formatDur25, rowTier, isExpanded, cellValue, sortIndicator,
-             onColDragStart, onColDrop, startResize,
+             onColDragStart, onColDrop, startResize, colWidth,
              paneLists, paneCounts, volIdx };
   },
   computed: {
@@ -1356,7 +1365,7 @@ const ResultList = {
               <template v-for="c in columns" :key="c.key">
                 <th v-if="c.key !== 'actions'"
                     :class="['col-'+c.key, c.fixed ? 'fixed-col' : '']"
-                    :style="{ width: c.width + 'px' }">
+                    :style="{ width: colWidth(c) + 'px' }">
                   <span>{{ c.label }}</span>
                 </th>
               </template>
@@ -1475,7 +1484,7 @@ const ResultList = {
             <tr>
               <th v-for="c in columns" :key="c.key"
                   :class="['col-'+c.key, c.fixed ? 'fixed-col' : '']"
-                  :style="{ width: c.width + 'px' }"
+                  :style="{ width: colWidth(c) + 'px' }"
                   @dragover.prevent
                   @drop="onColDrop(c)">
                 <!-- 拖动手柄 (左) -->
@@ -2662,6 +2671,11 @@ createApp({
     function resetColumns() {
       store.hiddenColumns = new Set(DEFAULT_HIDDEN_COLS);
       store.columnOrder = null;
+      store.columnWidths = {};
+    }
+    // 列宽变化 → 存到 store (持久化)
+    function onColResize({ key, width }) {
+      store.columnWidths = { ...store.columnWidths, [key]: width };
     }
     function onColDrop({ from, to }) {
       const order = store.columnOrder || COLUMNS.map(c => c.key);
@@ -2796,7 +2810,7 @@ createApp({
       savePreset, loadPreset, deletePreset, renamePreset, copyShareLink,
       takeScreenshot, printPage,
       // Items 6.x: 排序 / 列设置
-      visibleColumns, allColumns, toggleColumn, resetColumns, onColDrop,
+      visibleColumns, allColumns, toggleColumn, resetColumns, onColDrop, onColResize,
       onSortCol, sortFieldLabel, toggleSortDir, removeSortKey,
       onSortDragStart, onSortDrop,
     };
