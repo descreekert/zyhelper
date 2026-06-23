@@ -336,6 +336,7 @@ function applyFilters(plans, f, allowed) {
     if (p.isStopped && !f.includeStopped) continue;
     if (p.isMidOutside && !f.includeMidOutside) continue;
     if (p.refConfidence === "无" && f.refRequired) continue;
+    if (f.onlyNew && p.isNew !== "新增") continue;
 
     // 院校标签
     if (f.schoolTags.size) {
@@ -431,6 +432,7 @@ const initialFilters = () => ({
   includeStopped: false,
   includeMidOutside: false,       // V4: 默认不含中外合作
   refRequired: false,
+  onlyNew: false,                 // 只看 26 新增专业
   // P1.3: 选科组合 (物理类除物理外的 2 科)
   subjects: new Set(["化学", "政治"]),
   // 关键词
@@ -804,6 +806,8 @@ const PriorityFilter = {
     rangePresets: { type: Array, default: () => [] }, // [{label, lo, hi}]
     // 共用: 选中集合 (null = 全部 in range; Set = 用户子集)
     selected: Object,        // Set | null
+    // 完整 items (用于下拉添加 — 包含 inRange 之外的)
+    allItems: Array,         // 全部条目, 默认同 items
     // 单 chip 显示: 主 label / 副 label
     chipLabel: Function,     // (item) => string
     chipSub:   Function,     // (item) => string
@@ -1127,20 +1131,26 @@ const FilterPanel = {
         </div>
       </div>
 
-      <!-- 开关 -->
-      <div class="filter-section space-y-1 pt-2">
-        <label class="flex items-center gap-2">
-          <input type="checkbox" v-model="store.filters.includeStopped">
-          <span>包含停招行</span>
-        </label>
-        <label class="flex items-center gap-2">
-          <input type="checkbox" v-model="store.filters.includeMidOutside">
-          <span>包含中外合作办学</span>
-        </label>
-        <label class="flex items-center gap-2">
-          <input type="checkbox" v-model="store.filters.refRequired">
-          <span>仅有 25 参考</span>
-        </label>
+      <!-- 开关 (2 列布局) -->
+      <div class="filter-section pt-2">
+        <div class="grid grid-cols-2 gap-x-2 gap-y-1">
+          <label class="flex items-center gap-2 text-xs">
+            <input type="checkbox" v-model="store.filters.includeStopped">
+            <span>含停招</span>
+          </label>
+          <label class="flex items-center gap-2 text-xs">
+            <input type="checkbox" v-model="store.filters.includeMidOutside">
+            <span>含中外合作</span>
+          </label>
+          <label class="flex items-center gap-2 text-xs">
+            <input type="checkbox" v-model="store.filters.refRequired">
+            <span>仅有 25 参考</span>
+          </label>
+          <label class="flex items-center gap-2 text-xs">
+            <input type="checkbox" v-model="store.filters.onlyNew">
+            <span>只看新增</span>
+          </label>
+        </div>
       </div>
     </div>
   `,
@@ -1352,96 +1362,15 @@ const ResultList = {
   },
   template: `
     <div>
-      <div v-if="plans.length === 0" class="text-center text-slate-400 py-16">
+      <div v-if="plans.length === 0 && viewMode==='voluntary'" class="text-center text-slate-400 py-16">
+        <div class="text-4xl mb-2">📋</div>
+        <div>志愿单为空</div>
+        <div class="text-sm mt-1">回到查询页, 点击"+志愿"加入招生计划</div>
+      </div>
+      <div v-else-if="plans.length === 0" class="text-center text-slate-400 py-16">
         <div class="text-4xl mb-2">🤔</div>
         <div>未找到符合条件的招生计划</div>
         <div class="text-sm mt-1">尝试调整左侧筛选条件</div>
-      </div>
-
-      <!-- 志愿单视图 (V6: 加序号 + 上下移 + 不可排序) -->
-      <div v-else-if="viewMode==='voluntary'" class="overflow-x-auto">
-        <div v-if="plans.length === 0" class="text-center text-slate-400 py-16">
-          <div class="text-4xl mb-2">📋</div>
-          <div>志愿单为空</div>
-          <div class="text-sm mt-1">回到查询页, 点击 "+ 志愿" 加入招生计划</div>
-        </div>
-        <table v-else class="resizable-table w-full bg-white border text-xs">
-          <thead>
-            <tr>
-              <th style="width:40px" class="text-center">#</th>
-              <template v-for="c in columns" :key="c.key">
-                <th v-if="c.key !== 'actions'"
-                    :class="['col-'+c.key, c.fixed ? 'fixed-col' : '']"
-                    :style="{ width: colWidth(c) + 'px' }">
-                  <span>{{ c.label }}</span>
-                </th>
-              </template>
-              <th style="width:130px" class="text-center">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            <template v-for="(p, idx) in plans" :key="p.id">
-              <tr class="hover:bg-slate-50 cursor-pointer"
-                  :class="[rowTier(p) ? 'tier-row-'+rowTier(p) : '', isExpanded(p.id) ? 'main-row-expanded' : '']"
-                  @click="$emit('toggle-expand', p.id)">
-                <th class="vol-num-cell text-center">{{ idx + 1 }}</th>
-                <template v-for="c in columns" :key="c.key">
-                  <td v-if="c.key==='actions'"></td>
-                  <td v-else-if="c.key==='tier'" :class="'col-'+c.key">
-                    <span v-if="rowTier(p)" class="tier-cell" :class="'tier-cell-'+rowTier(p)">
-                      {{ rowTier(p) === 'chong' ? '冲' : rowTier(p) === 'wen' ? '稳' : '保' }}
-                    </span>
-                  </td>
-                  <td v-else-if="c.key==='school'" :class="'col-'+c.key">
-                    <tier-badge :tag="p.schoolTag"></tier-badge>
-                    <span class="ml-1">{{ p.schoolName }}</span>
-                    <span v-if="p.schoolRank" class="text-slate-400 ml-1">#{{ p.schoolRank }}</span>
-                  </td>
-                  <td v-else-if="c.key==='major'" :class="['col-'+c.key, 'truncate']" :title="p.majorName26 || p.majorName25">
-                    <span v-if="p.isNew==='新增'" class="badge-new">新</span>
-                    <span v-if="p.isStopped" class="badge-stop">停</span>
-                    <span v-if="p.diff && !p.isStopped && p.isNew !== '新增'"
-                          class="badge-diff" :title="p.diff">变</span>
-                    <span v-if="p.isMidOutside" class="badge-mid">中外</span>
-                    {{ p.majorName26 || p.majorName25 || '—' }}
-                  </td>
-                  <td v-else-if="c.key==='score'" :class="['col-'+c.key, 'font-bold text-blue-700 text-right']">
-                    {{ cellValue(p, c.key) }}
-                  </td>
-                  <td v-else-if="c.key==='rank' || c.key==='tuition'" :class="['col-'+c.key, 'text-right']">{{ cellValue(p, c.key) }}</td>
-                  <td v-else-if="c.key==='conf'" :class="'col-'+c.key"><conf-badge :conf="cellValue(p, c.key)"></conf-badge></td>
-                  <td v-else-if="c.key==='num' || c.key==='dur' || c.key==='sp' || c.key==='mp'"
-                      :class="['col-'+c.key, 'text-center']">{{ cellValue(p, c.key) }}</td>
-                  <td v-else :class="['col-'+c.key, 'truncate']" :title="cellValue(p, c.key)">{{ cellValue(p, c.key) }}</td>
-                </template>
-                <td class="text-center vol-actions">
-                  <button @click.stop="$emit('vol-top', p.id)" :disabled="idx === 0"
-                          class="px-1 hover:text-blue-600 disabled:opacity-30" title="置顶">⬆⬆</button>
-                  <button @click.stop="$emit('vol-up', p.id)" :disabled="idx === 0"
-                          class="px-1 hover:text-blue-600 disabled:opacity-30" title="上移">⬆</button>
-                  <button @click.stop="$emit('vol-down', p.id)" :disabled="idx === plans.length-1"
-                          class="px-1 hover:text-blue-600 disabled:opacity-30" title="下移">⬇</button>
-                  <button @click.stop="$emit('vol-bottom', p.id)" :disabled="idx === plans.length-1"
-                          class="px-1 hover:text-blue-600 disabled:opacity-30" title="置底">⬇⬇</button>
-                  <button @click.stop="$emit('toggle-voluntary', p.id)"
-                          class="px-1 text-red-500 hover:text-red-700" title="移除">✕</button>
-                </td>
-              </tr>
-              <!-- 展开行 (复用主表格的展开行) -->
-              <tr v-if="isExpanded(p.id)" class="expanded-row">
-                <td :colspan="columns.length + 1" class="bg-slate-50 p-3">
-                  <div class="text-sm">
-                    <div><b>所在省:</b> {{ p.province }} · {{ p.cityTier }} · <b>类型:</b> {{ p.schoolType }} · <b>主管:</b> {{ p.managing || '—' }}</div>
-                    <div class="mt-1"><b>学科评估:</b> {{ p.rankEval || p.rankEval25 || '—' }}</div>
-                    <div class="mt-1"><b>软科评级:</b> {{ p.rankSoftware || '—' }}</div>
-                    <div class="mt-1" v-if="p.remarks"><b class="text-amber-700">📌 备注:</b> {{ p.remarks }}</div>
-                    <div class="mt-1" v-if="p.diffSummary"><b class="text-orange-700">📈 变化:</b> {{ p.diffSummary }}</div>
-                  </div>
-                </td>
-              </tr>
-            </template>
-          </tbody>
-        </table>
       </div>
 
       <!-- 三栏冲稳保 (3.16.1) -->
@@ -1485,27 +1414,32 @@ const ResultList = {
       </div>
 
       <!-- 表格视图: 数据驱动 (V4: drag/sort/resize 拆子元素, sticky header) -->
+      <!-- voluntary mode: 同表格但加 # 和 操作 列, 表头不可 sort/drag (但可 resize) -->
       <div v-else class="table-scroll">
         <table class="resizable-table w-full bg-white border text-xs">
           <thead>
             <tr>
+              <!-- voluntary: 序号列 -->
+              <th v-if="viewMode==='voluntary'" style="width:40px" class="text-center">#</th>
+              <!-- voluntary: 操作列 (前置) -->
+              <th v-if="viewMode==='voluntary'" style="width:130px" class="text-center">操作</th>
               <th v-for="c in columns" :key="c.key"
                   :class="['col-'+c.key, c.fixed ? 'fixed-col' : '']"
                   :style="{ width: colWidth(c) + 'px' }"
                   @dragover.prevent
-                  @drop="onColDrop(c)">
-                <!-- 拖动手柄 (左) -->
-                <span v-if="!c.fixed" class="th-drag"
+                  @drop="viewMode !== 'voluntary' && onColDrop(c)">
+                <!-- 拖动手柄 (左) - voluntary 不显示 -->
+                <span v-if="!c.fixed && viewMode !== 'voluntary'" class="th-drag"
                       draggable="true"
                       @dragstart="onColDragStart(c, $event)"
                       title="拖动调整列顺序">⠿</span>
-                <!-- 表头文字 (中) - 点击排序 -->
-                <span class="th-text" :class="c.sortable ? 'sortable' : ''"
-                      @click.stop="c.sortable && $emit('sort-col', c.sortField)">{{ c.label }}</span>
-                <span v-if="sortIndicator(c)" class="sort-indicator">
+                <!-- 表头文字 (中) - voluntary 不点击排序 -->
+                <span class="th-text" :class="(c.sortable && viewMode !== 'voluntary') ? 'sortable' : ''"
+                      @click.stop="c.sortable && viewMode !== 'voluntary' && $emit('sort-col', c.sortField)">{{ c.label }}</span>
+                <span v-if="sortIndicator(c) && viewMode !== 'voluntary'" class="sort-indicator">
                   {{ sortIndicator(c).dir === 'desc' ? '↓' : '↑' }}<sub>{{ sortIndicator(c).idx }}</sub>
                 </span>
-                <!-- 列宽 resize 手柄 (右) -->
+                <!-- 列宽 resize 手柄 (右) - 两种模式都可 -->
                 <span v-if="!c.fixed" class="th-resize"
                       @mousedown.stop="startResize(c, $event)"
                       title="拖动调整列宽"></span>
@@ -1513,10 +1447,27 @@ const ResultList = {
             </tr>
           </thead>
           <tbody>
-            <template v-for="p in plans" :key="p.id">
+            <template v-for="(p, idx) in plans" :key="p.id">
               <tr class="hover:bg-slate-50 cursor-pointer"
                   :class="[rowTier(p) ? 'tier-row-'+rowTier(p) : '', isExpanded(p.id) ? 'main-row-expanded' : '']"
                   @click="$emit('toggle-expand', p.id)">
+                <!-- voluntary: 序号列 -->
+                <th v-if="viewMode==='voluntary'" class="vol-num-cell text-center">{{ idx + 1 }}</th>
+                <!-- voluntary: 操作列 (前置: 上下移 / 移除 / 详情) -->
+                <td v-if="viewMode==='voluntary'" class="text-center vol-actions">
+                  <button @click.stop="$emit('vol-top', p.id)" :disabled="idx === 0"
+                          class="px-1 hover:text-blue-600 disabled:opacity-30" title="置顶">⇈</button>
+                  <button @click.stop="$emit('vol-up', p.id)" :disabled="idx === 0"
+                          class="px-1 hover:text-blue-600 disabled:opacity-30" title="上移">↑</button>
+                  <button @click.stop="$emit('vol-down', p.id)" :disabled="idx === plans.length-1"
+                          class="px-1 hover:text-blue-600 disabled:opacity-30" title="下移">↓</button>
+                  <button @click.stop="$emit('vol-bottom', p.id)" :disabled="idx === plans.length-1"
+                          class="px-1 hover:text-blue-600 disabled:opacity-30" title="置底">⇊</button>
+                  <button @click.stop="$emit('toggle-voluntary', p.id)"
+                          class="px-1 text-red-500 hover:text-red-700" title="移除">✕</button>
+                  <button @click.stop="$emit('open-detail', p)"
+                          class="px-1 text-blue-500 hover:underline" title="详情">详</button>
+                </td>
                 <template v-for="c in columns" :key="c.key">
                   <td v-if="c.key==='tier'" :class="'col-'+c.key">
                     <span v-if="rowTier(p)" class="tier-cell" :class="'tier-cell-'+rowTier(p)">
@@ -1544,25 +1495,28 @@ const ResultList = {
                   <td v-else-if="c.key==='num' || c.key==='dur' || c.key==='sp' || c.key==='mp'"
                       :class="['col-'+c.key, 'text-center']">{{ cellValue(p, c.key) }}</td>
                   <td v-else-if="c.key==='actions'" :class="'col-'+c.key">
-                    <button @click.stop="$emit('toggle-voluntary', p.id)"
-                            :class="volIdx(p.id) ? 'vol-badge vol-in' : 'vol-badge vol-out'"
-                            :title="volIdx(p.id) ? '点击移出志愿单 (序号 ' + volIdx(p.id) + ')' : '加入志愿单'">
-                      {{ volIdx(p.id) ? '#' + volIdx(p.id) : '+志愿' }}
-                    </button>
-                    <button @click.stop="$emit('toggle-compare', p.id)"
-                            class="ml-1 px-1 border rounded text-xs"
-                            :class="compareSet.has(p.id) ? 'bg-amber-100 border-amber-400 text-amber-700' : ''">
-                      {{ compareSet.has(p.id) ? '✓' : '+对' }}
-                    </button>
-                    <button @click.stop="$emit('open-detail', p)"
-                            class="ml-1 text-blue-500 hover:underline text-xs">详</button>
+                    <!-- voluntary 模式下 actions 列不渲染 (操作已在前置列) -->
+                    <template v-if="viewMode !== 'voluntary'">
+                      <button @click.stop="$emit('toggle-voluntary', p.id)"
+                              :class="volIdx(p.id) ? 'vol-badge vol-in' : 'vol-badge vol-out'"
+                              :title="volIdx(p.id) ? '点击移出志愿单 (序号 ' + volIdx(p.id) + ')' : '加入志愿单'">
+                        {{ volIdx(p.id) ? '#' + volIdx(p.id) : '+志愿' }}
+                      </button>
+                      <button @click.stop="$emit('toggle-compare', p.id)"
+                              class="ml-1 px-1 border rounded text-xs"
+                              :class="compareSet.has(p.id) ? 'bg-amber-100 border-amber-400 text-amber-700' : ''">
+                        {{ compareSet.has(p.id) ? '✓' : '+对' }}
+                      </button>
+                      <button @click.stop="$emit('open-detail', p)"
+                              class="ml-1 text-blue-500 hover:underline text-xs">详</button>
+                    </template>
                   </td>
                   <td v-else :class="['col-'+c.key, 'truncate']" :title="cellValue(p, c.key)">{{ cellValue(p, c.key) }}</td>
                 </template>
               </tr>
               <!-- 展开行 V5 (Item 7: 紧凑 + 变化合并 25vs26 + 预测 1 行) -->
               <tr v-if="isExpanded(p.id)" class="expanded-row">
-                <td :colspan="columns.length" class="bg-slate-50 p-3">
+                <td :colspan="columns.length + (viewMode==='voluntary' ? 2 : 0)" class="bg-slate-50 p-3">
                   <div class="space-y-3">
 
                     <!-- 学校基本信息 (1 行 inline) -->
@@ -2587,6 +2541,63 @@ createApp({
       }
       return c;
     });
+    // 志愿单 HTML 导出 (志愿填报标准 6 列格式)
+    function exportVoluntaryHtml() {
+      if (!store.voluntary.length) { alert("志愿单为空"); return; }
+      const m = planByIdMap.value;
+      const items = store.voluntary.map(id => m[id]).filter(Boolean);
+      const dt = new Date();
+      const dateStr = `${dt.getFullYear()}_${dt.getMonth()+1}_${dt.getDate()}_${dt.getHours()}_${dt.getMinutes()}_${dt.getSeconds()}`;
+      const esc = s => String(s ?? "").replace(/[<>&"]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));
+      const rowsHtml = items.map((p, i) => `
+        <tr>
+          <td class="num">${i + 1}</td>
+          <td>${esc(p.schoolCode || '')}</td>
+          <td>${esc(p.schoolName || '')}</td>
+          <td>${esc(p.majorCode26 || '')}</td>
+          <td class="major">${esc(p.majorName26 || p.majorName25 || '')}</td>
+          <td class="remarks">${esc(p.remarks || '')}</td>
+        </tr>
+      `).join("");
+      const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>志愿单 ${dateStr}</title>
+<style>
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; padding: 20px; max-width: 1000px; margin: 0 auto; }
+  h1 { font-size: 18px; text-align: center; margin: 0 0 12px; }
+  .info { font-size: 12px; color: #555; text-align: center; margin-bottom: 16px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th { background: #edf5fe; color: #333; padding: 8px 4px; border: 1px solid #999; font-weight: bold; }
+  td { padding: 6px 4px; border: 1px solid #999; text-align: center; vertical-align: middle; }
+  td.num { background: #f8fafc; font-weight: bold; }
+  td.major { text-align: left; }
+  td.remarks { text-align: left; color: #555; font-size: 11px; }
+  @media print { body { padding: 10px; } }
+</style>
+</head><body>
+  <h1>2026 物理类 志愿单 (共 ${items.length} 个志愿)</h1>
+  <div class="info">生成时间: ${dt.toLocaleString('zh-CN')}</div>
+  <table>
+    <thead>
+      <tr>
+        <th style="width:50px">序号</th>
+        <th style="width:90px">院校代号</th>
+        <th style="width:180px">院校名称</th>
+        <th style="width:80px">专业代号</th>
+        <th>专业名称</th>
+        <th style="width:200px">专业备注</th>
+      </tr>
+    </thead>
+    <tbody>${rowsHtml}</tbody>
+  </table>
+</body></html>`;
+      const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url;
+      a.download = `志愿_${dateStr}.html`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
     // 志愿单按档导出
     function exportVoluntaryByTier() {
       if (!store.voluntary.length) { alert("志愿单为空"); return; }
@@ -3005,7 +3016,7 @@ createApp({
       openDetail, toggleCompare, toggleFavorite, toggleExpand, saveFavorites,
       voluntarySet, isInVoluntary, voluntaryIndex, toggleVoluntary,
       moveVoluntaryUp, moveVoluntaryDown, moveVoluntaryToTop, moveVoluntaryToBottom, clearVoluntary,
-      voluntaryTierCounts, exportVoluntaryByTier,
+      voluntaryTierCounts, exportVoluntaryByTier, exportVoluntaryHtml,
       resetFilters, onApplyTier, reloadData,
       exportCsv, toggleDark,
       savePreset, loadPreset, deletePreset, renamePreset, copyShareLink,

@@ -248,7 +248,8 @@
                 <span class="text-amber-600">稳 {{ voluntaryTierCounts.wen }}/{{ paneTargets.wen }}</span>,
                 <span class="text-green-600">保 {{ voluntaryTierCounts.bao }}/{{ paneTargets.bao }}</span>)
               </span>
-              <button @click="exportVoluntaryByTier" class="text-xs ml-3 text-amber-600 hover:underline">📥 按档导出</button>
+              <button @click="exportVoluntaryHtml" v-if="store.voluntary.length" class="text-xs ml-3 text-blue-600 hover:underline">📤 导出志愿 HTML</button>
+              <button @click="exportVoluntaryByTier" class="text-xs ml-2 text-amber-600 hover:underline">📥 按档 CSV</button>
               <button @click="clearVoluntary" v-if="store.voluntary.length" class="text-xs ml-2 text-red-500 hover:underline">清空</button>
             </div>
             <!-- 其它视图: 显示筛后计数 -->
