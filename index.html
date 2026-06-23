@@ -62,7 +62,7 @@
 
           <div class="flex-1"></div>
 
-          <!-- 右侧操作 — 紧凑版 (icon + 小字, 单行) -->
+          <!-- 右侧操作 — 紧凑版 (icon + 小字, 单行); mobile 折叠到 more 菜单 -->
           <div class="flex items-center gap-1 text-xs">
             <div class="flex border rounded overflow-hidden">
               <button @click="store.viewMode = 'table'"
@@ -73,6 +73,7 @@
                       :title="cwb ? '三栏冲稳保' : '请先输入 26 分数'"
                       class="px-1.5 py-1 border-l" :class="store.viewMode==='pane' ? 'bg-blue-600 text-white' : 'hover:bg-slate-100 disabled:opacity-40'">⫷</button>
             </div>
+            <!-- 常用 (mobile 也显示) -->
             <button @click="ui.showCompare = !ui.showCompare"
                     class="px-2 py-1 rounded border hover:bg-slate-100"
                     :class="{ 'bg-amber-100 border-amber-300': ui.showCompare }"
@@ -81,21 +82,25 @@
                     class="px-2 py-1 rounded border hover:bg-slate-100"
                     :class="{ 'bg-rose-100 border-rose-300': ui.showFavorites }"
                     title="收藏">♥({{ store.favorites.size }})</button>
-            <button @click="copyShareLink"
-                    class="px-2 py-1 rounded border hover:bg-slate-100 no-print no-screenshot"
-                    title="复制分享链接">🔗</button>
-            <button @click="takeScreenshot" :disabled="ui.screenshotting"
-                    class="px-2 py-1 rounded border hover:bg-slate-100 disabled:opacity-50 no-print no-screenshot"
-                    title="截图保存">{{ ui.screenshotting ? '⏳' : '📷' }}</button>
-            <button @click="printPage"
-                    class="px-2 py-1 rounded border hover:bg-slate-100 no-print no-screenshot"
-                    title="打印">🖨</button>
-            <button @click="exportCsv"
-                    class="px-2 py-1 rounded border hover:bg-slate-100 no-print no-screenshot"
-                    title="导出 CSV">📥</button>
-            <button @click="toggleDark"
-                    class="px-2 py-1 rounded border hover:bg-slate-100"
-                    title="切换暗色">{{ ui.dark ? '☀' : '🌙' }}</button>
+            <!-- 次要 (mobile 隐藏, 进 more 菜单) -->
+            <button @click="copyShareLink" class="hide-mobile px-2 py-1 rounded border hover:bg-slate-100 no-print no-screenshot" title="复制分享链接">🔗</button>
+            <button @click="takeScreenshot" :disabled="ui.screenshotting" class="hide-mobile px-2 py-1 rounded border hover:bg-slate-100 disabled:opacity-50 no-print no-screenshot" title="截图保存">{{ ui.screenshotting ? '⏳' : '📷' }}</button>
+            <button @click="printPage" class="hide-mobile px-2 py-1 rounded border hover:bg-slate-100 no-print no-screenshot" title="打印">🖨</button>
+            <button @click="exportCsv" class="hide-mobile px-2 py-1 rounded border hover:bg-slate-100 no-print no-screenshot" title="导出 CSV">📥</button>
+            <button @click="toggleDark" class="hide-mobile px-2 py-1 rounded border hover:bg-slate-100" title="切换暗色">{{ ui.dark ? '☀' : '🌙' }}</button>
+            <!-- More 菜单 (仅 mobile 显示) -->
+            <div class="show-mobile-only relative more-menu">
+              <button @click="ui.showMoreMenu = !ui.showMoreMenu"
+                      class="px-2 py-1 rounded border hover:bg-slate-100" title="更多">⋯</button>
+              <div v-if="ui.showMoreMenu"
+                   class="absolute right-0 top-9 z-30 bg-white border rounded shadow-lg p-2 w-40 space-y-1 text-sm">
+                <button @click="copyShareLink(); ui.showMoreMenu = false" class="block w-full text-left px-2 py-1 hover:bg-slate-100 rounded">🔗 分享链接</button>
+                <button @click="takeScreenshot(); ui.showMoreMenu = false" :disabled="ui.screenshotting" class="block w-full text-left px-2 py-1 hover:bg-slate-100 rounded">📷 截图</button>
+                <button @click="printPage(); ui.showMoreMenu = false" class="block w-full text-left px-2 py-1 hover:bg-slate-100 rounded">🖨 打印</button>
+                <button @click="exportCsv(); ui.showMoreMenu = false" class="block w-full text-left px-2 py-1 hover:bg-slate-100 rounded">📥 导出 CSV</button>
+                <button @click="toggleDark()" class="block w-full text-left px-2 py-1 hover:bg-slate-100 rounded">{{ ui.dark ? '☀ 亮色' : '🌙 暗色' }}</button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -188,9 +193,14 @@
         </div>
       </header>
 
+      <!-- Mobile: sidebar backdrop -->
+      <div v-if="!store.sidebarCollapsed"
+           @click="store.sidebarCollapsed = true"
+           class="sidebar-backdrop fixed inset-0 bg-black/50 z-30"></div>
+
       <!-- Main layout: sidebar + content -->
       <div class="flex">
-        <!-- Sidebar (Item 1: 可收起) -->
+        <!-- Sidebar (desktop: 内联收起; mobile: overlay drawer) -->
         <aside class="sidebar shrink-0 bg-white border-r border-slate-200 sticky top-[88px] h-[calc(100vh-88px)] overflow-y-auto overflow-x-hidden transition-all duration-200"
                :class="store.sidebarCollapsed ? 'w-0' : 'w-80'">
           <filter-panel

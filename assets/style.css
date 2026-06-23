@@ -276,6 +276,96 @@ tr.main-row-expanded td { background: rgba(59, 130, 246, 0.04); }
   line-height: 1.5;
 }
 
+/* ===== Mobile 响应式 (≤ 767px) ===== */
+.show-mobile-only { display: none; }
+.sidebar-backdrop { display: none; }
+
+@media (max-width: 767px) {
+  .hide-mobile { display: none !important; }
+  .show-mobile-only { display: block; }
+
+  /* 顶栏 第 1 行 允许换行 */
+  header > div:first-child {
+    flex-wrap: wrap;
+    gap: 6px !important;
+  }
+  /* 标题缩小, score tool 占满 */
+  header h1 { font-size: 14px !important; }
+
+  /* 冲稳保 buttons 区允许换行 + 字体小 */
+  header > div:nth-child(2) { font-size: 11px; }
+  header > div:nth-child(2) button { font-size: 10px; padding: 3px 6px; }
+
+  /* sidebar 改 fixed overlay drawer */
+  .sidebar {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    height: 100vh !important;
+    width: 280px !important;
+    z-index: 40 !important;
+    transform: translateX(0);
+    box-shadow: 2px 0 12px rgba(0,0,0,0.2);
+  }
+  .sidebar.w-0 {
+    transform: translateX(-100%);
+    width: 280px !important;   /* 仍占 280, 但 translateX 移走 */
+  }
+
+  /* sidebar backdrop 仅 mobile 显示 (desktop 不需要) */
+  .sidebar-backdrop { display: block; }
+
+  /* main 占满 */
+  main { padding: 8px !important; }
+
+  /* 表格隐藏次要列 (mobile 横向空间紧张) */
+  .resizable-table th.col-soft,
+  .resizable-table td.col-soft,
+  .resizable-table th.col-eval,
+  .resizable-table td.col-eval,
+  .resizable-table th.col-remarks,
+  .resizable-table td.col-remarks,
+  .resizable-table th.col-baoyan,
+  .resizable-table td.col-baoyan,
+  .resizable-table th.col-diff,
+  .resizable-table td.col-diff,
+  .resizable-table th.col-dur,
+  .resizable-table td.col-dur,
+  .resizable-table th.col-tuition,
+  .resizable-table td.col-tuition,
+  .resizable-table th.col-conf,
+  .resizable-table td.col-conf,
+  .resizable-table th.col-num,
+  .resizable-table td.col-num {
+    display: none !important;
+  }
+  /* 主要列字号小一点 */
+  .resizable-table { font-size: 10px; }
+
+  /* PlanCard 紧凑 */
+  .plan-card { padding: 8px !important; }
+
+  /* sort chip 多排显示 */
+  .sort-chip { font-size: 10px; padding: 1px 4px; }
+
+  /* 浮动展开按钮 mobile 调整 */
+  button.fixed.top-\[140px\] { top: 100px !important; }
+}
+
+/* tablet (≥768 < 1024): sidebar 默认显示但更窄 */
+@media (max-width: 1023px) and (min-width: 768px) {
+  .sidebar.w-80 { width: 240px !important; }
+  /* 表格隐藏 次要列 */
+  .resizable-table th.col-soft,
+  .resizable-table td.col-soft,
+  .resizable-table th.col-baoyan,
+  .resizable-table td.col-baoyan,
+  .resizable-table th.col-remarks,
+  .resizable-table td.col-remarks {
+    display: none !important;
+  }
+}
+
 /* ===== 对比高亮 ===== */
 .compare-cell {
   padding: 1px 4px;

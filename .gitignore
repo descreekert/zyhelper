@@ -30,3 +30,8 @@ build/
 
 # Logs
 *.log
+
+# 截图保存的副产物 (浏览器下载位置)
+docs/志愿_*.html
+docs/志愿_*.png
+*.html.tmp

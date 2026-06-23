@@ -465,12 +465,15 @@ watch(() => ({
   columnOrder: store.columnOrder,
 }), v => saveLS(LS_KEY_LAYOUT, v), { deep: true });
 
+const isMobile = () => window.matchMedia("(max-width: 767px)").matches;
+
 const ui = reactive({
   dark: false,
   showCompare: false,
   showFavorites: false,
   showColSettings: false,
   showRatioPanel: false,
+  showMoreMenu: false,
   detailPlan: null,
   myScore: 0,
   myRank: 0,
@@ -557,15 +560,16 @@ const ScoreTool = {
              class="w-20 border rounded px-2 py-1 text-center text-slate-700"
              placeholder="0">
       <template v-if="multiEquiv && multiEquiv.length">
-        <span class="text-xs text-slate-400">|</span>
-        <span class="text-xs text-slate-500 mr-1">多年等位:</span>
-        <span v-for="e in multiEquiv" :key="e.year"
+        <span class="text-xs text-slate-400 hide-mobile">|</span>
+        <span class="text-xs text-slate-500 mr-1 hide-mobile">多年等位:</span>
+        <span v-for="(e, i) in multiEquiv" :key="e.year"
               class="text-xs text-slate-600 mr-2"
+              :class="i > 0 ? 'hide-mobile' : ''"
               :title="e.year + ' 年: ' + e.score + ' 分 / ' + e.rank + ' 名'">
           <b class="text-purple-700">{{ e.year }}</b>: {{ e.score }}/<span class="text-slate-500">{{ e.rank || '—' }}</span>
         </span>
         <select :value="equivSource" @change="$emit('update:equivSource', $event.target.value)"
-                class="text-xs border rounded px-1 py-0.5 text-slate-600"
+                class="text-xs border rounded px-1 py-0.5 text-slate-600 hide-mobile"
                 title="冲稳保基准">
           <option value="25">基准: 25</option>
           <option value="avg">基准: 平均</option>
@@ -1398,17 +1402,17 @@ const ResultList = {
                   :class="[rowTier(p) ? 'tier-row-'+rowTier(p) : '', isExpanded(p.id) ? 'main-row-expanded' : '']"
                   @click="$emit('toggle-expand', p.id)">
                 <template v-for="c in columns" :key="c.key">
-                  <td v-if="c.key==='tier'" class="col-tier">
+                  <td v-if="c.key==='tier'" :class="'col-'+c.key">
                     <span v-if="rowTier(p)" class="tier-cell" :class="'tier-cell-'+rowTier(p)">
                       {{ rowTier(p) === 'chong' ? '冲' : rowTier(p) === 'wen' ? '稳' : '保' }}
                     </span>
                   </td>
-                  <td v-else-if="c.key==='school'">
+                  <td v-else-if="c.key==='school'" :class="'col-'+c.key">
                     <tier-badge :tag="p.schoolTag"></tier-badge>
                     <span class="ml-1">{{ p.schoolName }}</span>
                     <span v-if="p.schoolRank" class="text-slate-400 ml-1">#{{ p.schoolRank }}</span>
                   </td>
-                  <td v-else-if="c.key==='major'" class="truncate" :title="p.majorName26 || p.majorName25">
+                  <td v-else-if="c.key==='major'" :class="['col-'+c.key, 'truncate']" :title="p.majorName26 || p.majorName25">
                     <span v-if="p.isNew==='新增'" class="badge-new">新</span>
                     <span v-if="p.isStopped" class="badge-stop">停</span>
                     <span v-if="p.diff && !p.isStopped && p.isNew !== '新增'"
@@ -1416,14 +1420,14 @@ const ResultList = {
                     <span v-if="p.isMidOutside" class="badge-mid">中外</span>
                     {{ p.majorName26 || p.majorName25 || '—' }}
                   </td>
-                  <td v-else-if="c.key==='score'" class="font-bold text-blue-700 text-right">
+                  <td v-else-if="c.key==='score'" :class="['col-'+c.key, 'font-bold text-blue-700 text-right']">
                     {{ cellValue(p, c.key) }}
                   </td>
-                  <td v-else-if="c.key==='rank' || c.key==='tuition'" class="text-right">{{ cellValue(p, c.key) }}</td>
-                  <td v-else-if="c.key==='conf'"><conf-badge :conf="cellValue(p, c.key)"></conf-badge></td>
+                  <td v-else-if="c.key==='rank' || c.key==='tuition'" :class="['col-'+c.key, 'text-right']">{{ cellValue(p, c.key) }}</td>
+                  <td v-else-if="c.key==='conf'" :class="'col-'+c.key"><conf-badge :conf="cellValue(p, c.key)"></conf-badge></td>
                   <td v-else-if="c.key==='num' || c.key==='dur' || c.key==='sp' || c.key==='mp'"
-                      class="text-center">{{ cellValue(p, c.key) }}</td>
-                  <td v-else-if="c.key==='actions'">
+                      :class="['col-'+c.key, 'text-center']">{{ cellValue(p, c.key) }}</td>
+                  <td v-else-if="c.key==='actions'" :class="'col-'+c.key">
                     <button @click.stop="$emit('toggle-favorite', p.id)"
                             :class="favorites.has(p.id) ? 'text-rose-500' : 'text-slate-300'">♥</button>
                     <button @click.stop="$emit('toggle-compare', p.id)"
@@ -1434,7 +1438,7 @@ const ResultList = {
                     <button @click.stop="$emit('open-detail', p)"
                             class="ml-1 text-blue-500 hover:underline text-xs">详</button>
                   </td>
-                  <td v-else class="truncate" :title="cellValue(p, c.key)">{{ cellValue(p, c.key) }}</td>
+                  <td v-else :class="['col-'+c.key, 'truncate']" :title="cellValue(p, c.key)">{{ cellValue(p, c.key) }}</td>
                 </template>
               </tr>
               <!-- 展开行 V5 (Item 7: 紧凑 + 变化合并 25vs26 + 预测 1 行) -->
@@ -2113,6 +2117,16 @@ createApp({
       loading.value = false;
     }
     onMounted(load);
+
+    // Mobile: 默认卡片视图 + 默认侧栏收起 (首次加载, 不覆盖已存的 layout)
+    onMounted(() => {
+      if (isMobile()) {
+        if (!layoutInit.sidebarCollapsed && layoutInit.sidebarCollapsed !== false) {
+          store.sidebarCollapsed = true;
+        }
+        if (store.viewMode === "table") store.viewMode = "list";
+      }
+    });
 
     // P2.2: URL hash 同步 (filters → hash, 双向)
     let hashUpdating = false;
