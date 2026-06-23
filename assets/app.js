@@ -554,20 +554,20 @@ const ScoreTool = {
     return { cwb, targetNum, onScore, onRank, multiEquiv };
   },
   template: `
-    <div class="flex items-center gap-2 text-sm">
-      <label class="text-slate-500">26 分数:</label>
+    <div class="flex items-center gap-2 text-sm flex-wrap">
+      <label class="text-slate-500 whitespace-nowrap">26 分数:</label>
       <input type="number" :value="myScore" @input="onScore($event.target.value)"
              class="w-20 border rounded px-2 py-1 text-center font-bold text-blue-600"
              placeholder="0">
-      <label class="text-slate-500">26 位次:</label>
+      <label class="text-slate-500 whitespace-nowrap">26 位次:</label>
       <input type="number" :value="myRank || ''" @input="onRank($event.target.value)"
              class="w-20 border rounded px-2 py-1 text-center text-slate-700"
              placeholder="0">
       <template v-if="multiEquiv && multiEquiv.length">
         <span class="text-xs text-slate-400 hide-mobile">|</span>
-        <span class="text-xs text-slate-500 mr-1 hide-mobile">多年等位:</span>
+        <span class="text-xs text-slate-500 mr-1 hide-mobile whitespace-nowrap">多年等位:</span>
         <span v-for="(e, i) in multiEquiv" :key="e.year"
-              class="text-xs text-slate-600 mr-2"
+              class="text-xs text-slate-600 mr-2 whitespace-nowrap"
               :class="i > 0 ? 'hide-mobile' : ''"
               :title="e.year + ' 年: ' + e.score + ' 分 / ' + e.rank + ' 名'">
           <b class="text-purple-700">{{ e.year }}</b>: {{ e.score }}/<span class="text-slate-500">{{ e.rank || '—' }}</span>

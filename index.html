@@ -45,7 +45,7 @@
       <!-- Top bar -->
       <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
         <!-- 第 1 行: 标题 + 26 分数/位次/等位换算 + 右侧操作 -->
-        <div class="px-4 py-2 flex items-center gap-4">
+        <div class="px-4 py-2 flex items-center gap-4 flex-wrap">
           <h1 class="text-lg font-bold text-blue-700 whitespace-nowrap">📚 志愿助手</h1>
 
           <score-tool
@@ -63,7 +63,7 @@
           <div class="flex-1"></div>
 
           <!-- 右侧操作 — 紧凑版 (icon + 小字, 单行); mobile 折叠到 more 菜单 -->
-          <div class="flex items-center gap-1 text-xs">
+          <div class="flex items-center gap-1 text-xs flex-wrap whitespace-nowrap">
             <div class="flex border rounded overflow-hidden">
               <button @click="store.viewMode = 'table'"
                       class="px-1.5 py-1" :class="store.viewMode==='table' ? 'bg-blue-600 text-white' : 'hover:bg-slate-100'" title="表格视图">📋</button>
@@ -105,8 +105,8 @@
         </div>
 
         <!-- 第 2 行: 冲稳保按钮独占一行 + 数据信息 -->
-        <div v-if="cwb" class="px-4 pb-2 flex items-center gap-2 flex-wrap text-xs">
-          <span class="text-slate-500">志愿分布:</span>
+        <div v-if="cwb" class="px-4 pb-2 flex items-center gap-2 flex-wrap text-xs whitespace-nowrap">
+          <span class="text-slate-500 whitespace-nowrap">志愿分布:</span>
           <!-- 比例调节 popover -->
           <div class="relative ratio-popover">
             <button @click="ui.showRatioPanel = !ui.showRatioPanel"
