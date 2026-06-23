@@ -1,13 +1,14 @@
 // 2026 物理类志愿填报助手 - Vue 3 单文件应用
 // 数据文件: data/plans.json, data/score_rank.json, data/meta.json
 
-const { createApp, ref, reactive, computed, watch, onMounted, onUnmounted } = Vue;
+const { createApp, ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } = Vue;
 
 // ========== 工具函数 ==========
 
 const LS_KEY_FAV   = "zyhelper_favorites_v1";
 const LS_KEY_VOL   = "zyhelper_voluntary_v1";
 const LS_KEY_PRIORITY_OVR = "zyhelper_priority_overrides_v1";
+const LS_KEY_PLAN_OVR = "zyhelper_plan_overrides_v1";
 const LS_KEY_PRESET= "zyhelper_presets_v2";   // v2: 含 subjects + allowed 关键词维度
 const LS_KEY_UI    = "zyhelper_ui_v1";
 
@@ -460,6 +461,8 @@ const store = reactive({
   voluntary: loadLS(LS_KEY_VOL, null) || loadLS(LS_KEY_FAV, []),   // 首次加载从 favorites 迁移
   // 用户自定义排序覆盖 (null = 用 priority.json 默认; Array<name> = 自定义顺序)
   priorityOverrides: loadLS(LS_KEY_PRIORITY_OVR, { schools: null, cities: null, majorClasses: null, majors: null }),
+  // 用户手动修改的 plan 字段 (e.g. ref25Score) — { [planId]: { ref25Score, ref25Rank } }
+  planOverrides: loadLS(LS_KEY_PLAN_OVR, {}),
   compareList: [],
   expandedRows: new Set(),
   // P2.1: 筛选预设 [{name, filters: serialized}, ...]
@@ -502,6 +505,7 @@ const ui = reactive({
 watch(() => Array.from(store.favorites), v => saveLS(LS_KEY_FAV, v));
 watch(() => [...store.voluntary], v => saveLS(LS_KEY_VOL, v));
 watch(() => store.priorityOverrides, v => saveLS(LS_KEY_PRIORITY_OVR, v), { deep: true });
+watch(() => store.planOverrides, v => saveLS(LS_KEY_PLAN_OVR, v), { deep: true });
 watch(ui, v => saveLS(LS_KEY_UI, { ...v, detailPlan: null }), { deep: true });
 
 // ========== 组件 ==========
@@ -1327,16 +1331,39 @@ const ResultList = {
   props: ["plans", "total", "currentPage", "pageSize", "compareSet", "favorites",
           "viewMode", "expandedRows", "tierMap",
           "columns", "sortKeys", "cwb", "paneTargets",
-          "voluntary", "voluntarySet", "columnWidths"],
+          "voluntary", "voluntarySet", "columnWidths", "planOverrides"],
   emits: ["page-change", "open-detail", "toggle-compare", "toggle-favorite", "toggle-expand",
           "sort-col", "col-drop", "col-resize",
-          "toggle-voluntary", "vol-up", "vol-down", "vol-top", "vol-bottom"],
+          "toggle-voluntary", "vol-up", "vol-down", "vol-top", "vol-bottom",
+          "edit-score"],
   setup(props, { emit }) {
     function fmtDuration(p) { return formatDuration(p.duration || p.duration25); }
     function formatDur25(p) { return formatDuration(p.duration25 || p.duration); }
     function volIdx(id) {
       const i = props.voluntary?.indexOf(id);
       return (i !== undefined && i >= 0) ? i + 1 : 0;
+    }
+    // 双击 编辑 25 参考分
+    const editingScore = ref(null);   // plan id
+    const editingValue = ref("");
+    function startEditScore(p, ev) {
+      ev.stopPropagation();
+      editingScore.value = p.id;
+      editingValue.value = (p.isStopped ? p.score25 : p.ref25Score) || "";
+      nextTick(() => {
+        const inp = ev.target.closest("td")?.querySelector("input");
+        inp?.focus();
+        inp?.select();
+      });
+    }
+    function commitEditScore() {
+      if (editingScore.value == null) return;
+      emit("edit-score", { id: editingScore.value, score: editingValue.value });
+      editingScore.value = null;
+    }
+    function cancelEditScore() { editingScore.value = null; }
+    function isEdited(p) {
+      return props.planOverrides && props.planOverrides[p.id];
     }
     function rowTier(p) {
       return props.tierMap ? (props.tierMap.get(p.id) || null) : null;
@@ -1417,7 +1444,8 @@ const ResultList = {
     }));
     return { fmtDuration, formatDur25, rowTier, isExpanded, cellValue, sortIndicator,
              onColDragStart, onColDrop, startResize, colWidth,
-             paneLists, paneCounts, volIdx };
+             paneLists, paneCounts, volIdx,
+             editingScore, editingValue, startEditScore, commitEditScore, cancelEditScore, isEdited };
   },
   computed: {
     totalPages() {
@@ -1552,8 +1580,20 @@ const ResultList = {
                     <span v-if="p.isMidOutside" class="badge-mid">中外</span>
                     {{ p.majorName26 || p.majorName25 || '—' }}
                   </td>
-                  <td v-else-if="c.key==='score'" :class="['col-'+c.key, 'font-bold text-blue-700 text-right']">
-                    {{ cellValue(p, c.key) }}
+                  <td v-else-if="c.key==='score'" :class="['col-'+c.key, 'font-bold text-blue-700 text-right cursor-text', isEdited(p) ? 'cell-edited' : '']"
+                      :title="isEdited(p) ? '已手动修改 (双击重编辑)' : '双击编辑 25 参考分'"
+                      @dblclick="startEditScore(p, $event)">
+                    <template v-if="editingScore === p.id">
+                      <input type="number" v-model="editingValue"
+                             @blur="commitEditScore"
+                             @keydown.enter="commitEditScore"
+                             @keydown.esc="cancelEditScore"
+                             @click.stop
+                             class="w-16 px-1 text-right border rounded bg-yellow-50">
+                    </template>
+                    <template v-else>
+                      {{ cellValue(p, c.key) }}<span v-if="isEdited(p)" class="text-amber-500 text-xs">*</span>
+                    </template>
                   </td>
                   <td v-else-if="c.key==='rank' || c.key==='tuition'" :class="['col-'+c.key, 'text-right']">{{ cellValue(p, c.key) }}</td>
                   <td v-else-if="c.key==='conf'" :class="'col-'+c.key"><conf-badge :conf="cellValue(p, c.key)"></conf-badge></td>
@@ -2392,7 +2432,14 @@ createApp({
       loadingPct.value = 10;
       const r1 = await fetch("data/plans.json" + t);
       loadingPct.value = 30;
-      store.allPlans = await r1.json();
+      const plans = await r1.json();
+      // 应用 planOverrides (用户手动修改的字段)
+      const ov = store.planOverrides || {};
+      for (const p of plans) {
+        const o = ov[p.id];
+        if (o) Object.assign(p, o);
+      }
+      store.allPlans = plans;
       loadingPct.value = 50;
 
       loadingMsg.value = "下载 score_rank.json...";
@@ -2944,6 +2991,31 @@ createApp({
     function onColResize({ key, width }) {
       store.columnWidths = { ...store.columnWidths, [key]: width };
     }
+    // 双击 cell 编辑 (用户修改 25 参考分; 自动算位次)
+    function editPlanScore(planId, newScore) {
+      const idx = store.allPlans.findIndex(p => p.id === planId);
+      if (idx < 0) return;
+      const p = store.allPlans[idx];
+      const s = parseInt(newScore, 10);
+      if (!s || s < 100 || s > 750) { alert("分数无效 (100-750)"); return; }
+      const newRank = scoreRank.value ? rank25FromScore25(s, scoreRank.value) : null;
+      // 更新 plan + 持久化 override
+      store.allPlans[idx] = { ...p, ref25Score: s, ref25Rank: newRank };
+      store.planOverrides = {
+        ...store.planOverrides,
+        [planId]: { ref25Score: s, ref25Rank: newRank, _edited: true },
+      };
+    }
+    function resetPlanEdit(planId) {
+      if (!confirm("还原此行的手动修改 (恢复原始 25 参考分)?")) return;
+      // 直接刷新数据 (重新 load 会再读 LS 但我们先删 override)
+      const ov = { ...store.planOverrides };
+      delete ov[planId];
+      store.planOverrides = ov;
+      // 刷新 - reload data (会重置 plan 字段)
+      load();
+    }
+
     // 排序设置 modal handlers
     function savePriorityOverrides(out) {
       store.priorityOverrides = out;
@@ -3089,6 +3161,7 @@ createApp({
       // Items 6.x: 排序 / 列设置
       visibleColumns, allColumns, toggleColumn, resetColumns, onColDrop, onColResize,
       savePriorityOverrides, resetPriorityOverrides,
+      editPlanScore, resetPlanEdit,
       onSortCol, sortFieldLabel, toggleSortDir, removeSortKey,
       onSortDragStart, onSortDrop,
     };

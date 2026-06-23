@@ -434,6 +434,12 @@ tr.main-row-expanded td { background: rgba(59, 130, 246, 0.04); }
 .preset-chip:hover { background: #dbeafe; }
 .preset-chip button { background: transparent; cursor: pointer; padding: 0 2px; }
 
+/* === V7: cell 在线编辑 === */
+.cell-edited {
+  background: #fef3c7 !important;
+}
+.dark .cell-edited { background: #78350f !important; }
+
 /* === V7: PriorityFilter + 号添加 === */
 .chip-add {
   display: inline-block;
