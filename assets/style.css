@@ -1,0 +1,606 @@
+/* 全局自定义样式 (Tailwind 之外的补充) */
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "PingFang SC",
+               "Microsoft YaHei", "Hiragino Sans GB", "Source Han Sans CN", sans-serif;
+}
+
+/* 院校层级标签 (V3: 改为浅底深字, GitHub label 风格, 不刺眼) */
+.tag-985    { background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
+.tag-211    { background: #ffedd5; color: #c2410c; border: 1px solid #fed7aa; }
+.tag-双一流 { background: #fef3c7; color: #a16207; border: 1px solid #fde68a; }
+.tag-国重点 { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+.tag-省重点 { background: #d1fae5; color: #047857; border: 1px solid #a7f3d0; }
+.tag-保研资格 { background: #e0e7ff; color: #4338ca; border: 1px solid #c7d2fe; }
+.tag-其他   { background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
+
+/* 可信度标签 */
+.conf-高           { background: #16a34a; color: white; }
+.conf-中           { background: #65a30d; color: white; }
+.conf-低           { background: #ca8a04; color: white; }
+.conf-本校同类估   { background: #c2410c; color: white; }
+.conf-本校同门类估 { background: #b45309; color: white; }
+.conf-本校高分估   { background: #a16207; color: white; }
+.conf-中外合作估   { background: #9333ea; color: white; }
+.conf-无           { background: #64748b; color: white; }
+.conf-停招         { background: #475569; color: white; }
+
+/* 评级颜色 */
+.eval-A\+  { color: #b91c1c; font-weight: bold; }
+.eval-A    { color: #c2410c; font-weight: bold; }
+.eval-A-   { color: #d97706; font-weight: bold; }
+.eval-B\+  { color: #65a30d; font-weight: 600; }
+.eval-B    { color: #16a34a; }
+.eval-B-   { color: #059669; }
+.eval-C\+  { color: #0891b2; }
+.eval-C    { color: #0e7490; }
+.eval-C-   { color: #475569; }
+
+/* 卡片悬浮 */
+.plan-card {
+  transition: all 0.15s ease;
+}
+.plan-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+/* 滑动条 chip 容器  */
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.chip {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: 12px;
+  border-radius: 4px;
+  border: 1px solid #cbd5e1;
+  background: white;
+  color: #475569;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.1s;
+}
+.chip:hover { background: #f1f5f9; }
+.chip.active {
+  background: #2563eb;
+  border-color: #2563eb;
+  color: white;
+}
+
+/* 详情弹窗 */
+.detail-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 600px;
+  max-width: 100vw;
+  height: 100vh;
+  background: white;
+  box-shadow: -8px 0 32px rgba(0,0,0,0.15);
+  z-index: 50;
+  overflow-y: auto;
+  animation: slideIn 0.2s ease;
+}
+@keyframes slideIn {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+
+/* 紧凑表格 */
+.compact-table th,
+.compact-table td {
+  padding: 4px 8px;
+  font-size: 13px;
+  border-bottom: 1px solid #e2e8f0;
+}
+.compact-table th {
+  background: #f8fafc;
+  font-weight: 600;
+  text-align: left;
+}
+
+/* ===== 冲稳保 tier 配色 ===== */
+.tier-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+.tier-dot.tier-chong { background: #dc2626; }
+.tier-dot.tier-wen   { background: #d97706; }
+.tier-dot.tier-bao   { background: #16a34a; }
+
+.tier-border-chong { border-left: 4px solid #dc2626 !important; }
+.tier-border-wen   { border-left: 4px solid #d97706 !important; }
+.tier-border-bao   { border-left: 4px solid #16a34a !important; }
+
+.tier-chip-chong { background: #fee2e2; color: #dc2626; }
+.tier-chip-wen   { background: #fef3c7; color: #d97706; }
+.tier-chip-bao   { background: #dcfce7; color: #16a34a; }
+
+.tier-row-chong { background: #fef2f2; }
+.tier-row-wen   { background: #fffbeb; }
+.tier-row-bao   { background: #f0fdf4; }
+.tier-row-chong:hover { background: #fee2e2 !important; }
+.tier-row-wen:hover   { background: #fef3c7 !important; }
+.tier-row-bao:hover   { background: #dcfce7 !important; }
+
+.tier-cell {
+  display: inline-block;
+  width: 18px; height: 18px;
+  text-align: center;
+  border-radius: 50%;
+  font-size: 10px; font-weight: bold;
+  line-height: 18px;
+}
+.tier-cell-chong { background: #dc2626; color: white; }
+.tier-cell-wen   { background: #d97706; color: white; }
+.tier-cell-bao   { background: #16a34a; color: white; }
+
+/* ===== 关键词补全 chip ===== */
+.chip-pick {
+  display: inline-flex; align-items: center;
+  padding: 1px 6px;
+  font-size: 12px;
+  border-radius: 4px;
+  border: 1px solid;
+}
+.chip-pick-school { background: #dbeafe; border-color: #93c5fd; color: #1e40af; }
+.chip-pick-class  { background: #fef3c7; border-color: #fcd34d; color: #92400e; }
+.chip-pick-name   { background: #dcfce7; border-color: #86efac; color: #166534; }
+
+/* ===== 筛选侧栏分组 ===== */
+.filter-section {
+  padding-bottom: 8px;
+  border-bottom: 1px dashed #e2e8f0;
+}
+.filter-section:last-child { border-bottom: none; }
+
+/* ===== 表格 (V4: sticky 表头 + 拆子元素 drag/sort/resize) ===== */
+.table-scroll {
+  max-height: calc(100vh - 200px);
+  overflow: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  background: white;
+}
+.resizable-table {
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+.resizable-table th {
+  position: sticky;
+  top: 0;
+  background: #f1f5f9;
+  z-index: 5;
+  padding: 4px 4px;
+  font-weight: 600;
+  text-align: left;
+  border-bottom: 2px solid #94a3b8;
+  border-right: 1px solid #e2e8f0;
+  min-width: 30px;
+  user-select: none;
+  position: sticky;
+  /* 不再用 CSS resize: horizontal, 改用 th-resize 子元素 */
+}
+.resizable-table td {
+  padding: 3px 6px;
+  border-bottom: 1px solid #f1f5f9;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.resizable-table td.truncate { max-width: 0; }
+
+/* 表头三组子元素布局: drag(左) | text(中) | resize(右) */
+.resizable-table th { display: table-cell; }
+.th-drag {
+  display: inline-block;
+  width: 12px; cursor: grab;
+  color: #cbd5e1;
+  margin-right: 2px;
+  font-size: 12px;
+  vertical-align: middle;
+}
+.th-drag:hover { color: #2563eb; }
+.th-drag:active { cursor: grabbing; }
+.th-text {
+  display: inline-block;
+  vertical-align: middle;
+  padding: 0 2px;
+}
+.th-text.sortable { cursor: pointer; }
+.th-text.sortable:hover { color: #2563eb; text-decoration: underline; }
+.th-resize {
+  position: absolute;
+  right: 0; top: 0;
+  width: 5px; height: 100%;
+  cursor: col-resize;
+  background: transparent;
+  z-index: 6;
+}
+.th-resize:hover { background: #60a5fa; }
+.resizable-table th { position: sticky; }    /* keep sticky */
+.resizable-table th { position: relative; }  /* allow th-resize abs */
+/* 同时 sticky + relative 的方法: 用 sticky 的同时手动 contains */
+.resizable-table thead th {
+  position: -webkit-sticky;
+  position: sticky;
+  top: 0;
+}
+.resizable-table th .th-resize { position: absolute; }
+
+/* Item 3: 展开行时主行不截断 */
+tr.main-row-expanded td.truncate { white-space: normal; word-break: break-word; }
+tr.main-row-expanded td { background: rgba(59, 130, 246, 0.04); }
+
+/* 专业名前的小 tag (新/停/变/中外) — Item 4 */
+.badge-new, .badge-stop, .badge-diff, .badge-mid {
+  display: inline-block;
+  padding: 1px 4px;
+  font-size: 10px;
+  font-weight: bold;
+  border-radius: 3px;
+  margin-right: 2px;
+  line-height: 1.2;
+  vertical-align: middle;
+}
+.badge-new  { background: #fee2e2; color: #b91c1c; }
+.badge-stop { background: #e2e8f0; color: #475569; }
+.badge-diff { background: #ffedd5; color: #c2410c; cursor: help; }
+.badge-mid  { background: #ede9fe; color: #6d28d9; }
+
+/* hover: 单元格展开显示完整内容 (Item 3) */
+.resizable-table tbody tr:hover td.truncate {
+  white-space: normal;
+  word-break: break-word;
+}
+.resizable-table tbody tr td.truncate:hover {
+  position: relative;
+  z-index: 4;
+  background: #fff;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.12);
+  max-width: 500px;
+  white-space: normal;
+  word-break: break-word;
+}
+.expanded-row td {
+  border-top: 2px solid #cbd5e1;
+  padding: 8px 12px;
+  white-space: normal;
+}
+.expanded-row .expand-full {
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.5;
+}
+
+/* ===== 对比高亮 ===== */
+.compare-cell {
+  padding: 1px 4px;
+  border-radius: 3px;
+  display: inline-block;
+}
+.compare-best  { background: #dcfce7; color: #15803d; font-weight: bold; }
+.compare-worst { background: #fee2e2; color: #b91c1c; }
+.dark .compare-best  { background: #14532d !important; color: #bbf7d0 !important; }
+.dark .compare-worst { background: #7f1d1d !important; color: #fecaca !important; }
+
+/* ===== 3.18: 截图模式临时样式 ===== */
+.screenshot-mode .no-screenshot { display: none !important; }
+/* 截图时去掉 sticky 让所有内容渲染到位 */
+.screenshot-mode .resizable-table thead th { position: static; }
+.screenshot-mode header { position: static; }
+.screenshot-mode aside { position: static; }
+
+/* ===== 打印样式 (新增) ===== */
+@media print {
+  /* 强制亮色 */
+  html, body { background: white !important; color: black !important; color-scheme: light; }
+  html.dark { color-scheme: light; }
+  .dark body { background: white !important; color: black !important; }
+
+  /* 隐藏不需要的元素 */
+  .no-print, aside, .col-settings-panel, .pane-col,
+  header > div:first-child > div.flex.items-center.gap-2:last-child,
+  .sort-chip button { display: none !important; }
+
+  /* main 占满 */
+  main { width: 100% !important; padding: 8px !important; }
+  .table-scroll { max-height: none !important; overflow: visible !important; border: none !important; }
+
+  /* 表格紧凑 + 每页含表头 */
+  .resizable-table { font-size: 9px !important; }
+  .resizable-table thead { display: table-header-group; }   /* 浏览器原生在每页重复 */
+  .resizable-table tbody tr { page-break-inside: avoid; break-inside: avoid; }
+  .resizable-table th, .resizable-table td { padding: 2px 3px !important; }
+
+  /* sticky 取消 (打印时无法 sticky) */
+  .resizable-table thead th { position: static !important; }
+
+  /* 浮动按钮 */
+  button.fixed { display: none !important; }
+
+  /* 展开行打印优化 */
+  .expanded-row td { background: #f8f8f8 !important; }
+  .expand-section { border: 1px solid #ddd !important; break-inside: avoid; }
+}
+
+/* === P2.1: 预设 chip === */
+.preset-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  font-size: 12px;
+  border-radius: 12px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e40af;
+  cursor: pointer;
+}
+.preset-chip:hover { background: #dbeafe; }
+.preset-chip button { background: transparent; cursor: pointer; padding: 0 2px; }
+
+/* === 3.16.1: 三栏并排 === */
+.pane-col {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 220px);
+}
+.pane-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 2px solid currentColor;
+  font-weight: 600;
+}
+.pane-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* === 3.16.2: 收藏配额 chip === */
+.quota-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  border: 1px solid;
+}
+.quota-chip.quota-chong { background: #fee2e2; border-color: #fecaca; color: #b91c1c; }
+.quota-chip.quota-wen   { background: #fef3c7; border-color: #fde68a; color: #a16207; }
+.quota-chip.quota-bao   { background: #dcfce7; border-color: #bbf7d0; color: #15803d; }
+.quota-chip.quota-other { background: #f1f5f9; border-color: #e2e8f0; color: #64748b; }
+.quota-chip.quota-ok    { font-weight: 600; }
+.quota-chip.quota-warn  { opacity: 0.9; }
+.quota-chip.quota-empty { opacity: 0.55; }
+
+/* === Item 7 (V5): 展开行布局 - 严格按用户规格 === */
+/* 1 行 inline (学校基本信息 / 预测): flex + nowrap */
+.info-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+  font-size: 11px;
+  color: #1e293b;
+}
+.info-line > span { white-space: nowrap; }
+.info-line b {
+  color: #64748b;
+  font-weight: 500;
+  margin-right: 4px;
+}
+
+/* 专业信息: 3 / 2 / 2 / 1 列结构 */
+.major-row { display: grid; gap: 4px 16px; font-size: 11px; }
+.major-row-3 { grid-template-columns: 2fr 1fr 1fr; }
+.major-row-2 { grid-template-columns: 1fr 1fr; }
+.major-row > div { display: flex; gap: 4px; }
+.major-row .info-label {
+  color: #64748b;
+  font-weight: 500;
+  white-space: nowrap;
+  margin-right: 4px;
+}
+.compare-table .diff-cell {
+  vertical-align: top;
+  background: #fefce8;
+  border-right: 2px solid #fde68a;
+  padding: 6px 8px;
+}
+.predict-table thead th {
+  text-align: center;
+  background: #f8fafc;
+}
+.predict-table tbody td { font-weight: 600; }
+.predict-table tbody td:last-child { font-weight: normal; }
+
+/* === Item 6 (V3): 展开行 4 块布局 === */
+.expand-section {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+.expand-section-title {
+  font-size: 13px;
+  font-weight: bold;
+  color: #1e293b;
+  margin-bottom: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #e2e8f0;
+}
+.expand-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  table-layout: fixed;
+}
+.expand-table th {
+  text-align: left;
+  font-weight: 500;
+  color: #64748b;
+  padding: 3px 6px;
+  width: 80px;
+  vertical-align: top;
+  white-space: nowrap;
+}
+.expand-table td {
+  padding: 3px 6px;
+  color: #1e293b;
+  vertical-align: top;
+  word-break: break-word;
+}
+.expand-table td.expand-wrap {
+  white-space: normal;
+  word-break: break-word;
+}
+
+/* 25 vs 26 对比表 */
+.compare-table {
+  table-layout: auto;
+}
+.compare-table th, .compare-table td {
+  text-align: center;
+  padding: 4px 8px;
+  border-bottom: 1px solid #f1f5f9;
+}
+.compare-table thead th {
+  background: #f8fafc;
+  font-size: 11px;
+  color: #475569;
+}
+.compare-table tbody th {
+  background: #f1f5f9;
+  font-weight: bold;
+  width: auto;
+  text-align: center;
+}
+.compare-table .row-26 { background: rgba(59, 130, 246, 0.05); }
+.compare-table .row-26 b { color: #1d4ed8; }
+.compare-table .row-25 { background: rgba(100, 116, 139, 0.04); }
+.compare-table .row-history { color: #94a3b8; font-size: 10px; }
+
+/* 表头排序 / 拖动指示 */
+.resizable-table th.sortable { cursor: pointer; }
+.resizable-table th.sortable:hover { background: #e2e8f0; }
+.resizable-table th[draggable=true] { user-select: none; }
+.resizable-table th.fixed-col { cursor: default; }
+.sort-indicator {
+  display: inline-block;
+  margin-left: 3px;
+  color: #2563eb;
+  font-weight: bold;
+}
+.sort-indicator sub {
+  font-size: 9px;
+  color: #64748b;
+  font-weight: normal;
+}
+
+/* 顶部 sort chip */
+.sort-chip {
+  display: inline-flex; align-items: center;
+  padding: 2px 6px;
+  font-size: 12px;
+  border-radius: 4px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e40af;
+  cursor: grab;
+  user-select: none;
+}
+.sort-chip:active { cursor: grabbing; }
+.sort-chip button { font-weight: bold; }
+
+/* 侧栏收起态: 隐藏内部, 但保留宽度过渡 */
+.sidebar { transition: width 0.2s ease; }
+
+/* ===== 暗黑模式 V2 (P2.3 全面覆盖) ===== */
+.dark { color-scheme: dark; }
+.dark body { background: #0f172a; color: #e2e8f0; }
+
+/* 顶栏/侧栏/主体 */
+.dark header,
+.dark aside,
+.dark main,
+.dark .plan-card,
+.dark .expand-section,
+.dark .pane-col,
+.dark .table-scroll,
+.dark .resizable-table { background: #1e293b; color: #e2e8f0; }
+
+/* Tailwind utility 覆盖 */
+.dark .bg-white { background: #1e293b !important; }
+.dark .bg-slate-50 { background: #0f172a !important; }
+.dark .text-slate-500, .dark .text-slate-600, .dark .text-slate-700 { color: #cbd5e1 !important; }
+.dark .text-slate-900 { color: #f1f5f9 !important; }
+.dark .text-slate-400 { color: #94a3b8 !important; }
+.dark .border, .dark .border-slate-200, .dark .border-slate-100 { border-color: #334155 !important; }
+
+/* 输入 */
+.dark input, .dark select, .dark textarea {
+  background: #0f172a;
+  color: #e2e8f0;
+  border-color: #475569;
+}
+
+/* 表格 */
+.dark .resizable-table th { background: #334155 !important; color: #cbd5e1; border-bottom-color: #64748b; }
+.dark .resizable-table td { border-bottom-color: #334155; }
+.dark .resizable-table tbody tr:hover { background: #334155 !important; }
+.dark .compact-table th { background: #334155; color: #cbd5e1; }
+.dark .expanded-row td { background: #0f172a !important; }
+.dark .expand-section { border-color: #334155; }
+
+/* tier 行染色 (调淡, 暗模式) */
+.dark .tier-row-chong { background: rgba(220, 38, 38, 0.15) !important; }
+.dark .tier-row-wen   { background: rgba(217, 119, 6, 0.15) !important; }
+.dark .tier-row-bao   { background: rgba(22, 163, 74, 0.15) !important; }
+
+/* chip */
+.dark .chip { background: #334155; color: #cbd5e1; border-color: #475569; }
+.dark .chip:hover { background: #475569; }
+.dark .chip.active { background: #2563eb; color: white; border-color: #1d4ed8; }
+.dark .preset-chip { background: #334155; color: #cbd5e1; border-color: #475569; }
+.dark .preset-chip:hover { background: #475569; }
+
+/* tag badge - 浅色保持可读, 加深底色 */
+.dark .tag-985 { background: #7f1d1d; color: #fecaca; border-color: #991b1b; }
+.dark .tag-211 { background: #7c2d12; color: #fed7aa; border-color: #9a3412; }
+.dark .tag-双一流 { background: #78350f; color: #fde68a; border-color: #92400e; }
+.dark .tag-国重点 { background: #14532d; color: #bbf7d0; border-color: #166534; }
+.dark .tag-省重点 { background: #064e3b; color: #a7f3d0; border-color: #065f46; }
+.dark .tag-保研资格 { background: #312e81; color: #c7d2fe; border-color: #3730a3; }
+.dark .tag-其他 { background: #334155; color: #cbd5e1; border-color: #475569; }
+
+/* 详情抽屉 */
+.dark .detail-drawer { background: #1e293b; }
+
+/* 按钮 */
+.dark button { color: inherit; }
+.dark button.hover\\:bg-slate-100:hover { background: #334155 !important; }
+
+/* hover row 在暗模式下应该是更深的 */
+.dark tr.main-row-expanded td { background: rgba(59, 130, 246, 0.12) !important; }
+
+/* score input 字色 */
+.dark .text-blue-600 { color: #60a5fa !important; }
+.dark .text-blue-700 { color: #3b82f6 !important; }
+.dark .text-purple-700 { color: #a78bfa !important; }
+.dark .text-rose-500 { color: #fb7185 !important; }
+.dark .text-orange-700 { color: #fb923c !important; }
+.dark .text-amber-700, .dark .text-amber-800 { color: #fcd34d !important; }
+.dark .text-red-700 { color: #f87171 !important; }
+.dark .text-green-700 { color: #4ade80 !important; }

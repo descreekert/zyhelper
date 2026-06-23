@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>2026 物理类志愿填报助手</title>
+  <link rel="stylesheet" href="assets/style.css">
+  <script src="https://unpkg.com/vue@3.4.21/dist/vue.global.prod.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/chart.js@4.4.2/dist/chart.umd.js"></script>
+  <script src="https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            tier: {
+              '985':   '#dc2626',
+              '211':   '#ea580c',
+              '双一流': '#d97706',
+              '国重点': '#65a30d',
+              '省重点': '#16a34a',
+              '其他':   '#64748b',
+            }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-slate-50 text-slate-900 antialiased">
+  <div id="app">
+    <!-- Loading -->
+    <div v-if="loading" class="fixed inset-0 flex flex-col items-center justify-center bg-slate-50 z-50">
+      <div class="text-2xl font-bold mb-2">📚 2026 志愿填报助手</div>
+      <div class="text-slate-500">正在加载数据... {{ loadingMsg }}</div>
+      <div class="mt-4 w-64 h-2 bg-slate-200 rounded-full overflow-hidden">
+        <div class="h-full bg-blue-500 transition-all" :style="{ width: loadingPct + '%' }"></div>
+      </div>
+    </div>
+
+    <!-- Main app -->
+    <template v-else>
+      <!-- Top bar -->
+      <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+        <!-- 第 1 行: 标题 + 26 分数/位次/等位换算 + 右侧操作 -->
+        <div class="px-4 py-2 flex items-center gap-4">
+          <h1 class="text-lg font-bold text-blue-700 whitespace-nowrap">📚 志愿助手</h1>
+
+          <score-tool
+            :score-rank="scoreRank"
+            v-model:my-score="ui.myScore"
+            v-model:my-rank="ui.myRank"
+            v-model:total-volunteers="ui.totalVolunteers"
+            v-model:ratio-chong="ui.ratioChong"
+            v-model:ratio-wen="ui.ratioWen"
+            v-model:ratio-bao="ui.ratioBao"
+            v-model:equiv-source="ui.equivSource"
+            @apply-tier="onApplyTier"
+          ></score-tool>
+
+          <div class="flex-1"></div>
+
+          <!-- 右侧操作 — 紧凑版 (icon + 小字, 单行) -->
+          <div class="flex items-center gap-1 text-xs">
+            <div class="flex border rounded overflow-hidden">
+              <button @click="store.viewMode = 'table'"
+                      class="px-1.5 py-1" :class="store.viewMode==='table' ? 'bg-blue-600 text-white' : 'hover:bg-slate-100'" title="表格视图">📋</button>
+              <button @click="store.viewMode = 'list'"
+                      class="px-1.5 py-1 border-l" :class="store.viewMode==='list' ? 'bg-blue-600 text-white' : 'hover:bg-slate-100'" title="卡片视图">🗂</button>
+              <button @click="store.viewMode = 'pane'" :disabled="!cwb"
+                      :title="cwb ? '三栏冲稳保' : '请先输入 26 分数'"
+                      class="px-1.5 py-1 border-l" :class="store.viewMode==='pane' ? 'bg-blue-600 text-white' : 'hover:bg-slate-100 disabled:opacity-40'">⫷</button>
+            </div>
+            <button @click="ui.showCompare = !ui.showCompare"
+                    class="px-2 py-1 rounded border hover:bg-slate-100"
+                    :class="{ 'bg-amber-100 border-amber-300': ui.showCompare }"
+                    title="对比">对比({{ store.compareList.length }})</button>
+            <button @click="ui.showFavorites = !ui.showFavorites"
+                    class="px-2 py-1 rounded border hover:bg-slate-100"
+                    :class="{ 'bg-rose-100 border-rose-300': ui.showFavorites }"
+                    title="收藏">♥({{ store.favorites.size }})</button>
+            <button @click="copyShareLink"
+                    class="px-2 py-1 rounded border hover:bg-slate-100 no-print no-screenshot"
+                    title="复制分享链接">🔗</button>
+            <button @click="takeScreenshot" :disabled="ui.screenshotting"
+                    class="px-2 py-1 rounded border hover:bg-slate-100 disabled:opacity-50 no-print no-screenshot"
+                    title="截图保存">{{ ui.screenshotting ? '⏳' : '📷' }}</button>
+            <button @click="printPage"
+                    class="px-2 py-1 rounded border hover:bg-slate-100 no-print no-screenshot"
+                    title="打印">🖨</button>
+            <button @click="exportCsv"
+                    class="px-2 py-1 rounded border hover:bg-slate-100 no-print no-screenshot"
+                    title="导出 CSV">📥</button>
+            <button @click="toggleDark"
+                    class="px-2 py-1 rounded border hover:bg-slate-100"
+                    title="切换暗色">{{ ui.dark ? '☀' : '🌙' }}</button>
+          </div>
+        </div>
+
+        <!-- 第 2 行: 冲稳保按钮独占一行 + 数据信息 -->
+        <div v-if="cwb" class="px-4 pb-2 flex items-center gap-2 flex-wrap text-xs">
+          <span class="text-slate-500">志愿分布:</span>
+          <!-- 比例调节 popover -->
+          <div class="relative ratio-popover">
+            <button @click="ui.showRatioPanel = !ui.showRatioPanel"
+                    class="px-1.5 py-0.5 rounded border text-slate-500 hover:bg-slate-100"
+                    title="调节比例">⚙</button>
+            <div v-if="ui.showRatioPanel"
+                 class="absolute left-0 top-7 z-30 bg-white border rounded shadow-lg p-3 w-64 text-xs">
+              <div class="flex items-center justify-between mb-2">
+                <span class="font-bold">冲稳保比例</span>
+                <button @click="ui.showRatioPanel = false" class="text-slate-400 hover:text-red-500">×</button>
+              </div>
+              <label class="flex items-center justify-between mb-2">
+                <span>总志愿数</span>
+                <input type="number" v-model.number="ui.totalVolunteers" min="1" max="200"
+                       class="w-20 border rounded px-2 py-0.5 text-center">
+              </label>
+              <div class="space-y-1">
+                <label class="flex items-center justify-between">
+                  <span class="text-red-700">冲 %</span>
+                  <input type="number" :value="Math.round(ui.ratioChong*100)"
+                         @input="ui.ratioChong = (+$event.target.value || 0) / 100"
+                         min="0" max="100"
+                         class="w-16 border rounded px-2 py-0.5 text-center">
+                  <span class="text-slate-400 w-12 text-right">{{ Math.round(ui.totalVolunteers * ui.ratioChong) }} 个</span>
+                </label>
+                <label class="flex items-center justify-between">
+                  <span class="text-amber-700">稳 %</span>
+                  <input type="number" :value="Math.round(ui.ratioWen*100)"
+                         @input="ui.ratioWen = (+$event.target.value || 0) / 100"
+                         min="0" max="100"
+                         class="w-16 border rounded px-2 py-0.5 text-center">
+                  <span class="text-slate-400 w-12 text-right">{{ Math.round(ui.totalVolunteers * ui.ratioWen) }} 个</span>
+                </label>
+                <label class="flex items-center justify-between">
+                  <span class="text-green-700">保 %</span>
+                  <input type="number" :value="Math.round(ui.ratioBao*100)"
+                         @input="ui.ratioBao = (+$event.target.value || 0) / 100"
+                         min="0" max="100"
+                         class="w-16 border rounded px-2 py-0.5 text-center">
+                  <span class="text-slate-400 w-12 text-right">{{ Math.round(ui.totalVolunteers * ui.ratioBao) }} 个</span>
+                </label>
+              </div>
+              <div class="mt-2 pt-2 border-t flex justify-between items-center">
+                <span :class="ratioSumOk ? 'text-green-600' : 'text-red-600'" class="text-xs">
+                  合计 {{ Math.round((ui.ratioChong + ui.ratioWen + ui.ratioBao) * 100) }}%
+                  {{ ratioSumOk ? '✓' : '⚠ 应 = 100%' }}
+                </span>
+                <button @click="resetRatios" class="text-blue-500 hover:underline">默认 25/45/30</button>
+              </div>
+            </div>
+          </div>
+          <button @click="onApplyTier('chong', cwb.ranges.chong)"
+                  class="px-2 py-1 rounded border"
+                  :class="activeTier === 'chong' ? 'bg-red-600 border-red-700 text-white ring-2 ring-red-300' : 'bg-red-50 border-red-200 hover:bg-red-100'"
+                  :title="activeTier === 'chong' ? '点击恢复 3 档全有' : '只看冲档'">
+            冲 {{ Math.round(ui.totalVolunteers*ui.ratioChong) }}: {{ cwb.ranges.chong.scoreLow }}-{{ cwb.ranges.chong.scoreHigh }}
+            <span :class="activeTier === 'chong' ? 'text-red-100' : 'text-slate-500'" v-if="cwb.ranges.chong.rankLow">({{ cwb.ranges.chong.rankLow }}-{{ cwb.ranges.chong.rankHigh }})</span>
+          </button>
+          <button @click="onApplyTier('wen', cwb.ranges.wen)"
+                  class="px-2 py-1 rounded border"
+                  :class="activeTier === 'wen' ? 'bg-amber-600 border-amber-700 text-white ring-2 ring-amber-300' : 'bg-amber-50 border-amber-200 hover:bg-amber-100'"
+                  :title="activeTier === 'wen' ? '点击恢复 3 档全有' : '只看稳档'">
+            稳 {{ Math.round(ui.totalVolunteers*ui.ratioWen) }}: {{ cwb.ranges.wen.scoreLow }}-{{ cwb.ranges.wen.scoreHigh }}
+            <span :class="activeTier === 'wen' ? 'text-amber-100' : 'text-slate-500'" v-if="cwb.ranges.wen.rankLow">({{ cwb.ranges.wen.rankLow }}-{{ cwb.ranges.wen.rankHigh }})</span>
+          </button>
+          <button @click="onApplyTier('bao', cwb.ranges.bao)"
+                  class="px-2 py-1 rounded border"
+                  :class="activeTier === 'bao' ? 'bg-green-600 border-green-700 text-white ring-2 ring-green-300' : 'bg-green-50 border-green-200 hover:bg-green-100'"
+                  :title="activeTier === 'bao' ? '点击恢复 3 档全有' : '只看保档'">
+            保 {{ Math.round(ui.totalVolunteers*ui.ratioBao) }}: {{ cwb.ranges.bao.scoreLow }}-{{ cwb.ranges.bao.scoreHigh }}
+            <span :class="activeTier === 'bao' ? 'text-green-100' : 'text-slate-500'" v-if="cwb.ranges.bao.rankLow">({{ cwb.ranges.bao.rankLow }}-{{ cwb.ranges.bao.rankHigh }})</span>
+          </button>
+          <span class="flex-1"></span>
+          <span class="text-slate-400">
+            数据生成: {{ meta.generatedAt }} · 总 {{ meta.totalPlans }}
+          </span>
+        </div>
+        <div v-else class="px-4 pb-2 text-xs text-slate-400">
+          数据生成: {{ meta.generatedAt }} · 总条目 {{ meta.totalPlans }} ·
+          非停招 {{ meta.nonStoppedCount }} ·
+          停招 {{ meta.stoppedCount }} ·
+          中外合作 {{ meta.midOutsideCount }} ·
+          <span class="text-blue-600">筛后 {{ filtered.length }} 条</span>
+        </div>
+      </header>
+
+      <!-- Main layout: sidebar + content -->
+      <div class="flex">
+        <!-- Sidebar (Item 1: 可收起) -->
+        <aside class="sidebar shrink-0 bg-white border-r border-slate-200 sticky top-[88px] h-[calc(100vh-88px)] overflow-y-auto overflow-x-hidden transition-all duration-200"
+               :class="store.sidebarCollapsed ? 'w-0' : 'w-80'">
+          <filter-panel
+            v-if="!store.sidebarCollapsed"
+            :store="store"
+            :meta="meta"
+            :priority="priority"
+            :plans="keywordCandidatePool"
+            :cwb="cwb"
+            @reset="resetFilters"
+            @save-preset="savePreset"
+            @load-preset="loadPreset"
+            @delete-preset="deletePreset"
+            @rename-preset="renamePreset"
+          ></filter-panel>
+        </aside>
+
+        <!-- K1: 浮动展开按钮 (侧栏收起时显示) -->
+        <button v-if="store.sidebarCollapsed"
+                @click="store.sidebarCollapsed = false"
+                class="fixed top-[140px] left-0 z-20 bg-white border-y border-r rounded-r-md shadow-md w-5 h-10 text-slate-500 hover:bg-blue-50 hover:text-blue-600 text-sm leading-none"
+                title="展开筛选">›</button>
+
+        <!-- Main content -->
+        <main class="flex-1 min-w-0 p-4">
+          <!-- Compare bar -->
+          <compare-bar
+            v-if="ui.showCompare && store.compareList.length > 0"
+            :store="store"
+            :plans="planByIdMap"
+          ></compare-bar>
+
+          <!-- Favorites bar -->
+          <favorites-bar
+            v-if="ui.showFavorites"
+            :store="store"
+            :plans="planByIdMap"
+            :ui="ui"
+            :cwb="cwb"
+            @open-detail="openDetail"
+            @clear="store.favorites.clear(); saveFavorites()"
+          ></favorites-bar>
+
+          <!-- Top sort + count bar -->
+          <div class="flex items-center gap-3 mb-3 flex-wrap">
+            <div class="text-sm text-slate-600">
+              <span class="font-bold text-lg text-blue-600">{{ filtered.length }}</span> 条结果
+              <span v-if="cwb" class="text-xs ml-1">
+                (<span class="text-red-600">冲 {{ filteredTierCounts.chong }}/{{ paneTargets.chong }}</span>,
+                <span class="text-amber-600">稳 {{ filteredTierCounts.wen }}/{{ paneTargets.wen }}</span>,
+                <span class="text-green-600">保 {{ filteredTierCounts.bao }}/{{ paneTargets.bao }}</span>)
+              </span>
+              <span v-if="store.pageSize && filtered.length > store.pageSize" class="text-slate-400">
+                · 显示第 {{ (currentPage-1)*store.pageSize + 1 }}-{{ Math.min(currentPage*store.pageSize, filtered.length) }} 条
+              </span>
+            </div>
+
+            <!-- Sort tags (Item 6.1: 多列排序) -->
+            <div class="flex items-center gap-1 flex-wrap">
+              <label class="text-xs text-slate-500">排序:</label>
+              <template v-for="(k, i) in store.sortKeys" :key="k.field">
+                <span class="sort-chip"
+                      draggable="true"
+                      @dragstart="onSortDragStart(i)"
+                      @dragover.prevent
+                      @drop="onSortDrop(i)">
+                  <span class="text-slate-400 mr-1">{{ i+1 }}.</span>
+                  {{ sortFieldLabel(k.field) }}
+                  <button @click="toggleSortDir(i)" class="ml-1">{{ k.dir==='desc' ? '↓' : '↑' }}</button>
+                  <button @click="removeSortKey(i)" class="ml-1 text-slate-400 hover:text-red-500">×</button>
+                </span>
+              </template>
+              <span v-if="!store.sortKeys.length" class="text-xs text-slate-400">点击表头添加</span>
+              <button v-if="store.sortKeys.length" @click="store.sortKeys = []"
+                      class="text-xs text-slate-500 hover:underline ml-1">清空</button>
+            </div>
+
+            <div class="flex-1"></div>
+
+            <!-- 刷新按钮 (V4 Item 6: 移到这里) -->
+            <button @click="reloadData"
+                    class="text-sm px-2 py-1 border rounded hover:bg-slate-100"
+                    title="重新加载数据 (保留筛选)">🔄 刷新</button>
+
+            <!-- 列设置 (Item 6.3 + Item 11 click-outside) -->
+            <div class="relative col-settings-panel">
+              <button @click="ui.showColSettings = !ui.showColSettings"
+                      class="text-sm px-2 py-1 border rounded hover:bg-slate-100">⚙ 列</button>
+              <div v-if="ui.showColSettings"
+                   class="absolute right-0 top-8 bg-white border rounded shadow-lg p-3 z-30 w-64">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-sm font-bold">显示列</span>
+                  <div class="flex gap-2">
+                    <button @click="resetColumns" class="text-xs text-blue-500 hover:underline">重置</button>
+                    <button @click="ui.showColSettings = false" class="text-xs text-slate-500 hover:underline">关闭</button>
+                  </div>
+                </div>
+                <div class="space-y-1 max-h-72 overflow-y-auto">
+                  <label v-for="c in allColumns" :key="c.key" class="flex items-center gap-2 text-sm">
+                    <input type="checkbox" :checked="!store.hiddenColumns.has(c.key)"
+                           @change="toggleColumn(c.key)">
+                    <span>{{ c.label || c.key }}</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <label class="text-sm">每页:</label>
+            <select v-model.number="store.pageSize" class="text-sm border rounded px-2 py-1">
+              <option :value="0">全部</option>
+              <option :value="50">50</option>
+              <option :value="100">100</option>
+              <option :value="200">200</option>
+              <option :value="500">500</option>
+            </select>
+          </div>
+
+          <!-- Result list -->
+          <result-list
+            :plans="paged"
+            :total="filtered.length"
+            :current-page="currentPage"
+            :page-size="store.pageSize"
+            :compare-set="compareIdSet"
+            :favorites="store.favorites"
+            :view-mode="store.viewMode"
+            :expanded-rows="store.expandedRows"
+            :tier-map="tierMap"
+            :columns="visibleColumns"
+            :sort-keys="store.sortKeys"
+            :cwb="cwb"
+            :pane-targets="paneTargets"
+            @page-change="currentPage = $event"
+            @open-detail="openDetail"
+            @toggle-compare="toggleCompare"
+            @toggle-favorite="toggleFavorite"
+            @toggle-expand="toggleExpand"
+            @sort-col="onSortCol"
+            @col-drop="onColDrop"
+          ></result-list>
+        </main>
+      </div>
+
+      <!-- Detail drawer -->
+      <detail-drawer
+        v-if="ui.detailPlan"
+        :plan="ui.detailPlan"
+        :score-rank="scoreRank"
+        @close="ui.detailPlan = null"
+        @toggle-compare="toggleCompare"
+        @toggle-favorite="toggleFavorite"
+        :compare-set="compareIdSet"
+        :favorites="store.favorites"
+      ></detail-drawer>
+
+    </template>
+  </div>
+
+  <script src="assets/app.js"></script>
+</body>
+</html>
