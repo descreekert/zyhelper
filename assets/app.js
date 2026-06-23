@@ -1346,7 +1346,7 @@ const ResultList = {
   emits: ["page-change", "open-detail", "toggle-compare", "toggle-favorite", "toggle-expand",
           "sort-col", "col-drop", "col-resize",
           "toggle-voluntary", "vol-up", "vol-down", "vol-top", "vol-bottom",
-          "edit-score"],
+          "edit-score", "revert-score"],
   setup(props, { emit }) {
     function fmtDuration(p) { return formatDuration(p.duration || p.duration25); }
     function formatDur25(p) { return formatDuration(p.duration25 || p.duration); }
@@ -1609,8 +1609,9 @@ const ResultList = {
                     {{ p.majorName26 || p.majorName25 || '—' }}
                   </td>
                   <td v-else-if="c.key==='score'" :class="['col-'+c.key, 'font-bold text-blue-700 text-right cursor-text', isEdited(p) ? 'cell-edited' : '']"
-                      :title="isEdited(p) ? '已手动修改 (双击重编辑)' : '双击编辑 25 参考分'"
-                      @dblclick="startEditScore(p, $event)">
+                      :title="isEdited(p) ? '已手动修改 (双击重编辑, ↩ 恢复原始)' : '双击编辑 25 参考分'"
+                      @click.stop
+                      @dblclick.stop="startEditScore(p, $event)">
                     <template v-if="editingScore === p.id">
                       <input type="number" v-model="editingValue"
                              @blur="commitEditScore"
@@ -1621,6 +1622,9 @@ const ResultList = {
                     </template>
                     <template v-else>
                       {{ cellValue(p, c.key) }}<span v-if="isEdited(p)" class="text-amber-500 text-xs">*</span>
+                      <button v-if="isEdited(p)" @click.stop="$emit('revert-score', p.id)"
+                              class="ml-1 text-xs text-blue-500 hover:text-blue-700"
+                              title="恢复原始值">↩</button>
                     </template>
                   </td>
                   <td v-else-if="c.key==='rank' || c.key==='tuition'" :class="['col-'+c.key, 'text-right']">{{ cellValue(p, c.key) }}</td>
@@ -2452,6 +2456,9 @@ createApp({
     const priority = ref(null);
     const currentPage = ref(1);
 
+    // 保存每条 plan 原始字段 (load 时快照, 用于"恢复默认")
+    const planOriginals = new Map();
+
     // 加载数据
     async function load() {
       loading.value = true;
@@ -2461,6 +2468,11 @@ createApp({
       const r1 = await fetch("data/plans.json" + t);
       loadingPct.value = 30;
       const plans = await r1.json();
+      // 先快照原始值 (在 override 应用之前)
+      planOriginals.clear();
+      for (const p of plans) {
+        planOriginals.set(p.id, { ref25Score: p.ref25Score, ref25Rank: p.ref25Rank });
+      }
       // 应用 planOverrides (用户手动修改的字段)
       const ov = store.planOverrides || {};
       for (const p of plans) {
@@ -3026,22 +3038,31 @@ createApp({
       const p = store.allPlans[idx];
       const s = parseInt(newScore, 10);
       if (!s || s < 100 || s > 750) { alert("分数无效 (100-750)"); return; }
+      // 如果新值等于原始值, 直接 revert (取消 override + 不再显示 *)
+      const orig = planOriginals.get(planId);
+      if (orig && s === orig.ref25Score) {
+        revertPlanScore(planId);
+        return;
+      }
       const newRank = scoreRank.value ? rank25FromScore25(s, scoreRank.value) : null;
-      // 更新 plan + 持久化 override
       store.allPlans[idx] = { ...p, ref25Score: s, ref25Rank: newRank };
       store.planOverrides = {
         ...store.planOverrides,
         [planId]: { ref25Score: s, ref25Rank: newRank, _edited: true },
       };
     }
-    function resetPlanEdit(planId) {
-      if (!confirm("还原此行的手动修改 (恢复原始 25 参考分)?")) return;
-      // 直接刷新数据 (重新 load 会再读 LS 但我们先删 override)
+    // 恢复某条 plan 的原始 ref25Score/Rank
+    function revertPlanScore(planId) {
+      const orig = planOriginals.get(planId);
+      if (!orig) return;
+      const idx = store.allPlans.findIndex(p => p.id === planId);
+      if (idx >= 0) {
+        const p = store.allPlans[idx];
+        store.allPlans[idx] = { ...p, ref25Score: orig.ref25Score, ref25Rank: orig.ref25Rank };
+      }
       const ov = { ...store.planOverrides };
       delete ov[planId];
       store.planOverrides = ov;
-      // 刷新 - reload data (会重置 plan 字段)
-      load();
     }
 
     // 排序设置 modal handlers
@@ -3189,7 +3210,7 @@ createApp({
       // Items 6.x: 排序 / 列设置
       visibleColumns, allColumns, toggleColumn, resetColumns, onColDrop, onColResize,
       savePriorityOverrides, resetPriorityOverrides,
-      editPlanScore, resetPlanEdit,
+      editPlanScore, revertPlanScore,
       onSortCol, sortFieldLabel, toggleSortDir, removeSortKey,
       onSortDragStart, onSortDrop,
     };

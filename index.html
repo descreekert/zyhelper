@@ -353,6 +353,7 @@
             @col-drop="onColDrop"
             @col-resize="onColResize"
             @edit-score="ev => editPlanScore(ev.id, ev.score)"
+            @revert-score="revertPlanScore"
             @toggle-voluntary="toggleVoluntary"
             @vol-up="moveVoluntaryUp"
             @vol-down="moveVoluntaryDown"
