@@ -865,7 +865,40 @@ const PriorityFilter = {
       return props.selected == null ? inRange.value.length : props.selected.size;
     }
 
-    return { expanded, inRange, isActive, toggle, reset, applyPreset, isActivePreset, selectedCount };
+    // + 号手动添加 tag (在 inRange 之外, 加进 selected Set)
+    const showAddPopover = ref(false);
+    const addSearch = ref("");
+    const extraItems = computed(() => {
+      // selected 中但不在 inRange 的 (用户手动加的)
+      if (!props.selected) return [];
+      const inSet = new Set(inRange.value.map(i => i.name));
+      return (props.allItems || props.items).filter(i =>
+        props.selected.has(i.name) && !inSet.has(i.name)
+      );
+    });
+    const addCandidates = computed(() => {
+      const all = props.allItems || props.items;
+      const inRangeNames = new Set(inRange.value.map(i => i.name));
+      const inSelected = props.selected || new Set();
+      const kw = addSearch.value.toLowerCase().trim();
+      return all.filter(i =>
+        !inRangeNames.has(i.name) && !inSelected.has(i.name) &&
+        (!kw || i.name.toLowerCase().includes(kw))
+      ).slice(0, 50);
+    });
+    function addExtraItem(item) {
+      let set = props.selected;
+      if (set == null) {
+        set = new Set(inRange.value.map(i => i.name));
+      }
+      const next = new Set(set);
+      next.add(item.name);
+      emit("update:selected", next);
+      addSearch.value = "";
+    }
+
+    return { expanded, inRange, isActive, toggle, reset, applyPreset, isActivePreset, selectedCount,
+             showAddPopover, addSearch, extraItems, addCandidates, addExtraItem };
   },
   template: `
     <div class="filter-section">
@@ -910,12 +943,44 @@ const PriorityFilter = {
         </div>
 
         <!-- chip 组 -->
-        <div class="chip-row max-h-64 overflow-y-auto">
+        <div class="chip-row max-h-64 overflow-y-auto relative">
           <span v-for="item in inRange" :key="item.name"
                 class="chip" :class="{ active: isActive(item) }"
                 :title="chipSub ? chipSub(item) : ''"
                 @click="toggle(item)">
             {{ chipLabel ? chipLabel(item) : item.name }}
+          </span>
+          <!-- 手动添加的 chip (绿色边框区分) -->
+          <span v-for="item in extraItems" :key="'extra-'+item.name"
+                class="chip active extra-chip"
+                :title="(chipSub ? chipSub(item) : '') + ' (手动添加)'"
+                @click="toggle(item)">
+            {{ chipLabel ? chipLabel(item) : item.name }} ★
+          </span>
+          <!-- + 号手动添加 -->
+          <span class="relative">
+            <button @click="showAddPopover = !showAddPopover"
+                    class="chip-add" title="添加超出范围的 tag">+</button>
+            <div v-if="showAddPopover"
+                 class="absolute left-0 top-7 z-30 bg-white border rounded shadow-lg w-72 p-2"
+                 @click.stop>
+              <input v-model="addSearch" placeholder="搜索 (从所有 排序 中选)"
+                     class="w-full border rounded px-2 py-1 text-xs mb-1">
+              <div class="max-h-60 overflow-y-auto">
+                <div v-if="!addCandidates.length" class="text-xs text-slate-400 py-2 text-center">
+                  无候选 (可能都已在当前范围内)
+                </div>
+                <div v-for="item in addCandidates" :key="item.name"
+                     @click="addExtraItem(item); showAddPopover = false"
+                     class="px-2 py-1 text-xs cursor-pointer hover:bg-blue-50 rounded">
+                  {{ chipLabel ? chipLabel(item) : item.name }}
+                  <span v-if="chipSub" class="text-slate-400 ml-1">{{ chipSub(item) }}</span>
+                </div>
+              </div>
+              <div class="flex justify-end mt-1">
+                <button @click="showAddPopover = false" class="text-xs text-slate-500 hover:underline">关闭</button>
+              </div>
+            </div>
           </span>
         </div>
       </div>
