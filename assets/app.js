@@ -410,7 +410,7 @@ const initialFilters = () => ({
   enableRankRange: false,            // 默认仅按分数 (位次需主动启用)
   scoreRanges: [],                   // [{low, high, tier: 'chong'|'wen'|'bao'}]
   rankRanges:  [],
-  tuitionMax: 100000,
+  tuitionMax: 20000,
   // 学校优先双端 (V4: 默认第一档 1-18)
   schoolPriorityRange: [1, 18],
   selectedSchools: null,             // null = 全部 in range; Set = 用户手动子集
