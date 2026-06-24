@@ -486,6 +486,7 @@ const store = reactive({
   compareList: [],
   expandedRows: new Set(),           // 主表/list/pane
   expandedRowsVol: new Set(),        // voluntary 独立
+  expandedRecommend: new Set(),      // 聚合表 (key: schoolName)
   // 每视图独立的关键词筛选 (V8: 用户希望 voluntary/recommend 表也能用 keyword)
   voluntaryKeyword:  { keyword: "", pickedSchool: null, pickedMajorClass: null, pickedMajorName: null },
   recommendKeyword:  { keyword: "", pickedSchool: null, pickedMajorClass: null, pickedMajorName: null },
@@ -1530,33 +1531,84 @@ const ResultList = {
             </tr>
           </thead>
           <tbody>
-            <tr v-for="(g, gi) in recommendData" :key="gi"
-                :class="g.tier ? 'tier-row-'+g.tier : ''">
-              <td class="text-center">
-                <span v-if="g.tier" class="tier-cell" :class="'tier-cell-'+g.tier">
-                  {{ g.tier==='chong' ? '冲' : g.tier==='wen' ? '稳' : '保' }}
-                </span>
-              </td>
-              <td>{{ g.city }}</td>
-              <td>
-                <tier-badge :tag="g.schoolTag"></tier-badge>
-                <span class="ml-1 font-bold">{{ g.schoolName }}</span>
-                <span v-if="g.schoolRank" class="text-slate-400 ml-1 text-[10px]">#{{ g.schoolRank }}</span>
-              </td>
-              <td class="recommend-classes">
-                <span v-for="(c, ci) in g.majorClasses" :key="ci">
-                  {{ c }}<span v-if="ci < g.majorClasses.length - 1" class="text-slate-400 mx-1">｜</span>
-                </span>
-              </td>
-              <td class="text-center font-bold">{{ g.totalEnroll }}</td>
-              <td class="text-center recommend-stats">
-                <span class="text-blue-700 font-bold">{{ g.topScore }}/{{ g.topRank ?? '—' }}</span>
-                <span class="text-slate-400 mx-1">｜</span>
-                <span>{{ g.botScore }}/{{ g.botRank ?? '—' }}</span>
-                <span class="text-slate-400 mx-1">｜</span>
-                <span class="text-slate-500">{{ g.avgScore }}/{{ g.avgRank ?? '—' }}</span>
-              </td>
-            </tr>
+            <template v-for="(g, gi) in recommendData" :key="gi">
+              <tr :class="[g.tier ? 'tier-row-'+g.tier : '', isExpanded(g.schoolName) ? 'main-row-expanded' : '', 'cursor-pointer']"
+                  @click="$emit('toggle-expand', g.schoolName)">
+                <td class="text-center">
+                  <span v-if="g.tier" class="tier-cell" :class="'tier-cell-'+g.tier">
+                    {{ g.tier==='chong' ? '冲' : g.tier==='wen' ? '稳' : '保' }}
+                  </span>
+                </td>
+                <td>{{ g.city }}</td>
+                <td>
+                  <span class="text-slate-400 mr-1 text-[10px]">{{ isExpanded(g.schoolName) ? '▾' : '▸' }}</span>
+                  <tier-badge :tag="g.schoolTag"></tier-badge>
+                  <span class="ml-1 font-bold">{{ g.schoolName }}</span>
+                  <span v-if="g.schoolRank" class="text-slate-400 ml-1 text-[10px]">#{{ g.schoolRank }}</span>
+                </td>
+                <td class="recommend-classes">
+                  <span v-for="(c, ci) in g.majorClasses" :key="ci">
+                    {{ c }}<span v-if="ci < g.majorClasses.length - 1" class="text-slate-400 mx-1">｜</span>
+                  </span>
+                </td>
+                <td class="text-center font-bold">{{ g.totalEnroll }}</td>
+                <td class="text-center recommend-stats">
+                  <span class="text-blue-700 font-bold">{{ g.topScore }}/{{ g.topRank ?? '—' }}</span>
+                  <span class="text-slate-400 mx-1">｜</span>
+                  <span>{{ g.botScore }}/{{ g.botRank ?? '—' }}</span>
+                  <span class="text-slate-400 mx-1">｜</span>
+                  <span class="text-slate-500">{{ g.avgScore }}/{{ g.avgRank ?? '—' }}</span>
+                </td>
+              </tr>
+              <tr v-if="isExpanded(g.schoolName)" class="expanded-row">
+                <td colspan="6" class="p-0">
+                  <table class="w-full text-xs recommend-detail-table">
+                    <thead>
+                      <tr class="bg-slate-100 text-slate-600">
+                        <th class="px-2 py-1 text-left">专业类</th>
+                        <th class="px-2 py-1 text-left">专业 (26 / 25)</th>
+                        <th class="px-2 py-1 text-center" style="width:50px">招生</th>
+                        <th class="px-2 py-1 text-center" style="width:80px">25 分/位</th>
+                        <th class="px-2 py-1 text-center" style="width:60px">学费</th>
+                        <th class="px-2 py-1 text-center" style="width:60px">学制</th>
+                        <th class="px-2 py-1 text-center" style="width:80px">状态</th>
+                        <th class="px-2 py-1 text-center" style="width:90px">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="p in g.plans" :key="p.id" class="border-t">
+                        <td class="px-2 py-1">{{ p.majorClass || p.majorClass25 || '—' }}</td>
+                        <td class="px-2 py-1">
+                          <div>{{ p.majorName26 || p.majorName25 || '—' }}</div>
+                          <div v-if="p.majorName25 && p.majorName26 && p.majorName25 !== p.majorName26" class="text-slate-400 text-[10px]">25: {{ p.majorName25 }}</div>
+                        </td>
+                        <td class="px-2 py-1 text-center">{{ p.enrollNum26 || p.enrollNum25 || '—' }}</td>
+                        <td class="px-2 py-1 text-center">
+                          <span class="font-bold">{{ p.isStopped ? p.score25 : p.ref25Score }}</span>
+                          <span class="text-slate-400 mx-0.5">/</span>
+                          <span>{{ (p.isStopped ? p.rank25 : p.ref25Rank) ?? '—' }}</span>
+                        </td>
+                        <td class="px-2 py-1 text-center">{{ p.tuition || p.tuition25 || '—' }}</td>
+                        <td class="px-2 py-1 text-center">{{ formatDur25(p) || '—' }}</td>
+                        <td class="px-2 py-1 text-center">
+                          <span v-if="p.isStopped" class="text-red-500">停招</span>
+                          <span v-else class="text-slate-500">{{ p.refConfidence || '—' }}</span>
+                        </td>
+                        <td class="px-2 py-1 text-center" @click.stop>
+                          <button class="text-blue-600 hover:underline mr-1"
+                                  @click="$emit('open-detail', p)">详情</button>
+                          <button class="text-amber-600 hover:underline"
+                                  :class="voluntarySet?.has(p.id) ? 'opacity-40' : ''"
+                                  @click="$emit('toggle-voluntary', p.id)">
+                            {{ voluntarySet?.has(p.id) ? '✓' : '+志' }}
+                          </button>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </td>
+              </tr>
+            </template>
           </tbody>
         </table>
       </div>
@@ -2937,6 +2989,12 @@ createApp({
         const tier = planTierRelaxed({ ref25Score: avgScore, isStopped: false }, cwb.value);
         // 专业类列表 (去重, 用 ｜ 分隔)
         const majorClasses = [...g.majorClassSet];
+        // 子表行: 按 25 分降序
+        const sortedPlans = [...g.plans].sort((a, b) => {
+          const sa = a.isStopped ? (a.score25 ?? -1) : (a.ref25Score ?? -1);
+          const sb = b.isStopped ? (b.score25 ?? -1) : (b.ref25Score ?? -1);
+          return sb - sa;
+        });
         result.push({
           schoolName: g.schoolName,
           schoolCode: g.schoolCode,
@@ -2952,6 +3010,7 @@ createApp({
           topScore: top.score, topRank: top.rank,
           botScore: bot.score, botRank: bot.rank,
           avgScore, avgRank,
+          plans: sortedPlans,        // 展开行用
         });
       }
       // 排序: 按 avgScore desc
@@ -3112,14 +3171,18 @@ createApp({
       }
     }
     function toggleExpand(id) {
-      // 单展开模式; voluntary 与主表独立
-      const key = store.viewMode === "voluntary" ? "expandedRowsVol" : "expandedRows";
+      // 单展开模式; voluntary / recommend / 主表 各自独立
+      const key = store.viewMode === "voluntary" ? "expandedRowsVol"
+        : store.viewMode === "recommend" ? "expandedRecommend"
+        : "expandedRows";
       const wasOpen = store[key].has(id);
       store[key] = wasOpen ? new Set() : new Set([id]);
     }
     // 给 ResultList 用的当前 expanded set
     const currentExpandedRows = computed(() =>
-      store.viewMode === "voluntary" ? store.expandedRowsVol : store.expandedRows);
+      store.viewMode === "voluntary" ? store.expandedRowsVol
+      : store.viewMode === "recommend" ? store.expandedRecommend
+      : store.expandedRows);
 
     // 每视图绑定不同的关键词筛选 state (主表用 store.filters; voluntary/recommend 各自)
     const currentKeywordFilters = computed(() => {
