@@ -1391,7 +1391,7 @@ const ResultList = {
   emits: ["page-change", "open-detail", "toggle-compare", "toggle-favorite", "toggle-expand",
           "sort-col", "col-drop", "col-resize",
           "toggle-voluntary", "vol-up", "vol-down", "vol-top", "vol-bottom",
-          "vol-confirm-pin", "vol-cancel-pending", "vol-unpin",
+          "vol-confirm-pin", "vol-cancel-pending", "vol-unpin", "vol-pin-at-current",
           "edit-score", "revert-score"],
   setup(props, { emit }) {
     function fmtDuration(p) { return formatDuration(p.duration || p.duration25); }
@@ -1753,7 +1753,7 @@ const ResultList = {
                           class="px-1 hover:text-blue-600 disabled:opacity-30" title="下移 (移动后需 ✓ 确认)">↓</button>
                   <button @click.stop="$emit('vol-bottom', p.id)" :disabled="idx === plans.length-1"
                           class="px-1 hover:text-blue-600 disabled:opacity-30" title="置底 (移动后需 ✓ 确认)">⇊</button>
-                  <!-- pending: 显示 ✓ 确认 / ✕ 撤销 -->
+                  <!-- pending: 显示 ✓ 确认 / ↩ 撤销 -->
                   <template v-if="isPending(p.id)">
                     <button @click.stop="$emit('vol-confirm-pin', p.id)"
                             class="px-1 text-green-600 hover:text-green-700 font-bold" title="确认锁定到当前位置">✓</button>
@@ -1763,6 +1763,9 @@ const ResultList = {
                   <!-- pinned: 显示 🔓 解锁 -->
                   <button v-else-if="isPinned(p.id)" @click.stop="$emit('vol-unpin', p.id)"
                           class="px-1 text-blue-600 hover:text-blue-800" title="解锁 (重新参与自动排序)">🔓</button>
+                  <!-- 未锁定 & 非 pending: 显示 📌 直接锁定 -->
+                  <button v-else @click.stop="$emit('vol-pin-at-current', p.id)"
+                          class="px-1 text-slate-400 hover:text-blue-600" title="锁定到当前位置 (无需先移动)">📌</button>
                   <button @click.stop="$emit('toggle-voluntary', p.id)"
                           class="px-1 text-red-500 hover:text-red-700" title="移除">✕</button>
                   <button @click.stop="$emit('open-detail', p)"
@@ -3331,45 +3334,52 @@ createApp({
         runAutoSort();   // V9: 新加入的不锁定; 自动按 26 位次插入合适位置
       }
     }
-    // V9: 移动操作 = 给 plan 加 pending 标记 (固定到目标位置), 其它非锁定项重新自动填充
+    // V9: 移动操作 = 给 plan 加 pending (固定到目标位置), 其它非锁定项按 26 位次重排.
+    // 目标位置如果有锁定/待确认项, 该项让位 — 失去 pinned/pending 状态, 回到自动排序池.
+    // 即用户始终可以移动, 不会被任何锁定 "卡住". 若误踢了锁定项, 用 ↩ 撤销 (该项回到 26 位次位置).
     function markPendingMoveTo(id, targetIdx) {
       const ids = [...voluntary.value];
       const cur = ids.indexOf(id);
       if (cur < 0) return;
       const N = ids.length;
       targetIdx = Math.max(0, Math.min(N - 1, targetIdx));
-      // 如果目标位置已被 confirmed-pinned 占据 → 静默拒绝 (不允许踢翻锁定项)
+      if (cur === targetIdx) return;   // 没动
+      const m = planByIdMap.value;
       const pinned = pinnedSet.value;
-      if (pinned.has(ids[targetIdx]) && ids[targetIdx] !== id) return;
-      // 把 id 移到 targetIdx; 其它非锁定项重排
+      const targetId = ids[targetIdx];
+      // 目标位置是 confirmed-pinned → 弹确认 (避免误踢锁定)
+      if (pinned.has(targetId) && targetId !== id) {
+        const tp = m[targetId];
+        const tname = tp ? `${tp.schoolName} · ${tp.majorName26 || tp.majorName25 || ''}` : targetId;
+        if (!confirm(`目标位置 #${targetIdx + 1} 已锁定:\n  📌 ${tname}\n\n移动会取消该项锁定, 是否继续?`)) {
+          return;
+        }
+      }
       const fixed = fixedSet.value;
       const fixedSlots = new Array(N).fill(null);
       const free = [];
       ids.forEach((x, i) => {
-        if (x === id) return;     // id 单独处理
+        if (x === id) return;
         if (fixed.has(x)) fixedSlots[i] = x;
         else free.push(x);
       });
-      // 把 id 放到 targetIdx 上 (即使原位置 fixed)
-      // 若 targetIdx 已有非 id 的 fixed 项, 需要让位 — 但前面拒绝了 pinned, 这里只剩 pending,
-      // pending 让位 = 把它从 fixedSlots 退回 free.
+      // 目标位置如有 fixed 项, 让位: 加入 free 池, 同时清掉它的 pinned/pending 状态
       if (fixedSlots[targetIdx]) {
         const displaced = fixedSlots[targetIdx];
         fixedSlots[targetIdx] = null;
-        // displaced 是 pending; 退到 free 末尾参与 rank 排序
         free.push(displaced);
-        // 也从 pending 列表里去除 (它的位置改变了, 视为重新 pending? — 简单起见: 它失去 pending)
-        const pd = pendingIdsOfActive().filter(x => x !== displaced);
-        setPendingActive(pd);
+        const pn = pinnedIdsOfActive();
+        if (pn.includes(displaced))   setPinnedActive(pn.filter(x => x !== displaced));
+        const pd = pendingIdsOfActive();
+        if (pd.includes(displaced))   setPendingActive(pd.filter(x => x !== displaced));
       }
       fixedSlots[targetIdx] = id;
-      // 把 id 加进 pending (若不在 pinned 中)
+      // 移动的 plan: 加入 pending (若不是 pinned)
       if (!pinned.has(id)) {
         const pd = pendingIdsOfActive();
         if (!pd.includes(id)) setPendingActive([...pd, id]);
       }
       // free 排序 (26 位次升序)
-      const m = planByIdMap.value;
       free.sort((a, b) => rank26ForPlan(m[a]) - rank26ForPlan(m[b]));
       let fi = 0;
       const out = fixedSlots.map(s => s ?? free[fi++]);
@@ -3392,6 +3402,23 @@ createApp({
       setPendingActive(pd.filter(x => x !== id));
       const pn = pinnedIdsOfActive();
       if (!pn.includes(id)) setPinnedActive([...pn, id]);
+    }
+    // 当前位置直接锁定 (不需先移动)
+    function pinAtCurrent(id) {
+      const pn = pinnedIdsOfActive();
+      if (pn.includes(id)) return;
+      setPinnedActive([...pn, id]);
+      // 同时清掉 pending (若有)
+      const pd = pendingIdsOfActive();
+      if (pd.includes(id)) setPendingActive(pd.filter(x => x !== id));
+    }
+    // 一键锁定所有当前显示位置 (满意当前排序时使用)
+    function pinAllCurrent() {
+      const ids = voluntary.value;
+      if (!ids.length) return;
+      if (!confirm(`把当前 ${ids.length} 项全部锁定到现在的位置?\n之后新增项目仍按 26 位次自动排, 锁定项不动.`)) return;
+      setPinnedActive([...ids]);
+      setPendingActive([]);
     }
     function cancelPending(id) {
       const pd = pendingIdsOfActive();
@@ -3774,6 +3801,7 @@ createApp({
       voluntaryPinnedCount: computed(() => pinnedSet.value.size),
       voluntaryPendingCount: computed(() => pendingSet.value.size),
       confirmPin, cancelPending, unpinConfirmed, confirmAllPending, cancelAllPending,
+      pinAtCurrent, pinAllCurrent,
       resetFilters, onApplyTier, reloadData,
       exportCsv, toggleDark,
       savePreset, loadPreset, deletePreset, renamePreset, copyShareLink,

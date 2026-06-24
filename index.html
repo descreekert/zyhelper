@@ -276,6 +276,10 @@
                 <button @click="cancelAllPending" class="ml-0.5 px-1.5 border border-amber-400 hover:bg-amber-50">✕ 全部撤销</button>
               </span>
               <span v-if="voluntaryPinnedCount" class="ml-1 text-xs text-slate-500" title="已锁定的项不参与自动排序">📌 {{ voluntaryPinnedCount }} 项已锁定</span>
+              <button v-if="voluntary.length"
+                      @click="pinAllCurrent"
+                      class="text-xs ml-1 px-1.5 py-0.5 border border-blue-300 rounded text-blue-600 hover:bg-blue-50"
+                      title="对当前排序满意, 直接锁定所有项 (无需逐条调整)">📌 锁定全部</button>
             </div>
             <!-- 其它视图: 显示筛后计数 + 26分数 (便于截图/打印识别) -->
             <div v-else class="text-sm text-slate-600">
@@ -401,6 +405,7 @@
             @vol-confirm-pin="confirmPin"
             @vol-cancel-pending="cancelPending"
             @vol-unpin="unpinConfirmed"
+            @vol-pin-at-current="pinAtCurrent"
           ></result-list>
         </main>
       </div>
