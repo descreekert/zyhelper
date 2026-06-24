@@ -2751,24 +2751,33 @@ createApp({
       };
     });
 
-    // V5 bug fix + V7: 用 sortedPriority 的索引位置 (而非 sort 字段) 算 allowed 集合
-    // V8: 合并用户手动 + 添加的 selectedSchools/Cities/MajorClasses,
-    // 否则 applyFilters 早期会按 Top N range 拒掉手动添加的项 (chip 检查走不到)
+    // V9: 改用 'sort' 字段值过滤 (而非数组下标位置), 与 PriorityFilter 的 inRange 一致.
+    // 用户在排名 sheet 用并列 (1,1,1...) 标同档, 必须按 sort 值才能正确包含所有并列项.
+    // 合并用户手动 + 添加的 selectedSchools/Cities/MajorClasses (允许超出 range 的项).
     const allowedSets = computed(() => {
       if (!sortedPriority.value) return null;
       const f = store.filters;
       const sp = sortedPriority.value;
-      const sLo = Math.max(0, (f.schoolPriorityRange[0] || 1) - 1);
-      const sHi = f.schoolPriorityRange[1] || sp.schools.length;
-      const schools = new Set(sp.schools.slice(sLo, sHi).map(s => s.name));
+      const sLo = f.schoolPriorityRange[0] || 1;
+      const sHi = f.schoolPriorityRange[1] || 99999;
+      const schools = new Set(
+        sp.schools.filter(s => s.sort != null && s.sort >= sLo && s.sort <= sHi)
+                  .map(s => s.name)
+      );
       if (f.selectedSchools && f.selectedSchools.size) {
         for (const n of f.selectedSchools) schools.add(n);
       }
-      const cities = new Set(sp.cities.slice(0, f.cityPriorityMax).map(c => c.city));
+      const cityMax = f.cityPriorityMax || 99999;
+      const cities = new Set(
+        sp.cities.filter(c => c.sort != null && c.sort <= cityMax).map(c => c.city)
+      );
       if (f.selectedCities && f.selectedCities.size) {
         for (const n of f.selectedCities) cities.add(n);
       }
-      const majorClasses = new Set(sp.majorClasses.slice(0, f.majorClassPriorityMax).map(c => c.name));
+      const classMax = f.majorClassPriorityMax || 99999;
+      const majorClasses = new Set(
+        sp.majorClasses.filter(c => c.sort != null && c.sort <= classMax).map(c => c.name)
+      );
       if (f.selectedMajorClasses && f.selectedMajorClasses.size) {
         for (const n of f.selectedMajorClasses) majorClasses.add(n);
       }
