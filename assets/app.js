@@ -2752,18 +2752,27 @@ createApp({
     });
 
     // V5 bug fix + V7: 用 sortedPriority 的索引位置 (而非 sort 字段) 算 allowed 集合
+    // V8: 合并用户手动 + 添加的 selectedSchools/Cities/MajorClasses,
+    // 否则 applyFilters 早期会按 Top N range 拒掉手动添加的项 (chip 检查走不到)
     const allowedSets = computed(() => {
       if (!sortedPriority.value) return null;
       const f = store.filters;
       const sp = sortedPriority.value;
-      // 学校: 双端范围 → 取 sp.schools 的 [lo-1, hi) 索引切片
       const sLo = Math.max(0, (f.schoolPriorityRange[0] || 1) - 1);
       const sHi = f.schoolPriorityRange[1] || sp.schools.length;
-      return {
-        schools: new Set(sp.schools.slice(sLo, sHi).map(s => s.name)),
-        cities:  new Set(sp.cities.slice(0, f.cityPriorityMax).map(c => c.city)),
-        majorClasses: new Set(sp.majorClasses.slice(0, f.majorClassPriorityMax).map(c => c.name)),
-      };
+      const schools = new Set(sp.schools.slice(sLo, sHi).map(s => s.name));
+      if (f.selectedSchools && f.selectedSchools.size) {
+        for (const n of f.selectedSchools) schools.add(n);
+      }
+      const cities = new Set(sp.cities.slice(0, f.cityPriorityMax).map(c => c.city));
+      if (f.selectedCities && f.selectedCities.size) {
+        for (const n of f.selectedCities) cities.add(n);
+      }
+      const majorClasses = new Set(sp.majorClasses.slice(0, f.majorClassPriorityMax).map(c => c.name));
+      if (f.selectedMajorClasses && f.selectedMajorClasses.size) {
+        for (const n of f.selectedMajorClasses) majorClasses.add(n);
+      }
+      return { schools, cities, majorClasses };
     });
     // 筛选 / 排序
     const filtered = computed(() => applyFilters(store.allPlans, store.filters, allowedSets.value));
