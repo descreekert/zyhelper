@@ -2446,6 +2446,23 @@ const PrioritySettings = {
       }
       return props.filters[t.filterKey] || 0;
     });
+    // V9: 分隔线按 sort 值 (而非数组位置) 切.
+    // 第一个 sort > topN 的索引; 没有 override 时与 web app 实际过滤 (sort ≤ topN) 一致.
+    const topNBreakIdx = computed(() => {
+      const arr = currentItems.value;
+      const top = currentTopN.value;
+      if (!arr || !arr.length || !top) return 0;
+      for (let i = 0; i < arr.length; i++) {
+        const s = arr[i].sort;
+        if (s == null || s > top) return i;
+      }
+      return arr.length;
+    });
+    // 是否存在持久化的自定义 override (用户手动调过顺序; 此时显示顺序 ≠ priority.json sort)
+    const hasOverride = computed(() => {
+      const ov = props.overrides[activeTab.value];
+      return Array.isArray(ov) && ov.length > 0;
+    });
 
     function move(idx, delta) {
       const arr = editing[activeTab.value];
@@ -2488,13 +2505,14 @@ const PrioritySettings = {
       emit("save", out);
     }
     function chipSubLabel(item, tabKey) {
-      if (tabKey === "schools") return `[${(item.tag || '').split('/')[0]}] ${item.city} · 排名 ${item.rank}`;
+      if (tabKey === "schools") return `[${(item.tag || '').split('/')[0]}] ${item.city} · 软科 ${item.rank}`;
       if (tabKey === "cities") return ``;
       if (tabKey === "majorClasses") return `[${item.category}]`;
       if (tabKey === "majors") return `[${item.category}/${item.majorClass}] ${item.code || ''}`;
       return "";
     }
     return { tabs, activeTab, editing, currentTab, currentItems, currentTopN,
+             topNBreakIdx, hasOverride,
              move, moveToTop, moveToBottom, moveToPosition, resetTab, save, chipSubLabel };
   },
   template: `
@@ -2517,19 +2535,27 @@ const PrioritySettings = {
         <!-- 列表 -->
         <div class="flex-1 overflow-y-auto p-3">
           <div class="text-xs text-slate-500 mb-2">
-            当前 Top {{ currentTopN }} 在分隔线之上。点击 ↑/↓ 调整顺序, 或点击序号 # 跳位。
+            当前 sort ≤ {{ currentTopN }} 在分隔线之上 (V9: 按学校排序值过滤, 含并列档).
+            点击 ↑/↓ 调整顺序, 或点击序号 # 跳位。
             <button @click="resetTab" class="ml-2 text-amber-600 hover:underline">重置当前 tab 为默认</button>
+          </div>
+          <div v-if="hasOverride" class="text-xs bg-amber-50 border border-amber-200 text-amber-800 rounded p-2 mb-2">
+            ⚠ 当前显示的是<b>你之前手动保存的自定义排序</b>, 不是 priority.json 最新基础数据.
+            如果想看到最新的并列档位 (1,1,1 / 2,2 / 3,3,3...), 点击右上"重置当前 tab 为默认".
           </div>
           <div class="space-y-0.5">
             <template v-for="(item, idx) in currentItems" :key="item[currentTab.nameKey] + idx">
-              <!-- 分隔线 -->
-              <div v-if="idx === currentTopN" class="text-center text-xs text-slate-400 my-2 border-t pt-1">
-                ── Top {{ currentTopN }} 分隔线 ──
+              <!-- 分隔线: 按 sort 值切 -->
+              <div v-if="idx === topNBreakIdx" class="text-center text-xs text-slate-400 my-2 border-t pt-1">
+                ── sort ≤ {{ currentTopN }} 分隔线 ({{ topNBreakIdx }} 项) ──
               </div>
               <div class="priority-row flex items-center gap-2 p-1.5 hover:bg-slate-50 border-b">
                 <button @click="moveToPosition(idx)"
                         class="w-10 text-right text-xs text-slate-500 hover:text-blue-600"
                         title="点击跳位">#{{ idx + 1 }}</button>
+                <span v-if="item.sort != null"
+                      class="text-[10px] px-1.5 rounded bg-blue-100 text-blue-700 font-mono"
+                      :title="'学校排序值 ' + item.sort">{{ item.sort }}</span>
                 <span class="flex-1 text-sm">
                   {{ item[currentTab.nameKey] }}
                   <span class="text-xs text-slate-400 ml-2">{{ chipSubLabel(item, currentTab.key) }}</span>
