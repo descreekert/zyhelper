@@ -1524,13 +1524,10 @@ const ResultList = {
             <tr>
               <th style="width:38px">档</th>
               <th style="width:90px">城市</th>
-              <th style="width:200px">学校</th>
-              <th style="width:80px">门类</th>
-              <th style="width:140px">专业类</th>
-              <th style="width:320px">专业列表 (新/变/停)</th>
-              <th style="width:60px" title="计划总数">计划</th>
-              <th style="width:140px">25 参考分 (低/高/均)</th>
-              <th style="width:160px">25 参考位次 (低/高/均)</th>
+              <th style="width:220px">学校</th>
+              <th>专业类列表</th>
+              <th style="width:60px" title="计划总数">人数</th>
+              <th style="width:240px" title="格式: 分/位 | 分/位 | 分/位 (最难/最易/平均)">参考分/位次 (最难 | 最易 | 平均)</th>
             </tr>
           </thead>
           <tbody>
@@ -1544,29 +1541,21 @@ const ResultList = {
               <td>{{ g.city }}</td>
               <td>
                 <tier-badge :tag="g.schoolTag"></tier-badge>
-                <span class="ml-1">{{ g.schoolName }}</span>
+                <span class="ml-1 font-bold">{{ g.schoolName }}</span>
                 <span v-if="g.schoolRank" class="text-slate-400 ml-1 text-[10px]">#{{ g.schoolRank }}</span>
               </td>
-              <td>{{ g.majorCategory }}</td>
-              <td>{{ g.majorClass }}</td>
-              <td class="recommend-majors">
-                <span v-for="(m, mi) in g.majorTags" :key="mi" class="recommend-major-item">
-                  <span v-if="m.tags.includes('新')" class="badge-new" title="新增">新</span>
-                  <span v-if="m.tags.includes('停')" class="badge-stop" title="停招">停</span>
-                  <span v-if="m.tags.includes('变')" class="badge-diff" :title="m.plan.diff || '变化'">变</span>
-                  {{ m.name }}<span v-if="mi < g.majorTags.length - 1" class="text-slate-300">,</span>
+              <td class="recommend-classes">
+                <span v-for="(c, ci) in g.majorClasses" :key="ci">
+                  {{ c }}<span v-if="ci < g.majorClasses.length - 1" class="text-slate-400 mx-1">｜</span>
                 </span>
               </td>
               <td class="text-center font-bold">{{ g.totalEnroll }}</td>
-              <td class="text-center">
-                <span class="text-blue-700 font-bold">{{ g.minScore }}/{{ g.maxScore }}</span>
-                <span class="text-slate-500"> / {{ g.avgScore }}</span>
-              </td>
-              <td class="text-center">
-                <template v-if="g.avgRank">
-                  {{ g.minRank }}/{{ g.maxRank }} / <span class="text-slate-500">{{ g.avgRank }}</span>
-                </template>
-                <span v-else class="text-slate-400">—</span>
+              <td class="text-center recommend-stats">
+                <span class="text-blue-700 font-bold">{{ g.topScore }}/{{ g.topRank ?? '—' }}</span>
+                <span class="text-slate-400 mx-1">｜</span>
+                <span>{{ g.botScore }}/{{ g.botRank ?? '—' }}</span>
+                <span class="text-slate-400 mx-1">｜</span>
+                <span class="text-slate-500">{{ g.avgScore }}/{{ g.avgRank ?? '—' }}</span>
               </td>
             </tr>
           </tbody>
@@ -2886,12 +2875,10 @@ createApp({
       } : null;
       const plans = applyFilters(store.allPlans, overriddenFilters, overriddenAllowed);
 
-      // group by (schoolName, majorCategory + '/' + majorClass)
+      // 按学校聚合
       const groups = new Map();
       for (const p of plans) {
-        const cls = p.majorClass || p.majorClass25 || "—";
-        const cat = p.majorCategory || "—";
-        const key = `${p.schoolName}||${cat}//${cls}`;
+        const key = p.schoolName;
         if (!groups.has(key)) {
           groups.set(key, {
             schoolName: p.schoolName,
@@ -2901,50 +2888,52 @@ createApp({
             city: p.city,
             province: p.province,
             cityTier: p.cityTier,
-            majorCategory: cat,
-            majorClass: cls,
+            majorClassSet: new Set(),
             plans: [],
           });
         }
-        groups.get(key).plans.push(p);
+        const g = groups.get(key);
+        g.plans.push(p);
+        const cls = p.majorClass || p.majorClass25;
+        if (cls) g.majorClassSet.add(cls);
       }
 
       const result = [];
       for (const g of groups.values()) {
-        const scores = g.plans
-          .map(p => p.isStopped ? p.score25 : p.ref25Score)
-          .filter(s => s != null);
-        const ranks = g.plans
-          .map(p => p.isStopped ? p.rank25 : p.ref25Rank)
-          .filter(r => r != null);
-        if (!scores.length) continue;
+        const planScoreRank = g.plans.map(p => ({
+          score: p.isStopped ? p.score25 : p.ref25Score,
+          rank:  p.isStopped ? p.rank25  : p.ref25Rank,
+        })).filter(x => x.score != null);
+        if (!planScoreRank.length) continue;
+
         const totalEnroll = g.plans.reduce(
           (s, p) => s + (p.enrollNum26 || p.enrollNum25 || 0), 0);
-        const minScore = Math.min(...scores);
-        const maxScore = Math.max(...scores);
-        const avgScore = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
-        const minRank = ranks.length ? Math.min(...ranks) : null;
-        const maxRank = ranks.length ? Math.max(...ranks) : null;
+        // 按分数排序找 top/bottom
+        const sorted = [...planScoreRank].sort((a, b) => b.score - a.score);
+        const top = sorted[0];        // 最高分 (录取门槛最高 = 最低位次)
+        const bot = sorted[sorted.length - 1];   // 最低分 (录取门槛最低 = 最高位次)
+        const avgScore = Math.round(planScoreRank.reduce((s, x) => s + x.score, 0) / planScoreRank.length);
+        const ranks = planScoreRank.map(x => x.rank).filter(r => r != null);
         const avgRank = ranks.length ? Math.round(ranks.reduce((a, b) => a + b, 0) / ranks.length) : null;
-        // 用 avgScore 算 tier (relaxed - 保证每组归一档)
+        // tier 按 avgScore
         const tier = planTierRelaxed({ ref25Score: avgScore, isStopped: false }, cwb.value);
-        // 专业列表 (含 新/变/停 标记)
-        const majorTags = g.plans.map(p => {
-          const name = p.majorName26 || p.majorName25 || "—";
-          const tags = [];
-          if (p.isStopped) tags.push("停");
-          if (p.isNew === "新增") tags.push("新");
-          if (p.diff && !p.isStopped && p.isNew !== "新增") tags.push("变");
-          return { name, tags, plan: p };
-        });
+        // 专业类列表 (去重, 用 ｜ 分隔)
+        const majorClasses = [...g.majorClassSet];
         result.push({
-          ...g,
-          minScore, maxScore, avgScore,
-          minRank, maxRank, avgRank,
+          schoolName: g.schoolName,
+          schoolCode: g.schoolCode,
+          schoolTag: g.schoolTag,
+          schoolRank: g.schoolRank,
+          city: g.city,
+          province: g.province,
+          majorClasses,
           totalEnroll,
           planCount: g.plans.length,
           tier,
-          majorTags,
+          // 3 个 box: 最低位次/最高分 | 最高位次/最低分 | 平均
+          topScore: top.score, topRank: top.rank,
+          botScore: bot.score, botRank: bot.rank,
+          avgScore, avgRank,
         });
       }
       // 排序: 按 avgScore desc
