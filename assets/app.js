@@ -2860,11 +2860,17 @@ createApp({
     // 🎯 推荐 (按 校+专业类 聚合, 含停招, 不限校/市)
     const recommendData = computed(() => {
       if (!cwb.value || !priority.value) return [];
-      // 推荐用 filter 但 override 部分字段
+      // 推荐用 filter 但 override 部分字段 (硬编码, 不受用户切换影响)
       const overriddenFilters = {
         ...store.filters,
-        includeStopped: true,
-        // includeMidOutside 保留用户设置 (默认 false)
+        includeStopped: true,        // 含停招 (统计需完整)
+        includeMidOutside: false,    // 严格不含中外合作 (低分会拉偏平均)
+        tuitionMax: 20000,           // 学费 ≤ 2 万
+        // 关键词维度清空, 避免用户输的关键词限制推荐范围
+        keyword: "",
+        pickedSchool: null,
+        pickedMajorClass: null,
+        pickedMajorName: null,
       };
       // allowed 不限学校/城市, majorClasses 保留用户设置
       const baseAllowed = allowedSets.value;
@@ -2873,7 +2879,17 @@ createApp({
         cities: null,
         majorClasses: baseAllowed.majorClasses,
       } : null;
-      const plans = applyFilters(store.allPlans, overriddenFilters, overriddenAllowed);
+      let plans = applyFilters(store.allPlans, overriddenFilters, overriddenAllowed);
+      // 停招行 applyFilters 默认绕过专业类过滤 (因 26 无 class); 推荐模式严格要求,
+      // 用 25 字段 (majorClass25) 再过滤一遍, 排除医学/心理 等不在 Top N 类的停招行
+      const allowedCls = overriddenAllowed && overriddenAllowed.majorClasses;
+      if (allowedCls) {
+        plans = plans.filter(p => {
+          if (!p.isStopped) return true;
+          const cls = p.majorClass || p.majorClass25;
+          return cls && allowedCls.has(cls);
+        });
+      }
 
       // 按学校聚合
       const groups = new Map();
