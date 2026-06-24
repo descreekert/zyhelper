@@ -2867,6 +2867,10 @@ createApp({
         const m = planByIdMap.value;
         let arr = voluntary.value.map(id => m[id]).filter(Boolean);
         arr = applyKeywordFilter(arr, store.voluntaryKeyword);
+        // V9: 顶部冲稳保 tag 也筛志愿表 (与主表/聚合表一致)
+        if (activeTier.value && cwb.value) {
+          arr = arr.filter(p => planTierRelaxed(p, cwb.value) === activeTier.value);
+        }
         return arr;
       }
       if (!store.pageSize) return sorted.value;
