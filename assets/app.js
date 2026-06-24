@@ -486,6 +486,9 @@ const store = reactive({
   compareList: [],
   expandedRows: new Set(),           // 主表/list/pane
   expandedRowsVol: new Set(),        // voluntary 独立
+  // 每视图独立的关键词筛选 (V8: 用户希望 voluntary/recommend 表也能用 keyword)
+  voluntaryKeyword:  { keyword: "", pickedSchool: null, pickedMajorClass: null, pickedMajorName: null },
+  recommendKeyword:  { keyword: "", pickedSchool: null, pickedMajorClass: null, pickedMajorName: null },
   // P2.1: 筛选预设 [{name, filters: serialized}, ...]
   presets: loadLS(LS_KEY_PRESET, []),
 });
@@ -2725,10 +2728,12 @@ createApp({
     });
     const sorted = computed(() => applySort(filtered.value, store.sortKeys));
     const paged = computed(() => {
-      // voluntary 视图: 用志愿单 array 作为数据源 (按用户志愿顺序)
+      // voluntary 视图: 用志愿单 array 作为数据源 + 应用 voluntaryKeyword
       if (store.viewMode === "voluntary") {
         const m = planByIdMap.value;
-        return voluntary.value.map(id => m[id]).filter(Boolean);
+        let arr = voluntary.value.map(id => m[id]).filter(Boolean);
+        arr = applyKeywordFilter(arr, store.voluntaryKeyword);
+        return arr;
       }
       if (!store.pageSize) return sorted.value;
       const start = (currentPage.value - 1) * store.pageSize;
@@ -2857,16 +2862,17 @@ createApp({
     const recommendData = computed(() => {
       if (!cwb.value || !priority.value) return [];
       // 推荐用 filter 但 override 部分字段 (硬编码, 不受用户切换影响)
+      // 关键词部分用 recommendKeyword (推荐视图独立)
+      const rk = store.recommendKeyword;
       const overriddenFilters = {
         ...store.filters,
         includeStopped: true,        // 含停招 (统计需完整)
         includeMidOutside: false,    // 严格不含中外合作 (低分会拉偏平均)
         tuitionMax: 20000,           // 学费 ≤ 2 万
-        // 关键词维度清空, 避免用户输的关键词限制推荐范围
-        keyword: "",
-        pickedSchool: null,
-        pickedMajorClass: null,
-        pickedMajorName: null,
+        keyword: rk.keyword,
+        pickedSchool: rk.pickedSchool,
+        pickedMajorClass: rk.pickedMajorClass,
+        pickedMajorName: rk.pickedMajorName,
       };
       // allowed 不限学校/城市, majorClasses 保留用户设置
       const baseAllowed = allowedSets.value;
@@ -3114,6 +3120,25 @@ createApp({
     // 给 ResultList 用的当前 expanded set
     const currentExpandedRows = computed(() =>
       store.viewMode === "voluntary" ? store.expandedRowsVol : store.expandedRows);
+
+    // 每视图绑定不同的关键词筛选 state (主表用 store.filters; voluntary/recommend 各自)
+    const currentKeywordFilters = computed(() => {
+      if (store.viewMode === "voluntary") return store.voluntaryKeyword;
+      if (store.viewMode === "recommend") return store.recommendKeyword;
+      return store.filters;
+    });
+    // 应用关键词 4 字段到 plan 列表
+    function applyKeywordFilter(plans, f) {
+      if (!f) return plans;
+      let out = plans;
+      if (f.pickedSchool) out = out.filter(p => p.schoolName === f.pickedSchool);
+      if (f.pickedMajorClass) out = out.filter(p =>
+        (p.majorClass || p.majorClass25) === f.pickedMajorClass);
+      if (f.pickedMajorName) out = out.filter(p =>
+        p.majorName26 === f.pickedMajorName || p.majorName25 === f.pickedMajorName);
+      if (f.keyword) out = out.filter(p => matchesKeyword(p, f.keyword));
+      return out;
+    }
     function saveFavorites() { saveLS(LS_KEY_FAV, Array.from(store.favorites)); }
     function resetFilters() {
       Object.assign(store.filters, initialFilters());
@@ -3420,6 +3445,7 @@ createApp({
       ratioSumOk, resetRatios,
       filtered, sorted, paged, planByIdMap, compareIdSet, keywordCandidatePool,
       openDetail, toggleCompare, toggleFavorite, toggleExpand, saveFavorites, currentExpandedRows,
+      currentKeywordFilters,
       voluntary, voluntarySet, isInVoluntary, voluntaryIndex, toggleVoluntary,
       moveVoluntaryUp, moveVoluntaryDown, moveVoluntaryToTop, moveVoluntaryToBottom, clearVoluntary,
       newVoluntaryList, renameVoluntaryList, duplicateVoluntaryList, deleteVoluntaryList, switchVoluntaryList,

@@ -269,13 +269,14 @@
               <button @click="exportVoluntaryByTier" class="text-xs ml-1 text-amber-600 hover:underline">📥 按档 CSV</button>
               <button @click="clearVoluntary" v-if="voluntary.length" class="text-xs ml-1 text-red-500 hover:underline">清空</button>
             </div>
-            <!-- 其它视图: 显示筛后计数 -->
+            <!-- 其它视图: 显示筛后计数 + 26分数 (便于截图/打印识别) -->
             <div v-else class="text-sm text-slate-600">
               <span class="font-bold text-lg text-blue-600">{{ filtered.length }}</span> 条结果
-              <span v-if="cwb" class="text-xs ml-1">
-                (<span class="text-red-600">冲 {{ filteredTierCounts.chong }}/{{ paneTargets.chong }}</span>,
+              <span class="text-xs ml-1">
+                (<span v-if="ui.myScore" class="text-blue-600 mr-1">{{ ui.myScore }}分,</span>
+                <template v-if="cwb"><span class="text-red-600">冲 {{ filteredTierCounts.chong }}/{{ paneTargets.chong }}</span>,
                 <span class="text-amber-600">稳 {{ filteredTierCounts.wen }}/{{ paneTargets.wen }}</span>,
-                <span class="text-green-600">保 {{ filteredTierCounts.bao }}/{{ paneTargets.bao }}</span>)
+                <span class="text-green-600">保 {{ filteredTierCounts.bao }}/{{ paneTargets.bao }}</span></template>)
               </span>
               <span v-if="store.pageSize && filtered.length > store.pageSize" class="text-slate-400">
                 · 显示第 {{ (currentPage-1)*store.pageSize + 1 }}-{{ Math.min(currentPage*store.pageSize, filtered.length) }} 条
@@ -304,10 +305,10 @@
 
             <div class="flex-1"></div>
 
-            <!-- 关键词搜索 (移自侧栏, 即使侧栏收起也可用) -->
+            <!-- 关键词搜索 (每视图独立 state, 共享同一个输入框) -->
             <div class="keyword-toolbar w-64">
               <keyword-autocomplete
-                :filters="store.filters"
+                :filters="currentKeywordFilters"
                 :priority="priority"
                 :plans="keywordCandidatePool"
               ></keyword-autocomplete>
