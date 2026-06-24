@@ -1925,8 +1925,8 @@ const ResultList = {
                               <td>{{ p.enrollNum26 || '—' }}</td>
                               <td>{{ fmtDuration(p) || '—' }}</td>
                               <td>{{ p.tuition || '—' }}</td>
-                              <td><b class="text-blue-700">{{ p.ref25Score || '—' }}</b><span class="text-[10px] text-slate-400">(参考)</span></td>
-                              <td>{{ p.ref25Rank || '—' }}</td>
+                              <td><b class="text-blue-700">{{ score26Of(p) ?? '—' }}</b><span class="text-[10px] text-slate-400">(等位)</span></td>
+                              <td>{{ rank26Of(p) ?? '—' }}</td>
                               <td>{{ p.ref25LineDiff || '—' }}</td>
                               <td>{{ p.avgRank || '—' }}</td>
                             </template>
@@ -2039,7 +2039,15 @@ const DetailDrawer = {
     onMounted(renderChart);
     watch(() => props.plan, renderChart);
     onUnmounted(() => chart && chart.destroy());
-    return { chartRef };
+
+    // V9: 25 参考分 → 26 等位分/等位次
+    const equiv26 = computed(() => {
+      const p = props.plan;
+      if (!p || !props.scoreRank) return { score26: null, rank26: null };
+      const s25 = p.isStopped ? p.score25 : p.ref25Score;
+      return equivFromScore25(s25, props.scoreRank);
+    });
+    return { chartRef, equiv26 };
   },
   template: `
     <div class="detail-drawer">
@@ -2126,8 +2134,8 @@ const DetailDrawer = {
           <h4 class="font-bold text-base mb-2">25 参考分数 <conf-badge :conf="plan.refConfidence"></conf-badge></h4>
           <table class="compact-table w-full">
             <tbody>
-              <tr><th class="w-32">参考最低分</th><td class="font-bold text-blue-700">{{ plan.ref25Score }} 分</td></tr>
-              <tr><th>参考最低位次</th><td class="font-bold text-blue-700">{{ plan.ref25Rank }} 名</td></tr>
+              <tr><th class="w-32">参考最低分</th><td><b class="text-blue-700">{{ plan.ref25Score }}</b> 分 <span class="text-slate-400 ml-2">→ 26 等位 <b class="text-slate-700">{{ equiv26.score26 ?? '—' }}</b> 分</span></td></tr>
+              <tr><th>参考最低位次</th><td><b class="text-blue-700">{{ plan.ref25Rank }}</b> 名 <span class="text-slate-400 ml-2">→ 26 等位 <b class="text-slate-700">{{ equiv26.rank26 ?? '—' }}</b> 名</span></td></tr>
               <tr><th>参考线差</th><td>{{ plan.ref25LineDiff }} 分</td></tr>
               <tr v-if="plan.refSource"><th>来源</th><td class="text-xs text-slate-600">{{ plan.refSource }}</td></tr>
             </tbody>
