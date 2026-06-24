@@ -433,6 +433,11 @@ tr.main-row-expanded td { background: rgba(59, 130, 246, 0.04); }
 .preset-chip:hover { background: #dbeafe; }
 .preset-chip button { background: transparent; cursor: pointer; padding: 0 2px; }
 
+/* === V8: 表格 head 的关键词搜索 (主表 toolbar) === */
+.keyword-toolbar { min-width: 200px; }
+.keyword-toolbar > div { padding: 2px 4px !important; }
+.keyword-toolbar input { font-size: 12px; padding: 2px 4px; }
+
 /* === V8: 推荐视图 === */
 .recommend-table { font-size: 11px; }
 .recommend-table th { background: #eff6ff; }

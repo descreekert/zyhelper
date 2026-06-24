@@ -1090,10 +1090,6 @@ const FilterPanel = {
         </div>
       </div>
 
-      <!-- 关键词 (智能补全) -->
-      <div class="filter-section">
-        <keyword-autocomplete :filters="store.filters" :priority="priority" :plans="plans"></keyword-autocomplete>
-      </div>
 
       <!-- 3 段冲稳保 范围 -->
       <div class="filter-section">
@@ -1527,7 +1523,7 @@ const ResultList = {
               <th style="width:220px">学校</th>
               <th>专业类列表</th>
               <th style="width:60px" title="计划总数">人数</th>
-              <th style="width:240px" title="格式: 分/位 | 分/位 | 分/位 (最难/最易/平均)">参考分/位次 (最难 | 最易 | 平均)</th>
+              <th style="width:240px" title="格式: 分/位 | 分/位 | 分/位 (最高/最低/平均)">参考分/位次 (最高 | 最低 | 平均)</th>
             </tr>
           </thead>
           <tbody>
@@ -2513,7 +2509,7 @@ const PrioritySettings = {
 createApp({
   components: {
     ScoreTool, FilterPanel, ResultList, PlanCard, DetailDrawer, CompareBar, FavoritesBar,
-    PrioritySettings,
+    PrioritySettings, KeywordAutocomplete,
   },
   setup() {
     const loading = ref(true);

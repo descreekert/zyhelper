@@ -304,6 +304,15 @@
 
             <div class="flex-1"></div>
 
+            <!-- 关键词搜索 (移自侧栏, 即使侧栏收起也可用) -->
+            <div class="keyword-toolbar w-64">
+              <keyword-autocomplete
+                :filters="store.filters"
+                :priority="priority"
+                :plans="keywordCandidatePool"
+              ></keyword-autocomplete>
+            </div>
+
             <!-- 刷新按钮 (V4 Item 6: 移到这里) -->
             <button @click="reloadData"
                     class="text-sm px-2 py-1 border rounded hover:bg-slate-100"
