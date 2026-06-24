@@ -110,6 +110,23 @@ function score26FromRank26(rank, scoreRank) {
   return table[table.length - 1]?.[0] ?? null;
 }
 
+// 25 分数 → 26 等位分 + 26 等位次
+// 优先查 equivalent 表 (人工/精确); 不在范围则用 25 一分一段 + 26 一分一段 反查
+function equivFromScore25(score25, scoreRank) {
+  if (!score25 || !scoreRank) return { score26: null, rank26: null };
+  const eq = scoreRank.equivalent || [];
+  for (const r of eq) {
+    if (r.score25 === score25) return { score26: r.score26, rank26: r.rank26 };
+  }
+  // 兜底: 25rank → 26 同位次的 score → 该 26 score 的 rank
+  const r25 = rank25FromScore25(score25, scoreRank);
+  if (r25 == null) return { score26: null, rank26: null };
+  const s26 = score26FromRank26(r25, scoreRank);
+  if (s26 == null) return { score26: null, rank26: null };
+  const r26 = rank26FromScore26(s26, scoreRank);
+  return { score26: s26, rank26: r26 };
+}
+
 // 26 分数 → 26 位次 (查 26 一分一段)
 function rank26FromScore26(score26, scoreRank) {
   if (!score26 || !scoreRank?.oneScoreOneRank?.["2026"]) return null;
@@ -263,8 +280,8 @@ const COLUMNS = [
   { key: "dur",     label: "学制",     width: 40,  sortable: false },
   { key: "tuition", label: "学费",     width: 60,  sortable: true,  sortField: "tuition" },
   { key: "diff",    label: "变化",     width: 100, sortable: false },
-  { key: "score",   label: "25分数",   width: 70,  sortable: true,  sortField: "ref25Score" },
-  { key: "rank",    label: "25位次",   width: 80,  sortable: true,  sortField: "ref25Rank" },
+  { key: "score",   label: "分数 25/26",   width: 100, sortable: true,  sortField: "ref25Score" },
+  { key: "rank",    label: "位次 25/26",   width: 120, sortable: true,  sortField: "ref25Rank" },
   { key: "conf",    label: "可信度",   width: 60,  sortable: true,  sortField: "refConfidence" },
   { key: "eval",    label: "学科评估", width: 130, sortable: false },
   { key: "soft",    label: "软科评级", width: 90,  sortable: false },
@@ -1361,7 +1378,7 @@ const ResultList = {
           "viewMode", "expandedRows", "tierMap",
           "columns", "sortKeys", "cwb", "paneTargets",
           "voluntary", "voluntarySet", "columnWidths", "planOverrides",
-          "recommendData"],
+          "recommendData", "scoreRank"],
   emits: ["page-change", "open-detail", "toggle-compare", "toggle-favorite", "toggle-expand",
           "sort-col", "col-drop", "col-resize",
           "toggle-voluntary", "vol-up", "vol-down", "vol-top", "vol-bottom",
@@ -1416,6 +1433,19 @@ const ResultList = {
       return props.tierMap ? (props.tierMap.get(p.id) || null) : null;
     }
     function isExpanded(id) { return props.expandedRows && props.expandedRows.has(id); }
+    // 25 → 26 等位分缓存 (避免每行渲染都重算)
+    const equivCache = new Map();
+    function getEquiv(score25) {
+      if (score25 == null) return { score26: null, rank26: null };
+      if (equivCache.has(score25)) return equivCache.get(score25);
+      const v = equivFromScore25(score25, props.scoreRank);
+      equivCache.set(score25, v);
+      return v;
+    }
+    function score25Of(p) { return p.isStopped ? p.score25 : p.ref25Score; }
+    function rank25Of(p) { return p.isStopped ? p.rank25 : p.ref25Rank; }
+    function score26Of(p) { return getEquiv(score25Of(p)).score26; }
+    function rank26Of(p) { return getEquiv(score25Of(p)).rank26; }
     function cellValue(p, key) {
       switch (key) {
         case "city":    return p.city;
@@ -1492,6 +1522,7 @@ const ResultList = {
     return { fmtDuration, formatDur25, rowTier, isExpanded, cellValue, sortIndicator,
              onColDragStart, onColDrop, startResize, colWidth,
              paneLists, paneCounts, volIdx,
+             score25Of, rank25Of, score26Of, rank26Of,
              editingScore, editingValue, startEditScore, commitEditScore, cancelEditScore, isEdited };
   },
   computed: {
@@ -1527,7 +1558,7 @@ const ResultList = {
               <th style="width:220px">学校</th>
               <th>专业类列表</th>
               <th style="width:60px" title="计划总数">人数</th>
-              <th style="width:240px" title="格式: 分/位 | 分/位 | 分/位 (最高/最低/平均)">参考分/位次 (最高 | 最低 | 平均)</th>
+              <th style="width:340px" title="格式: 25分/26等位 · 25位次/26等位 (最高 | 最低 | 平均)">分数 25/26 · 位次 25/26 (最高 | 最低 | 平均)</th>
             </tr>
           </thead>
           <tbody>
@@ -1553,11 +1584,11 @@ const ResultList = {
                 </td>
                 <td class="text-center font-bold">{{ g.totalEnroll }}</td>
                 <td class="text-center recommend-stats">
-                  <span class="text-blue-700 font-bold">{{ g.topScore }}/{{ g.topRank ?? '—' }}</span>
+                  <span class="text-blue-700 font-bold">{{ g.topScore }}<span class="text-slate-400 font-normal">/{{ g.topScore26 ?? '—' }}</span> · {{ g.topRank ?? '—' }}<span class="text-slate-400 font-normal">/{{ g.topRank26 ?? '—' }}</span></span>
                   <span class="text-slate-400 mx-1">｜</span>
-                  <span>{{ g.botScore }}/{{ g.botRank ?? '—' }}</span>
+                  <span>{{ g.botScore }}<span class="text-slate-400">/{{ g.botScore26 ?? '—' }}</span> · {{ g.botRank ?? '—' }}<span class="text-slate-400">/{{ g.botRank26 ?? '—' }}</span></span>
                   <span class="text-slate-400 mx-1">｜</span>
-                  <span class="text-slate-500">{{ g.avgScore }}/{{ g.avgRank ?? '—' }}</span>
+                  <span class="text-slate-500">{{ g.avgScore }}<span class="text-slate-400">/{{ g.avgScore26 ?? '—' }}</span> · {{ g.avgRank ?? '—' }}<span class="text-slate-400">/{{ g.avgRank26 ?? '—' }}</span></span>
                 </td>
               </tr>
               <tr v-if="isExpanded(g.schoolName)" class="expanded-row">
@@ -1568,7 +1599,7 @@ const ResultList = {
                         <th class="px-2 py-1 text-left">专业类</th>
                         <th class="px-2 py-1 text-left">专业 (26 / 25)</th>
                         <th class="px-2 py-1 text-center" style="width:50px">招生</th>
-                        <th class="px-2 py-1 text-center" style="width:80px">25 分/位</th>
+                        <th class="px-2 py-1 text-center" style="width:160px">分数 25/26 · 位次 25/26</th>
                         <th class="px-2 py-1 text-center" style="width:60px">学费</th>
                         <th class="px-2 py-1 text-center" style="width:60px">学制</th>
                         <th class="px-2 py-1 text-center" style="width:80px">状态</th>
@@ -1584,9 +1615,9 @@ const ResultList = {
                         </td>
                         <td class="px-2 py-1 text-center">{{ p.enrollNum26 || p.enrollNum25 || '—' }}</td>
                         <td class="px-2 py-1 text-center">
-                          <span class="font-bold">{{ p.isStopped ? p.score25 : p.ref25Score }}</span>
-                          <span class="text-slate-400 mx-0.5">/</span>
-                          <span>{{ (p.isStopped ? p.rank25 : p.ref25Rank) ?? '—' }}</span>
+                          <span class="font-bold">{{ score25Of(p) ?? '—' }}</span><span class="text-slate-400">/{{ score26Of(p) ?? '—' }}</span>
+                          <span class="text-slate-400 mx-0.5">·</span>
+                          <span>{{ rank25Of(p) ?? '—' }}</span><span class="text-slate-400">/{{ rank26Of(p) ?? '—' }}</span>
                         </td>
                         <td class="px-2 py-1 text-center">{{ p.tuition || p.tuition25 || '—' }}</td>
                         <td class="px-2 py-1 text-center">{{ formatDur25(p) || '—' }}</td>
@@ -1728,7 +1759,7 @@ const ResultList = {
                     {{ p.majorName26 || p.majorName25 || '—' }}
                   </td>
                   <td v-else-if="c.key==='score'" :class="['col-'+c.key, 'font-bold text-blue-700 text-right cursor-text', isEdited(p) ? 'cell-edited' : '']"
-                      :title="isEdited(p) ? '已手动修改 (双击重编辑, ↩ 恢复原始)' : '双击编辑 25 参考分'"
+                      :title="isEdited(p) ? '已手动修改 (双击重编辑, ↩ 恢复原始)' : '双击编辑 25 参考分 · 斜杠后是 26 等位分'"
                       @click.stop
                       @dblclick.stop="startEditScore(p, $event)">
                     <template v-if="editingScore === p.id">
@@ -1740,13 +1771,20 @@ const ResultList = {
                              class="w-16 px-1 text-right border rounded bg-yellow-50">
                     </template>
                     <template v-else>
-                      {{ cellValue(p, c.key) }}<span v-if="isEdited(p)" class="text-amber-500 text-xs">*</span>
+                      <span>{{ score25Of(p) ?? '—' }}</span><span v-if="isEdited(p)" class="text-amber-500 text-xs">*</span>
+                      <span class="text-slate-400 font-normal mx-0.5">/</span>
+                      <span class="text-slate-500 font-normal">{{ score26Of(p) ?? '—' }}</span>
                       <button v-if="isEdited(p)" @click.stop="$emit('revert-score', p.id)"
                               class="ml-1 text-xs text-blue-500 hover:text-blue-700"
                               title="恢复原始值">↩</button>
                     </template>
                   </td>
-                  <td v-else-if="c.key==='rank' || c.key==='tuition'" :class="['col-'+c.key, 'text-right']">{{ cellValue(p, c.key) }}</td>
+                  <td v-else-if="c.key==='rank'" :class="['col-'+c.key, 'text-right']">
+                    <span>{{ rank25Of(p) ?? '—' }}</span>
+                    <span class="text-slate-400 mx-0.5">/</span>
+                    <span class="text-slate-500">{{ rank26Of(p) ?? '—' }}</span>
+                  </td>
+                  <td v-else-if="c.key==='tuition'" :class="['col-'+c.key, 'text-right']">{{ cellValue(p, c.key) }}</td>
                   <td v-else-if="c.key==='conf'" :class="'col-'+c.key"><conf-badge :conf="cellValue(p, c.key)"></conf-badge></td>
                   <td v-else-if="c.key==='num' || c.key==='dur' || c.key==='sp' || c.key==='mp'"
                       :class="['col-'+c.key, 'text-center']">{{ cellValue(p, c.key) }}</td>
@@ -3039,6 +3077,10 @@ createApp({
           const sb = b.isStopped ? (b.score25 ?? -1) : (b.ref25Score ?? -1);
           return sb - sa;
         });
+        // 26 等位分/位次 (基于 25 → 26 等位映射)
+        const eqTop = equivFromScore25(top.score, scoreRank.value);
+        const eqBot = equivFromScore25(bot.score, scoreRank.value);
+        const eqAvg = equivFromScore25(avgScore, scoreRank.value);
         result.push({
           schoolName: g.schoolName,
           schoolCode: g.schoolCode,
@@ -3050,10 +3092,14 @@ createApp({
           totalEnroll,
           planCount: g.plans.length,
           tier,
-          // 3 个 box: 最低位次/最高分 | 最高位次/最低分 | 平均
+          // 25 分/位次
           topScore: top.score, topRank: top.rank,
           botScore: bot.score, botRank: bot.rank,
           avgScore, avgRank,
+          // 26 等位分/位次
+          topScore26: eqTop.score26, topRank26: eqTop.rank26,
+          botScore26: eqBot.score26, botRank26: eqBot.rank26,
+          avgScore26: eqAvg.score26, avgRank26: eqAvg.rank26,
           plans: sortedPlans,        // 展开行用
         });
       }
