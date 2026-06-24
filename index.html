@@ -268,6 +268,14 @@
               <button @click="exportVoluntaryHtml" v-if="voluntary.length" class="text-xs ml-2 text-blue-600 hover:underline">📤 HTML</button>
               <button @click="exportVoluntaryByTier" class="text-xs ml-1 text-amber-600 hover:underline">📥 按档 CSV</button>
               <button @click="clearVoluntary" v-if="voluntary.length" class="text-xs ml-1 text-red-500 hover:underline">清空</button>
+              <!-- V9: 锁定状态 + 待确认批量操作 -->
+              <span v-if="voluntaryPendingCount" class="ml-3 text-xs bg-amber-100 border border-amber-300 text-amber-800 rounded px-2 py-0.5"
+                    :title="'移动后需点 ✓ 确认锁定, 否则下次自动排序会还原'">
+                ⏳ {{ voluntaryPendingCount }} 项待确认
+                <button @click="confirmAllPending" class="ml-1 px-1.5 bg-amber-600 text-white rounded hover:bg-amber-700">✓ 全部确认</button>
+                <button @click="cancelAllPending" class="ml-0.5 px-1.5 border border-amber-400 hover:bg-amber-50">✕ 全部撤销</button>
+              </span>
+              <span v-if="voluntaryPinnedCount" class="ml-1 text-xs text-slate-500" title="已锁定的项不参与自动排序">📌 {{ voluntaryPinnedCount }} 项已锁定</span>
             </div>
             <!-- 其它视图: 显示筛后计数 + 26分数 (便于截图/打印识别) -->
             <div v-else class="text-sm text-slate-600">
@@ -373,6 +381,8 @@
             :plan-overrides="store.planOverrides"
             :recommend-data="recommendData"
             :score-rank="scoreRank"
+            :pinned-set="pinnedSet"
+            :pending-set="pendingSet"
             @page-change="currentPage = $event"
             @open-detail="openDetail"
             @toggle-compare="toggleCompare"
@@ -388,6 +398,9 @@
             @vol-down="moveVoluntaryDown"
             @vol-top="moveVoluntaryToTop"
             @vol-bottom="moveVoluntaryToBottom"
+            @vol-confirm-pin="confirmPin"
+            @vol-cancel-pending="cancelPending"
+            @vol-unpin="unpinConfirmed"
           ></result-list>
         </main>
       </div>

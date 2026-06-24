@@ -9,6 +9,8 @@ const LS_KEY_FAV   = "zyhelper_favorites_v1";
 const LS_KEY_VOL   = "zyhelper_voluntary_v1";        // 旧 (单列表)
 const LS_KEY_VOL_LISTS = "zyhelper_voluntary_lists_v2";  // 新 (多列表 {name: ids[]})
 const LS_KEY_VOL_ACTIVE = "zyhelper_voluntary_active_v2";
+const LS_KEY_VOL_PINNED = "zyhelper_voluntary_pinned_v1";   // {name: id[]}  确认锁定
+const LS_KEY_VOL_PENDING = "zyhelper_voluntary_pending_v1"; // {name: id[]}  待确认
 const LS_KEY_PRIORITY_OVR = "zyhelper_priority_overrides_v1";
 const LS_KEY_PLAN_OVR = "zyhelper_plan_overrides_v1";
 const LS_KEY_PRESET= "zyhelper_presets_v2";   // v2: 含 subjects + allowed 关键词维度
@@ -496,6 +498,10 @@ const store = reactive({
     return { "默认": oldSingle || oldFav || [] };
   })(),
   activeVoluntaryName: loadLS(LS_KEY_VOL_ACTIVE, "默认"),
+  // V9: 志愿排序锁定 (按列表名 keyed). pinned = 用户确认锁定; pending = 待确认.
+  // 锁定/待确认的项保留当前数组位置, 其余按 26 等位次升序填充空位.
+  voluntaryPinned:  loadLS(LS_KEY_VOL_PINNED, {}),
+  voluntaryPending: loadLS(LS_KEY_VOL_PENDING, {}),
   // 用户自定义排序覆盖 (null = 用 priority.json 默认; Array<name> = 自定义顺序)
   priorityOverrides: loadLS(LS_KEY_PRIORITY_OVR, { schools: null, cities: null, majorClasses: null, majors: null }),
   // 用户手动修改的 plan 字段 (e.g. ref25Score) — { [planId]: { ref25Score, ref25Rank } }
@@ -546,6 +552,8 @@ const ui = reactive({
 
 watch(() => Array.from(store.favorites), v => saveLS(LS_KEY_FAV, v));
 watch(() => store.voluntaryLists, v => saveLS(LS_KEY_VOL_LISTS, v), { deep: true });
+watch(() => store.voluntaryPinned,  v => saveLS(LS_KEY_VOL_PINNED, v),  { deep: true });
+watch(() => store.voluntaryPending, v => saveLS(LS_KEY_VOL_PENDING, v), { deep: true });
 watch(() => store.activeVoluntaryName, v => saveLS(LS_KEY_VOL_ACTIVE, v));
 // 保证 active 名字总是 valid (lists 为空时建一个 "默认")
 if (!store.voluntaryLists || !Object.keys(store.voluntaryLists).length) {
@@ -1378,10 +1386,12 @@ const ResultList = {
           "viewMode", "expandedRows", "tierMap",
           "columns", "sortKeys", "cwb", "paneTargets",
           "voluntary", "voluntarySet", "columnWidths", "planOverrides",
-          "recommendData", "scoreRank"],
+          "recommendData", "scoreRank",
+          "pinnedSet", "pendingSet"],
   emits: ["page-change", "open-detail", "toggle-compare", "toggle-favorite", "toggle-expand",
           "sort-col", "col-drop", "col-resize",
           "toggle-voluntary", "vol-up", "vol-down", "vol-top", "vol-bottom",
+          "vol-confirm-pin", "vol-cancel-pending", "vol-unpin",
           "edit-score", "revert-score"],
   setup(props, { emit }) {
     function fmtDuration(p) { return formatDuration(p.duration || p.duration25); }
@@ -1446,6 +1456,9 @@ const ResultList = {
     function rank25Of(p) { return p.isStopped ? p.rank25 : p.ref25Rank; }
     function score26Of(p) { return getEquiv(score25Of(p)).score26; }
     function rank26Of(p) { return getEquiv(score25Of(p)).rank26; }
+    // V9: 锁定 / 待确认 状态查询
+    function isPinned(id) { return props.pinnedSet && props.pinnedSet.has(id); }
+    function isPending(id) { return props.pendingSet && props.pendingSet.has(id); }
     function cellValue(p, key) {
       switch (key) {
         case "city":    return p.city;
@@ -1523,6 +1536,7 @@ const ResultList = {
              onColDragStart, onColDrop, startResize, colWidth,
              paneLists, paneCounts, volIdx,
              score25Of, rank25Of, score26Of, rank26Of,
+             isPinned, isPending,
              editingScore, editingValue, startEditScore, commitEditScore, cancelEditScore, isEdited };
   },
   computed: {
@@ -1722,18 +1736,33 @@ const ResultList = {
               <tr class="hover:bg-slate-50 cursor-pointer"
                   :class="[rowTier(p) ? 'tier-row-'+rowTier(p) : '', isExpanded(p.id) ? 'main-row-expanded' : '']"
                   @click="$emit('toggle-expand', p.id)">
-                <!-- voluntary: 序号列 -->
-                <th v-if="viewMode==='voluntary'" class="vol-num-cell text-center">{{ idx + 1 }}</th>
-                <!-- voluntary: 操作列 (前置: 上下移 / 移除 / 详情) -->
+                <!-- voluntary: 序号列 + 锁定状态 -->
+                <th v-if="viewMode==='voluntary'" class="vol-num-cell text-center"
+                    :class="isPinned(p.id) ? 'bg-blue-50' : isPending(p.id) ? 'bg-amber-50' : ''">
+                  {{ idx + 1 }}
+                  <span v-if="isPinned(p.id)" class="text-blue-600" title="已锁定 (不参与自动排序)">📌</span>
+                  <span v-else-if="isPending(p.id)" class="text-amber-600" title="待确认 (移动后未确认, 下次自动排序会还原)">⏳</span>
+                </th>
+                <!-- voluntary: 操作列 (前置: 上下移 / 锁定操作 / 移除 / 详情) -->
                 <td v-if="viewMode==='voluntary'" class="text-center vol-actions">
                   <button @click.stop="$emit('vol-top', p.id)" :disabled="idx === 0"
-                          class="px-1 hover:text-blue-600 disabled:opacity-30" title="置顶">⇈</button>
+                          class="px-1 hover:text-blue-600 disabled:opacity-30" title="置顶 (移动后需 ✓ 确认)">⇈</button>
                   <button @click.stop="$emit('vol-up', p.id)" :disabled="idx === 0"
-                          class="px-1 hover:text-blue-600 disabled:opacity-30" title="上移">↑</button>
+                          class="px-1 hover:text-blue-600 disabled:opacity-30" title="上移 (移动后需 ✓ 确认)">↑</button>
                   <button @click.stop="$emit('vol-down', p.id)" :disabled="idx === plans.length-1"
-                          class="px-1 hover:text-blue-600 disabled:opacity-30" title="下移">↓</button>
+                          class="px-1 hover:text-blue-600 disabled:opacity-30" title="下移 (移动后需 ✓ 确认)">↓</button>
                   <button @click.stop="$emit('vol-bottom', p.id)" :disabled="idx === plans.length-1"
-                          class="px-1 hover:text-blue-600 disabled:opacity-30" title="置底">⇊</button>
+                          class="px-1 hover:text-blue-600 disabled:opacity-30" title="置底 (移动后需 ✓ 确认)">⇊</button>
+                  <!-- pending: 显示 ✓ 确认 / ✕ 撤销 -->
+                  <template v-if="isPending(p.id)">
+                    <button @click.stop="$emit('vol-confirm-pin', p.id)"
+                            class="px-1 text-green-600 hover:text-green-700 font-bold" title="确认锁定到当前位置">✓</button>
+                    <button @click.stop="$emit('vol-cancel-pending', p.id)"
+                            class="px-1 text-amber-600 hover:text-amber-700" title="撤销移动 (回到自动排序位置)">↩</button>
+                  </template>
+                  <!-- pinned: 显示 🔓 解锁 -->
+                  <button v-else-if="isPinned(p.id)" @click.stop="$emit('vol-unpin', p.id)"
+                          class="px-1 text-blue-600 hover:text-blue-800" title="解锁 (重新参与自动排序)">🔓</button>
                   <button @click.stop="$emit('toggle-voluntary', p.id)"
                           class="px-1 text-red-500 hover:text-red-700" title="移除">✕</button>
                   <button @click.stop="$emit('open-detail', p)"
@@ -3171,6 +3200,52 @@ createApp({
       get() { return store.voluntaryLists[store.activeVoluntaryName] || []; },
       set(arr) { store.voluntaryLists[store.activeVoluntaryName] = arr; },
     });
+    // V9: 锁定 / 待确认 (按 listName keyed; 数组语义 = Set, 用 Array 以便 LS 序列化)
+    function pinnedIdsOfActive() {
+      return store.voluntaryPinned[store.activeVoluntaryName] || [];
+    }
+    function pendingIdsOfActive() {
+      return store.voluntaryPending[store.activeVoluntaryName] || [];
+    }
+    const pinnedSet = computed(() => new Set(pinnedIdsOfActive()));
+    const pendingSet = computed(() => new Set(pendingIdsOfActive()));
+    const fixedSet = computed(() => new Set([...pinnedSet.value, ...pendingSet.value]));
+    function setPinnedActive(arr) {
+      store.voluntaryPinned = { ...store.voluntaryPinned, [store.activeVoluntaryName]: arr };
+    }
+    function setPendingActive(arr) {
+      store.voluntaryPending = { ...store.voluntaryPending, [store.activeVoluntaryName]: arr };
+    }
+    // 26 等位次 lookup (id -> rank26). 缺则给 Infinity (排到最后)
+    function rank26ForPlan(p) {
+      if (!p || !scoreRank.value) return Infinity;
+      const s25 = p.isStopped ? p.score25 : p.ref25Score;
+      const e = equivFromScore25(s25, scoreRank.value);
+      return e.rank26 ?? Infinity;
+    }
+    // 应用自动排序: pinned + pending 保留当前下标位置, 其余按 26 等位次升序填充
+    function runAutoSort() {
+      const ids = voluntary.value;
+      if (!ids.length || !scoreRank.value) return;
+      const m = planByIdMap.value;
+      const fixed = fixedSet.value;
+      const slots = new Array(ids.length).fill(null);
+      const free = [];
+      ids.forEach((id, i) => {
+        if (fixed.has(id)) slots[i] = id;
+        else free.push(id);
+      });
+      free.sort((a, b) => rank26ForPlan(m[a]) - rank26ForPlan(m[b]));
+      let fi = 0;
+      const out = slots.map(s => s ?? free[fi++]);
+      // 仅当顺序变化时写回 (避免无限 watch 触发)
+      const same = ids.length === out.length && ids.every((v, i) => v === out[i]);
+      if (!same) voluntary.value = out;
+    }
+    // 数据载入或切表后, 自动排序一次 (使现有列表受新规则支配)
+    watch([() => store.activeVoluntaryName, scoreRank], () => {
+      runAutoSort();
+    });
     // 多列表管理
     function newVoluntaryList(name) {
       if (!name) {
@@ -3186,11 +3261,14 @@ createApp({
       const newName = prompt("新名:", oldName);
       if (!newName || newName === oldName) return;
       if (store.voluntaryLists[newName]) { alert("已存在"); return; }
-      const newLists = {};
-      for (const k of Object.keys(store.voluntaryLists)) {
-        newLists[k === oldName ? newName : k] = store.voluntaryLists[k];
-      }
-      store.voluntaryLists = newLists;
+      const renameKey = (obj) => {
+        const out = {};
+        for (const k of Object.keys(obj)) out[k === oldName ? newName : k] = obj[k];
+        return out;
+      };
+      store.voluntaryLists  = renameKey(store.voluntaryLists);
+      store.voluntaryPinned = renameKey(store.voluntaryPinned);
+      store.voluntaryPending = renameKey(store.voluntaryPending);
       store.activeVoluntaryName = newName;
     }
     function duplicateVoluntaryList() {
@@ -3202,6 +3280,14 @@ createApp({
         ...store.voluntaryLists,
         [newName]: [...(store.voluntaryLists[oldName] || [])],
       };
+      store.voluntaryPinned = {
+        ...store.voluntaryPinned,
+        [newName]: [...(store.voluntaryPinned[oldName] || [])],
+      };
+      store.voluntaryPending = {
+        ...store.voluntaryPending,
+        [newName]: [...(store.voluntaryPending[oldName] || [])],
+      };
       store.activeVoluntaryName = newName;
     }
     function deleteVoluntaryList() {
@@ -3210,10 +3296,11 @@ createApp({
       if (keys.length === 1) { alert("至少保留 1 个志愿单"); return; }
       const cnt = store.voluntaryLists[name]?.length || 0;
       if (!confirm(`删除志愿单 "${name}" (${cnt} 项)?`)) return;
-      const newLists = { ...store.voluntaryLists };
-      delete newLists[name];
-      store.voluntaryLists = newLists;
-      store.activeVoluntaryName = Object.keys(newLists)[0];
+      const dropKey = (obj) => { const o = { ...obj }; delete o[name]; return o; };
+      store.voluntaryLists  = dropKey(store.voluntaryLists);
+      store.voluntaryPinned = dropKey(store.voluntaryPinned);
+      store.voluntaryPending = dropKey(store.voluntaryPending);
+      store.activeVoluntaryName = Object.keys(store.voluntaryLists)[0];
     }
     function switchVoluntaryList(name) {
       if (store.voluntaryLists[name]) store.activeVoluntaryName = name;
@@ -3229,47 +3316,114 @@ createApp({
     function toggleVoluntary(id) {
       const arr = [...voluntary.value];
       const i = arr.indexOf(id);
-      if (i >= 0) arr.splice(i, 1);
-      else arr.push(id);
-      voluntary.value = arr;
+      if (i >= 0) {
+        arr.splice(i, 1);
+        // 移除时也从 pinned / pending 里清掉
+        const pn = pinnedIdsOfActive().filter(x => x !== id);
+        const pd = pendingIdsOfActive().filter(x => x !== id);
+        if (pn.length !== pinnedIdsOfActive().length) setPinnedActive(pn);
+        if (pd.length !== pendingIdsOfActive().length) setPendingActive(pd);
+        voluntary.value = arr;
+        runAutoSort();
+      } else {
+        arr.push(id);
+        voluntary.value = arr;
+        runAutoSort();   // V9: 新加入的不锁定; 自动按 26 位次插入合适位置
+      }
+    }
+    // V9: 移动操作 = 给 plan 加 pending 标记 (固定到目标位置), 其它非锁定项重新自动填充
+    function markPendingMoveTo(id, targetIdx) {
+      const ids = [...voluntary.value];
+      const cur = ids.indexOf(id);
+      if (cur < 0) return;
+      const N = ids.length;
+      targetIdx = Math.max(0, Math.min(N - 1, targetIdx));
+      // 如果目标位置已被 confirmed-pinned 占据 → 静默拒绝 (不允许踢翻锁定项)
+      const pinned = pinnedSet.value;
+      if (pinned.has(ids[targetIdx]) && ids[targetIdx] !== id) return;
+      // 把 id 移到 targetIdx; 其它非锁定项重排
+      const fixed = fixedSet.value;
+      const fixedSlots = new Array(N).fill(null);
+      const free = [];
+      ids.forEach((x, i) => {
+        if (x === id) return;     // id 单独处理
+        if (fixed.has(x)) fixedSlots[i] = x;
+        else free.push(x);
+      });
+      // 把 id 放到 targetIdx 上 (即使原位置 fixed)
+      // 若 targetIdx 已有非 id 的 fixed 项, 需要让位 — 但前面拒绝了 pinned, 这里只剩 pending,
+      // pending 让位 = 把它从 fixedSlots 退回 free.
+      if (fixedSlots[targetIdx]) {
+        const displaced = fixedSlots[targetIdx];
+        fixedSlots[targetIdx] = null;
+        // displaced 是 pending; 退到 free 末尾参与 rank 排序
+        free.push(displaced);
+        // 也从 pending 列表里去除 (它的位置改变了, 视为重新 pending? — 简单起见: 它失去 pending)
+        const pd = pendingIdsOfActive().filter(x => x !== displaced);
+        setPendingActive(pd);
+      }
+      fixedSlots[targetIdx] = id;
+      // 把 id 加进 pending (若不在 pinned 中)
+      if (!pinned.has(id)) {
+        const pd = pendingIdsOfActive();
+        if (!pd.includes(id)) setPendingActive([...pd, id]);
+      }
+      // free 排序 (26 位次升序)
+      const m = planByIdMap.value;
+      free.sort((a, b) => rank26ForPlan(m[a]) - rank26ForPlan(m[b]));
+      let fi = 0;
+      const out = fixedSlots.map(s => s ?? free[fi++]);
+      voluntary.value = out;
     }
     function moveVoluntaryUp(id) {
       const i = voluntary.value.indexOf(id);
-      if (i > 0) {
-        const arr = [...voluntary.value];
-        [arr[i-1], arr[i]] = [arr[i], arr[i-1]];
-        voluntary.value = arr;
-      }
+      if (i > 0) markPendingMoveTo(id, i - 1);
     }
     function moveVoluntaryDown(id) {
       const i = voluntary.value.indexOf(id);
-      if (i >= 0 && i < voluntary.value.length - 1) {
-        const arr = [...voluntary.value];
-        [arr[i+1], arr[i]] = [arr[i], arr[i+1]];
-        voluntary.value = arr;
-      }
+      if (i >= 0 && i < voluntary.value.length - 1) markPendingMoveTo(id, i + 1);
     }
-    function moveVoluntaryToTop(id) {
-      const i = voluntary.value.indexOf(id);
-      if (i > 0) {
-        const arr = [...voluntary.value];
-        const [item] = arr.splice(i, 1);
-        arr.unshift(item);
-        voluntary.value = arr;
-      }
+    function moveVoluntaryToTop(id) { markPendingMoveTo(id, 0); }
+    function moveVoluntaryToBottom(id) { markPendingMoveTo(id, voluntary.value.length - 1); }
+    // V9: 锁定确认 / 撤销 / 解锁
+    function confirmPin(id) {
+      const pd = pendingIdsOfActive();
+      if (!pd.includes(id)) return;
+      setPendingActive(pd.filter(x => x !== id));
+      const pn = pinnedIdsOfActive();
+      if (!pn.includes(id)) setPinnedActive([...pn, id]);
     }
-    function moveVoluntaryToBottom(id) {
-      const i = voluntary.value.indexOf(id);
-      if (i >= 0 && i < voluntary.value.length - 1) {
-        const arr = [...voluntary.value];
-        const [item] = arr.splice(i, 1);
-        arr.push(item);
-        voluntary.value = arr;
-      }
+    function cancelPending(id) {
+      const pd = pendingIdsOfActive();
+      if (!pd.includes(id)) return;
+      setPendingActive(pd.filter(x => x !== id));
+      runAutoSort();
+    }
+    function unpinConfirmed(id) {
+      const pn = pinnedIdsOfActive();
+      if (!pn.includes(id)) return;
+      setPinnedActive(pn.filter(x => x !== id));
+      runAutoSort();
+    }
+    function confirmAllPending() {
+      const pd = pendingIdsOfActive();
+      if (!pd.length) return;
+      const pn = pinnedIdsOfActive();
+      const merged = [...pn];
+      for (const id of pd) if (!merged.includes(id)) merged.push(id);
+      setPinnedActive(merged);
+      setPendingActive([]);
+    }
+    function cancelAllPending() {
+      if (!pendingIdsOfActive().length) return;
+      setPendingActive([]);
+      runAutoSort();
     }
     function clearVoluntary() {
       if (confirm(`确认清空当前志愿单 "${store.activeVoluntaryName}" (${voluntary.value.length} 项)?`)) {
         voluntary.value = [];
+        setPinnedActive([]);
+        setPendingActive([]);
       }
     }
     function toggleExpand(id) {
@@ -3615,6 +3769,11 @@ createApp({
       moveVoluntaryUp, moveVoluntaryDown, moveVoluntaryToTop, moveVoluntaryToBottom, clearVoluntary,
       newVoluntaryList, renameVoluntaryList, duplicateVoluntaryList, deleteVoluntaryList, switchVoluntaryList,
       voluntaryTierCounts, exportVoluntaryByTier, exportVoluntaryHtml,
+      // V9: 锁定/待确认
+      pinnedSet, pendingSet,
+      voluntaryPinnedCount: computed(() => pinnedSet.value.size),
+      voluntaryPendingCount: computed(() => pendingSet.value.size),
+      confirmPin, cancelPending, unpinConfirmed, confirmAllPending, cancelAllPending,
       resetFilters, onApplyTier, reloadData,
       exportCsv, toggleDark,
       savePreset, loadPreset, deletePreset, renamePreset, copyShareLink,
