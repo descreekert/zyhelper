@@ -2996,10 +2996,142 @@ createApp({
       URL.revokeObjectURL(url);
     }
 
+    // V9: JSON 导出 (含 plan id + 学校/专业 元数据 + pinned 列表; 可跨设备/版本导入)
+    function exportVoluntaryJson() {
+      if (!voluntary.value.length) { alert("志愿单为空"); return; }
+      const m = planByIdMap.value;
+      const data = {
+        version: 1,
+        name: store.activeVoluntaryName,
+        exportedAt: new Date().toISOString().slice(0, 10),
+        count: voluntary.value.length,
+        plans: voluntary.value.map(id => {
+          const p = m[id];
+          return {
+            id,
+            schoolName: p?.schoolName ?? null,
+            schoolCode: p?.schoolCode ?? null,
+            majorName: p?.majorName26 || p?.majorName25 || null,
+            ref25Score: p?.ref25Score ?? null,
+          };
+        }),
+        pinned: [...pinnedIdsOfActive()],
+      };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a"); a.href = url;
+      a.download = `志愿_${store.activeVoluntaryName}_${data.exportedAt}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    // V9: JSON 导入 (文件选择 → 解析 → 选 合并/替换/新建)
+    function importVoluntaryJson() {
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = ".json,application/json";
+      input.onchange = async (ev) => {
+        const file = ev.target.files?.[0];
+        if (!file) return;
+        let data;
+        try {
+          const text = await file.text();
+          data = JSON.parse(text);
+        } catch (e) { alert("JSON 解析失败: " + e.message); return; }
+        if (!data || !Array.isArray(data.plans)) {
+          alert("格式不对: 缺少 plans 数组"); return;
+        }
+        // 匹配每个 plan: 优先 id, 兜底学校+专业
+        const m = planByIdMap.value;
+        const allPlans = store.allPlans;
+        const matchedIds = [];
+        const unmatched = [];
+        for (const item of data.plans) {
+          let id = null;
+          if (item.id && m[item.id]) id = item.id;
+          if (!id && item.schoolName && item.majorName) {
+            const found = allPlans.find(p =>
+              p.schoolName === item.schoolName &&
+              (p.majorName26 === item.majorName || p.majorName25 === item.majorName));
+            if (found) id = found.id;
+          }
+          if (id && !matchedIds.includes(id)) matchedIds.push(id);
+          else if (!id) unmatched.push(`${item.schoolName || '?'} · ${item.majorName || '?'}`);
+        }
+        if (!matchedIds.length) {
+          alert(`未匹配到任何 plan (${data.plans.length} 项全部缺失). 数据版本可能不一致.`);
+          return;
+        }
+        const summary = `导入 "${data.name || '未命名'}" — 匹配 ${matchedIds.length} 项${unmatched.length ? `, 未匹配 ${unmatched.length} 项` : ''}.`
+          + (unmatched.length ? `\n未匹配前几项:\n  ${unmatched.slice(0, 5).join('\n  ')}${unmatched.length > 5 ? '\n  ...' : ''}` : '')
+          + `\n\n选择导入方式 (输入数字):\n  1. 合并到当前 "${store.activeVoluntaryName}" (去重)\n  2. 替换当前 "${store.activeVoluntaryName}"\n  3. 新建志愿单 "${data.name || '导入志愿'}"`;
+        const mode = prompt(summary, "1");
+        if (!mode) return;
+        if (mode === "1") {
+          const cur = [...voluntary.value];
+          let added = 0;
+          for (const id of matchedIds) {
+            if (!cur.includes(id)) { cur.push(id); added++; }
+          }
+          voluntary.value = cur;
+          runAutoSort();
+          alert(`合并完成: 新增 ${added} 项 (${matchedIds.length - added} 项已存在跳过)`);
+        } else if (mode === "2") {
+          // 替换: 导入项一律不锁定, 按自动排序规则 (26 等位次升序)
+          voluntary.value = [...matchedIds];
+          setPinnedActive([]);
+          setPendingActive([]);
+          clearBackupActive();
+          runAutoSort();
+          alert(`替换完成: ${matchedIds.length} 项 (按 26 等位次自动排序)`);
+        } else if (mode === "3") {
+          // 新建: 导入项一律不锁定
+          let name = data.name || '导入志愿';
+          let i = 1;
+          while (store.voluntaryLists[name]) { name = `${data.name || '导入志愿'} (${i++})`; }
+          store.voluntaryLists  = { ...store.voluntaryLists, [name]: [...matchedIds] };
+          store.activeVoluntaryName = name;
+          // 切到新表会触发 watch → runAutoSort → 按 26 等位次排
+          alert(`新建志愿单 "${name}": ${matchedIds.length} 项 (按 26 等位次自动排序)`);
+        } else {
+          alert("取消导入");
+        }
+      };
+      input.click();
+    }
+
+    // V9: 从其它志愿单合并 (in-app)
+    function mergeFromOtherList() {
+      const others = Object.keys(store.voluntaryLists).filter(n => n !== store.activeVoluntaryName);
+      if (!others.length) { alert("没有其它志愿单可合并"); return; }
+      const lines = others.map((n, i) => `  ${i+1}. ${n} (${(store.voluntaryLists[n] || []).length} 项)`).join('\n');
+      const choice = prompt(`合并到当前 "${store.activeVoluntaryName}". 选择源:\n${lines}\n\n输入序号 1-${others.length}:`, "1");
+      if (!choice) return;
+      const idx = parseInt(choice, 10);
+      if (!idx || idx < 1 || idx > others.length) { alert("无效序号"); return; }
+      const srcName = others[idx - 1];
+      const srcIds = store.voluntaryLists[srcName] || [];
+      const cur = [...voluntary.value];
+      let added = 0;
+      for (const id of srcIds) {
+        if (!cur.includes(id)) { cur.push(id); added++; }
+      }
+      voluntary.value = cur;
+      runAutoSort();
+      alert(`从 "${srcName}" 合并到 "${store.activeVoluntaryName}":\n  新增 ${added} 项 (${srcIds.length - added} 项已存在)`);
+    }
+
     // 志愿单按档导出
+    // V9: 严格保留 voluntary.value 的实际顺序 (含 pinned 锁定位 + 自动排序的位置).
+    //     Tier 分组只是分段输出, 段内顺序 = 志愿表中实际看到的顺序.
+    //     新增 锁定 列: 📌 锁定 / ⏳ 待确认 / 自动
     function exportVoluntaryByTier() {
       if (!voluntary.value.length) { alert("志愿单为空"); return; }
       const m = planByIdMap.value;
+      const sr = scoreRank.value;
+      const equiv = (s25) => s25 != null && sr ? equivFromScore25(s25, sr) : { score26: null, rank26: null };
+      const pinSet = pinnedSet.value;
+      const pendSet = pendingSet.value;
       const cols = ["schoolName", "majorName26", "majorName25", "city", "schoolTag",
                     "ref25Score", "ref25Rank", "score25", "rank25",
                     "enrollNum26", "tuition", "subjectReq", "duration",
@@ -3012,30 +3144,33 @@ createApp({
         const s = String(v).replace(/"/g, '""');
         return /[",\n]/.test(s) ? `"${s}"` : s;
       };
-      // 按 tier 分组, 但保持志愿单内顺序
+      const lockOf = (id) => pinSet.has(id) ? "📌 锁定" : pendSet.has(id) ? "⏳ 待确认" : "自动";
+      // 按 tier 分组, 段内顺序 = voluntary.value 顺序 (即用户在志愿表中看到的顺序)
       const groups = { chong: [], wen: [], bao: [], other: [] };
-      const orderMap = new Map();
-      voluntary.value.forEach((id, i) => orderMap.set(id, i + 1));
-      for (const id of voluntary.value) {
+      voluntary.value.forEach((id, i) => {
         const p = m[id];
-        if (!p) continue;
+        if (!p) return;
         const t = cwb.value ? planTier(p, cwb.value) : null;
-        (groups[t] || groups.other).push({ p, idx: orderMap.get(id) });
-      }
-      const lines = ["档,志愿序号," + head.join(",")];
+        (groups[t] || groups.other).push({ p, id, idx: i + 1 });
+      });
+      const lines = ["档,志愿序号,锁定状态,26等位分,26等位次," + head.join(",")];
       const labels = { chong: "冲档", wen: "稳档", bao: "保档", other: "未分类" };
       for (const tier of ["chong", "wen", "bao", "other"]) {
         const g = groups[tier];
         if (!g.length) continue;
         lines.push(`${labels[tier]} (${g.length} 条):`);
-        for (const { p, idx } of g) {
-          lines.push(`${labels[tier]},#${idx},` + cols.map(c => esc(p[c])).join(","));
+        for (const { p, id, idx } of g) {
+          const e = equiv(p.isStopped ? p.score25 : p.ref25Score);
+          lines.push(
+            `${labels[tier]},#${idx},${esc(lockOf(id))},${esc(e.score26)},${esc(e.rank26)},`
+            + cols.map(c => esc(p[c])).join(",")
+          );
         }
       }
       const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), lines.join("\n")], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a'); a.href = url;
-      a.download = `志愿单_${new Date().toISOString().slice(0,10)}.csv`;
+      a.download = `志愿单_${store.activeVoluntaryName}_${new Date().toISOString().slice(0,10)}.csv`;
       a.click();
       URL.revokeObjectURL(url);
     }
@@ -3824,6 +3959,7 @@ createApp({
       moveVoluntaryUp, moveVoluntaryDown, moveVoluntaryToTop, moveVoluntaryToBottom, clearVoluntary,
       newVoluntaryList, renameVoluntaryList, duplicateVoluntaryList, deleteVoluntaryList, switchVoluntaryList,
       voluntaryTierCounts, exportVoluntaryByTier, exportVoluntaryHtml,
+      exportVoluntaryJson, importVoluntaryJson, mergeFromOtherList,
       // V9: 锁定/待确认
       pinnedSet, pendingSet,
       voluntaryPinnedCount: computed(() => pinnedSet.value.size),
