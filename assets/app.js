@@ -1774,6 +1774,7 @@ const ResultList = {
               <tr class="hover:bg-slate-50 cursor-pointer"
                   :class="[rowTier(p) ? 'tier-row-'+rowTier(p) : '', isExpanded(p.id) ? 'main-row-expanded' : '',
                            viewMode==='voluntary' && isSelected(p.id) ? 'vol-row-selected' : '']"
+                  :data-vol-row-id="viewMode==='voluntary' ? p.id : null"
                   @click="$emit('toggle-expand', p.id)">
                 <!-- voluntary: 序号列 (可点选中) + 锁定状态 -->
                 <th v-if="viewMode==='voluntary'" class="vol-num-cell text-center cursor-pointer"
@@ -3557,6 +3558,25 @@ createApp({
       // 移动项加入 pending
       const pd = pendingIdsOfActive();
       if (!pd.includes(id)) setPendingActive([...pd, id]);
+      // 移动完成后, 滚动到该行 (若已经出屏)
+      nextTick(() => scrollVoluntaryRowIntoView(id));
+    }
+    function scrollVoluntaryRowIntoView(id) {
+      const el = document.querySelector(`tr[data-vol-row-id="${id}"]`);
+      if (!el) return;
+      const container = el.closest(".table-scroll");
+      if (!container) {
+        el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        return;
+      }
+      const cRect = container.getBoundingClientRect();
+      const eRect = el.getBoundingClientRect();
+      // sticky thead 约 28px, scrollbar 约 18px; 留缓冲
+      const topGuard = 40;
+      const bottomGuard = 28;
+      if (eRect.top < cRect.top + topGuard || eRect.bottom > cRect.bottom - bottomGuard) {
+        el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      }
     }
     // "原本锁定" = 编辑前的 pinned (backup.pinned 优先, 没编辑会话时用当前 pinned)
     function isOriginallyPinned(id) {
@@ -3587,16 +3607,30 @@ createApp({
       }
       if (target !== cur) markPendingMoveTo(id, target);
     }
-    // ⇊ 下移到底 (智能, 对称):
-    //   原本锁定行 → 直接到末尾
-    //   非锁定行 → 移到"下方第一个锁定行"的上面
+    // ⇊ 下移到底 (智能):
+    //   原本锁定行 → 紧跟在 "最后一个其它锁定行" 后面 (保持在锁定区, 不到非锁定区)
+    //                若没有其它锁定行 → 末尾
+    //   非锁定行 → 移到 "下方第一个锁定行" 的上面 (没有则末尾)
     function moveVoluntaryToBottom(id) {
       const ids = voluntary.value;
       const cur = ids.indexOf(id);
       const N = ids.length;
       if (cur < 0 || cur >= N - 1) return;
-      let target = N - 1;
-      if (!isOriginallyPinned(id)) {
+      let target;
+      if (isOriginallyPinned(id)) {
+        // 找最后一个其它锁定行
+        let lastOther = -1;
+        for (let i = N - 1; i >= 0; i--) {
+          if (i !== cur && isOriginallyPinned(ids[i])) { lastOther = i; break; }
+        }
+        if (lastOther < 0) target = N - 1;
+        // 想让 self 在最终数组里紧跟 lastOther 后:
+        //   lastOther > cur → splice 后 lastOther 移到 lastOther-1, target=lastOther
+        //   lastOther < cur → target = lastOther+1
+        else if (lastOther > cur) target = lastOther;
+        else target = lastOther + 1;
+      } else {
+        target = N - 1;
         for (let i = cur + 1; i < N; i++) {
           if (isOriginallyPinned(ids[i])) { target = i - 1; break; }
         }
