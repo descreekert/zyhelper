@@ -550,6 +550,8 @@ const ui = reactive({
   ratioBao: 0.30,
   equivSource: "25",                  // '25' | '24' | '23' | 'avg'
   screenshotting: false,
+  moveBoundaryNote: null,             // V9: 单条移动遇 📌 边界的 transient 提示
+  _noteTimer: null,
   ...loadLS(LS_KEY_UI, {}),
 });
 
@@ -1391,12 +1393,13 @@ const ResultList = {
           "columns", "sortKeys", "cwb", "paneTargets",
           "voluntary", "voluntarySet", "columnWidths", "planOverrides",
           "recommendData", "scoreRank",
-          "pinnedSet", "pendingSet", "backupPinnedSet", "selectedVolId"],
+          "pinnedSet", "pendingSet", "backupPinnedSet", "selectedVolIds"],
   emits: ["page-change", "open-detail", "toggle-compare", "toggle-favorite", "toggle-expand",
           "sort-col", "col-drop", "col-resize",
           "toggle-voluntary", "vol-up", "vol-down", "vol-top", "vol-bottom",
           "vol-confirm-pin", "vol-cancel-pending", "vol-unpin", "vol-pin-at-current",
-          "vol-select", "vol-confirm-all", "vol-cancel-all",
+          "vol-select", "vol-clear-selection", "vol-move-selection",
+          "vol-confirm-all", "vol-cancel-all",
           "edit-score", "revert-score"],
   setup(props, { emit }) {
     function fmtDuration(p) { return formatDuration(p.duration || p.duration25); }
@@ -1465,7 +1468,8 @@ const ResultList = {
     function isPinned(id) { return props.pinnedSet && props.pinnedSet.has(id); }
     function isPending(id) { return props.pendingSet && props.pendingSet.has(id); }
     function wasPinned(id) { return props.backupPinnedSet && props.backupPinnedSet.has(id); }
-    function isSelected(id) { return props.selectedVolId === id; }
+    function isSelected(id) { return props.selectedVolIds && props.selectedVolIds.has(id); }
+    function selectedCount() { return props.selectedVolIds ? props.selectedVolIds.size : 0; }
     function cellValue(p, key) {
       switch (key) {
         case "city":    return p.city;
@@ -1543,7 +1547,7 @@ const ResultList = {
              onColDragStart, onColDrop, startResize, colWidth,
              paneLists, paneCounts, volIdx,
              score25Of, rank25Of, score26Of, rank26Of,
-             isPinned, isPending, wasPinned, isSelected,
+             isPinned, isPending, wasPinned, isSelected, selectedCount,
              editingScore, editingValue, startEditScore, commitEditScore, cancelEditScore, isEdited };
   },
   computed: {
@@ -1713,30 +1717,33 @@ const ResultList = {
             <tr>
               <!-- voluntary: 序号列 -->
               <th v-if="viewMode==='voluntary'" style="width:40px" class="text-center">#</th>
-              <!-- voluntary: 操作列表头. 移动按钮在前, ✓↩ 在后 (按用户操作时序 + 避免按钮位移误操作) -->
+              <!-- voluntary: 操作列表头. 移动按钮在前, ✓↩ 在后. 支持多选 -->
               <th v-if="viewMode==='voluntary'" style="width:220px" class="text-center vol-actions-header">
-                <!-- 选中行: 移动按钮 (固定位置) -->
-                <template v-if="selectedVolId">
-                  <span class="text-xs text-blue-600 mr-1" title="操作选中行">▶</span>
-                  <button @click.stop="$emit('vol-top', selectedVolId)"
+                <!-- 选中行: 移动按钮 (作用于全部选中行) -->
+                <template v-if="selectedCount() > 0">
+                  <span class="text-xs text-blue-600 mr-1"
+                        :title="selectedCount() === 1 ? '操作选中行' : '操作选中的 ' + selectedCount() + ' 行 (整块平移)'">
+                    ▶ <span v-if="selectedCount() > 1" class="font-bold">{{ selectedCount() }}</span>
+                  </span>
+                  <button @click.stop="$emit('vol-move-selection', 'top')"
                           class="px-1 hover:bg-blue-100 rounded"
-                          :title="'选中行 → 顶部 (智能: 锁定项→#1, 非锁定项→上方第一个锁定行下面)'">⇈</button>
-                  <button @click.stop="$emit('vol-up', selectedVolId)"
+                          :title="selectedCount() === 1 ? '选中行 → 顶部 (智能: 锁定项→#1, 非锁定项→上方第一个锁定行下面)' : '整块选中 → 顶部'">⇈</button>
+                  <button @click.stop="$emit('vol-move-selection', 'up')"
                           class="px-1 hover:bg-blue-100 rounded"
-                          title="选中行 ↑ 上移一格">↑</button>
-                  <button @click.stop="$emit('vol-down', selectedVolId)"
+                          :title="selectedCount() === 1 ? '选中行 ↑ 上移一格' : '整块选中 ↑ 上移一格'">↑</button>
+                  <button @click.stop="$emit('vol-move-selection', 'down')"
                           class="px-1 hover:bg-blue-100 rounded"
-                          title="选中行 ↓ 下移一格">↓</button>
-                  <button @click.stop="$emit('vol-bottom', selectedVolId)"
+                          :title="selectedCount() === 1 ? '选中行 ↓ 下移一格' : '整块选中 ↓ 下移一格'">↓</button>
+                  <button @click.stop="$emit('vol-move-selection', 'bottom')"
                           class="px-1 hover:bg-blue-100 rounded"
-                          :title="'选中行 → 底部 (智能: 锁定项→末尾, 非锁定项→下方第一个锁定行上面)'">⇊</button>
-                  <button @click.stop="$emit('vol-select', selectedVolId)"
+                          :title="selectedCount() === 1 ? '选中行 → 底部 (智能: 锁定项→最后一个锁定项下面, 非锁定项→下方第一个锁定行上面)' : '整块选中 → 底部'">⇊</button>
+                  <button @click.stop="$emit('vol-clear-selection')"
                           class="ml-0.5 px-1 text-slate-400 hover:text-red-500 text-xs"
                           title="取消选中">×</button>
                 </template>
                 <!-- 编辑会话: 全部确认 / 全部撤销 (放后面, 避免按钮位移导致误操作) -->
                 <template v-if="pendingSet && pendingSet.size > 0">
-                  <span v-if="selectedVolId" class="text-slate-300 mx-0.5">|</span>
+                  <span v-if="selectedCount() > 0" class="text-slate-300 mx-0.5">|</span>
                   <button @click.stop="$emit('vol-confirm-all')"
                           class="px-1.5 text-green-700 hover:bg-green-100 rounded font-bold"
                           title="全部确认: 把所有 ⏳ 升级为 📌 锁定">✓</button>
@@ -1744,8 +1751,8 @@ const ResultList = {
                           class="px-1.5 text-amber-700 hover:bg-amber-100 rounded"
                           title="全部撤销: 数组+pinned 完整回滚到编辑前">↩</button>
                 </template>
-                <span v-if="!(pendingSet && pendingSet.size > 0) && !selectedVolId"
-                      class="text-xs text-slate-400">操作 (点 # 选中)</span>
+                <span v-if="!(pendingSet && pendingSet.size > 0) && selectedCount() === 0"
+                      class="text-xs text-slate-400" title="点 # 选中 (Ctrl+点 多选, Shift+点 范围)">操作 (点 # 选中)</span>
               </th>
               <th v-for="c in columns" :key="c.key"
                   :class="['col-'+c.key, c.fixed ? 'fixed-col' : '']"
@@ -1788,8 +1795,8 @@ const ResultList = {
                       isPinned(p.id) ? 'bg-blue-50' : isPending(p.id) ? 'bg-amber-50' : '',
                       isSelected(p.id) ? 'ring-2 ring-blue-500 ring-inset bg-blue-100' : 'hover:bg-blue-50'
                     ]"
-                    title="点击选中此行, 然后用表头的 ⇈↑↓⇊ 移动 (再点取消选中)"
-                    @click.stop="$emit('vol-select', p.id)">
+                    title="单击选中 / Ctrl+点 多选切换 / Shift+点 范围选 / 再点同行取消"
+                    @click.stop="$emit('vol-select', { id: p.id, ctrl: $event.ctrlKey, meta: $event.metaKey, shift: $event.shiftKey })">
                   <span v-if="isSelected(p.id)" class="text-blue-700 font-bold">▶</span>
                   {{ idx + 1 }}
                   <span v-if="isPinned(p.id)" class="text-blue-600" title="已锁定 (不参与自动排序)">📌</span>
@@ -1800,15 +1807,22 @@ const ResultList = {
                           title="本次编辑刚移动 — ✓ 全部确认即锁定到当前位置, ↩ 全部撤销则丢弃">⏳</span>
                   </template>
                 </th>
-                <!-- voluntary: 行内操作只剩 锁定切换 / 移除 / 详情. ✓↩⇈↑↓⇊ 全在表头 -->
+                <!-- voluntary: 行内操作 = 单行细粒度. 移动+全局✓↩ 在表头 -->
+                <!-- 三档状态 (不同图标, 一眼可辨):
+                     🔓  = 当前 pinned, 点击解锁
+                     ↶  = pending + 原本就 pinned, 点击撤销该行变动 → 恢复原 📌
+                     📌  = pending+原本非pinned OR 完全空闲, 点击锁定到当前位置
+                -->
                 <td v-if="viewMode==='voluntary'" class="text-center vol-actions">
-                  <!-- pinned: 🔓 解锁 -->
                   <button v-if="isPinned(p.id)" @click.stop="$emit('vol-unpin', p.id)"
-                          class="px-1 text-blue-600 hover:text-blue-800" title="解锁 (重新参与自动排序)">🔓</button>
-                  <!-- 未锁定 (含 pending): 📌 直接锁定到当前位置 -->
+                          class="px-1 text-blue-600 hover:text-blue-800" title="🔓 解锁本行 (重新参与自动排序)">🔓</button>
+                  <button v-else-if="isPending(p.id) && wasPinned(p.id)"
+                          @click.stop="$emit('vol-cancel-pending', p.id)"
+                          class="px-1 text-amber-600 hover:text-amber-800"
+                          title="↶ 撤销本行的位置变动 → 恢复原 📌 锁定 (其它 ⏳ 不受影响)">↶</button>
                   <button v-else @click.stop="$emit('vol-pin-at-current', p.id)"
                           class="px-1 text-slate-400 hover:text-blue-600"
-                          :title="isPending(p.id) ? '锁定本行 (其它 ⏳ 不变, 用表头 ✓ 全部确认)' : '锁定到当前位置 (无需先移动)'">📌</button>
+                          :title="isPending(p.id) ? '📌 单独锁定本行到当前位置 (其它 ⏳ 不动)' : '📌 锁定本行到当前位置'">📌</button>
                   <button @click.stop="$emit('toggle-voluntary', p.id)"
                           class="px-1 text-red-500 hover:text-red-700" title="移除">✕</button>
                   <button @click.stop="$emit('open-detail', p)"
@@ -3381,10 +3395,42 @@ createApp({
       get() { return store.voluntaryLists[store.activeVoluntaryName] || []; },
       set(arr) { store.voluntaryLists[store.activeVoluntaryName] = arr; },
     });
-    // V9: 当前选中行 (用于在表头点 ⇈↑↓⇊ 操作选中行, 避免每次跟着移动重新点)
-    const voluntarySelectedId = ref(null);
-    function selectVoluntaryRow(id) {
-      voluntarySelectedId.value = (voluntarySelectedId.value === id) ? null : id;
+    // V9: 当前选中行集合 (支持多选). plain click 替换单选, ctrl/cmd 切换, shift 范围
+    const voluntarySelectedIds = ref(new Set());
+    const voluntarySelectionAnchor = ref(null);
+    function selectVoluntaryRow(payload) {
+      // payload: { id, ctrl, meta, shift } 或 字符串 id (兼容旧调用)
+      const id = typeof payload === "string" ? payload : payload?.id;
+      if (!id) return;
+      const ctrl  = typeof payload === "object" && (payload.ctrl || payload.meta);
+      const shift = typeof payload === "object" && payload.shift;
+      const cur = voluntarySelectedIds.value;
+      if (shift && voluntarySelectionAnchor.value && voluntarySelectionAnchor.value !== id) {
+        const ids = voluntary.value;
+        const a = ids.indexOf(voluntarySelectionAnchor.value);
+        const b = ids.indexOf(id);
+        if (a < 0 || b < 0) { voluntarySelectedIds.value = new Set([id]); voluntarySelectionAnchor.value = id; return; }
+        const [lo, hi] = a < b ? [a, b] : [b, a];
+        voluntarySelectedIds.value = new Set(ids.slice(lo, hi + 1));
+      } else if (ctrl) {
+        const next = new Set(cur);
+        if (next.has(id)) next.delete(id); else next.add(id);
+        voluntarySelectedIds.value = next;
+        voluntarySelectionAnchor.value = id;
+      } else {
+        // plain: 单选; 已是唯一选中再点取消
+        if (cur.size === 1 && cur.has(id)) {
+          voluntarySelectedIds.value = new Set();
+          voluntarySelectionAnchor.value = null;
+        } else {
+          voluntarySelectedIds.value = new Set([id]);
+          voluntarySelectionAnchor.value = id;
+        }
+      }
+    }
+    function clearVoluntarySelection() {
+      voluntarySelectedIds.value = new Set();
+      voluntarySelectionAnchor.value = null;
     }
     // V9: 锁定 / 待确认 (按 listName keyed; 数组语义 = Set, 用 Array 以便 LS 序列化)
     function pinnedIdsOfActive() {
@@ -3449,7 +3495,7 @@ createApp({
       runAutoSort();
     });
     // 切表清选中
-    watch(() => store.activeVoluntaryName, () => { voluntarySelectedId.value = null; });
+    watch(() => store.activeVoluntaryName, () => { clearVoluntarySelection(); });
     // 多列表管理
     function newVoluntaryList(name) {
       if (!name) {
@@ -3530,7 +3576,10 @@ createApp({
         if (pn.length !== pinnedIdsOfActive().length) setPinnedActive(pn);
         if (pd.length !== pendingIdsOfActive().length) setPendingActive(pd);
         voluntary.value = arr;
-        if (voluntarySelectedId.value === id) voluntarySelectedId.value = null;
+        if (voluntarySelectedIds.value.has(id)) {
+          const next = new Set(voluntarySelectedIds.value); next.delete(id);
+          voluntarySelectedIds.value = next;
+        }
         runAutoSort();
       } else {
         arr.push(id);
@@ -3600,13 +3649,36 @@ createApp({
       if (bk && Array.isArray(bk.pinned)) return bk.pinned.includes(id);
       return pinnedSet.value.has(id);
     }
+    // 边界提示 (单条移动遇到 📌 锁定项时, 停下并提示)
+    function showBoundaryNote(text) {
+      ui.moveBoundaryNote = text;
+      if (ui._noteTimer) clearTimeout(ui._noteTimer);
+      ui._noteTimer = setTimeout(() => { ui.moveBoundaryNote = null; }, 5000);
+    }
+    function planLabel(id) {
+      const p = planByIdMap.value[id];
+      return p ? `${p.schoolName} · ${p.majorName26 || p.majorName25 || ''}` : id;
+    }
     function moveVoluntaryUp(id) {
-      const i = voluntary.value.indexOf(id);
-      if (i > 0) markPendingMoveTo(id, i - 1);
+      const ids = voluntary.value;
+      const i = ids.indexOf(id);
+      if (i <= 0) return;
+      // 非锁定行 不可跨过 锁定行 → 停下来给用户决定
+      if (!isOriginallyPinned(id) && isOriginallyPinned(ids[i - 1])) {
+        showBoundaryNote(`⚠ 上方 #${i} 是 📌 锁定项 [${planLabel(ids[i - 1])}]. 停在边界. 用 ⇈ 跳过该项, 或 🔓 解锁该项后继续.`);
+        return;
+      }
+      markPendingMoveTo(id, i - 1);
     }
     function moveVoluntaryDown(id) {
-      const i = voluntary.value.indexOf(id);
-      if (i >= 0 && i < voluntary.value.length - 1) markPendingMoveTo(id, i + 1);
+      const ids = voluntary.value;
+      const i = ids.indexOf(id);
+      if (i < 0 || i >= ids.length - 1) return;
+      if (!isOriginallyPinned(id) && isOriginallyPinned(ids[i + 1])) {
+        showBoundaryNote(`⚠ 下方 #${i + 2} 是 📌 锁定项 [${planLabel(ids[i + 1])}]. 停在边界. 用 ⇊ 跳过该项, 或 🔓 解锁该项后继续.`);
+        return;
+      }
+      markPendingMoveTo(id, i + 1);
     }
     // ⇈ 上移到顶 (智能):
     //   原本锁定行 → 直接到 #1
@@ -3652,6 +3724,45 @@ createApp({
         }
       }
       if (target !== cur) markPendingMoveTo(id, target);
+    }
+    // V9 多选: 统一移动入口
+    //   单选 → 走 single-row 智能逻辑 (含 ⇈⇊ 的锁定边界)
+    //   多选 → 块整体移动 (⇈⇊ 绝对到顶/底, ↑↓ 整块平移 1 格)
+    function moveSelection(direction) {
+      const sel = voluntarySelectedIds.value;
+      if (!sel.size) return;
+      if (sel.size === 1) {
+        const id = [...sel][0];
+        if (direction === "top") moveVoluntaryToTop(id);
+        else if (direction === "up") moveVoluntaryUp(id);
+        else if (direction === "down") moveVoluntaryDown(id);
+        else if (direction === "bottom") moveVoluntaryToBottom(id);
+        return;
+      }
+      const ids0 = voluntary.value;
+      const ordered = ids0.filter(x => sel.has(x));
+      if (direction === "top") {
+        for (let k = 0; k < ordered.length; k++) markPendingMoveTo(ordered[k], k);
+      } else if (direction === "bottom") {
+        const N = voluntary.value.length;
+        for (let k = ordered.length - 1; k >= 0; k--) {
+          markPendingMoveTo(ordered[k], N - (ordered.length - k));
+        }
+      } else if (direction === "up") {
+        if (ids0.findIndex(x => sel.has(x)) === 0) return;
+        for (const id of ordered) {
+          const i = voluntary.value.indexOf(id);
+          if (i > 0) markPendingMoveTo(id, i - 1);
+        }
+      } else if (direction === "down") {
+        let lastSel = -1;
+        ids0.forEach((x, i) => { if (sel.has(x)) lastSel = i; });
+        if (lastSel === ids0.length - 1) return;
+        for (const id of ordered.slice().reverse()) {
+          const i = voluntary.value.indexOf(id);
+          if (i < voluntary.value.length - 1) markPendingMoveTo(id, i + 1);
+        }
+      }
     }
     // V9: 锁定确认 / 撤销 / 解锁
     // 单条 ✓ = 全部确认 (用户表达"整理完了, 这次都按现在的来"; 不必逐条确认)
@@ -3729,7 +3840,7 @@ createApp({
         setPinnedActive([]);
         setPendingActive([]);
         clearBackupActive();
-        voluntarySelectedId.value = null;
+        clearVoluntarySelection();
       }
     }
     function toggleExpand(id) {
@@ -4082,7 +4193,7 @@ createApp({
       voluntaryPendingCount: computed(() => pendingSet.value.size),
       confirmPin, cancelPending, unpinConfirmed, confirmAllPending, cancelAllPending,
       pinAtCurrent, pinAllCurrent,
-      voluntarySelectedId, selectVoluntaryRow,
+      voluntarySelectedIds, selectVoluntaryRow, clearVoluntarySelection, moveSelection,
       resetFilters, onApplyTier, reloadData,
       exportCsv, toggleDark,
       savePreset, loadPreset, deletePreset, renamePreset, copyShareLink,

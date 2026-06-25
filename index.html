@@ -286,6 +286,11 @@
                       class="text-xs ml-1 px-1.5 py-0.5 border border-blue-300 rounded text-blue-600 hover:bg-blue-50"
                       title="对当前排序满意, 直接锁定所有项 (无需逐条调整)">📌 锁定全部</button>
             </div>
+            <!-- V9: 移动边界提示 (单条 ↑↓ 遇 📌 锁定项时显示, 5s 自动消失) -->
+            <div v-if="ui.moveBoundaryNote" class="w-full mt-1 text-xs bg-yellow-50 border border-yellow-300 text-yellow-800 rounded px-2 py-1 flex items-center justify-between">
+              <span>{{ ui.moveBoundaryNote }}</span>
+              <button @click="ui.moveBoundaryNote = null" class="ml-2 text-yellow-600 hover:text-yellow-900">×</button>
+            </div>
             <!-- 其它视图: 显示筛后计数 + 26分数 (便于截图/打印识别) -->
             <div v-else class="text-sm text-slate-600">
               <span class="font-bold text-lg text-blue-600">{{ filtered.length }}</span> 条结果
@@ -393,7 +398,7 @@
             :pinned-set="pinnedSet"
             :pending-set="pendingSet"
             :backup-pinned-set="backupPinnedSet"
-            :selected-vol-id="voluntarySelectedId"
+            :selected-vol-ids="voluntarySelectedIds"
             @page-change="currentPage = $event"
             @open-detail="openDetail"
             @toggle-compare="toggleCompare"
@@ -414,6 +419,8 @@
             @vol-unpin="unpinConfirmed"
             @vol-pin-at-current="pinAtCurrent"
             @vol-select="selectVoluntaryRow"
+            @vol-clear-selection="clearVoluntarySelection"
+            @vol-move-selection="moveSelection"
             @vol-confirm-all="confirmAllPending"
             @vol-cancel-all="cancelAllPending"
           ></result-list>
