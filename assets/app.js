@@ -11,6 +11,7 @@ const LS_KEY_VOL_LISTS = "zyhelper_voluntary_lists_v2";  // 新 (多列表 {name
 const LS_KEY_VOL_ACTIVE = "zyhelper_voluntary_active_v2";
 const LS_KEY_VOL_PINNED = "zyhelper_voluntary_pinned_v1";   // {name: id[]}  确认锁定
 const LS_KEY_VOL_PENDING = "zyhelper_voluntary_pending_v1"; // {name: id[]}  待确认
+const LS_KEY_VOL_BACKUP = "zyhelper_voluntary_backup_v1";   // {name: {ids: id[], pinned: id[]}}  编辑前快照 (撤销用)
 const LS_KEY_PRIORITY_OVR = "zyhelper_priority_overrides_v1";
 const LS_KEY_PLAN_OVR = "zyhelper_plan_overrides_v1";
 const LS_KEY_PRESET= "zyhelper_presets_v2";   // v2: 含 subjects + allowed 关键词维度
@@ -500,8 +501,10 @@ const store = reactive({
   activeVoluntaryName: loadLS(LS_KEY_VOL_ACTIVE, "默认"),
   // V9: 志愿排序锁定 (按列表名 keyed). pinned = 用户确认锁定; pending = 待确认.
   // 锁定/待确认的项保留当前数组位置, 其余按 26 等位次升序填充空位.
+  // backup = 第一次 move 时快照 (整数组 + 当时 pinned), 撤销全部时回滚.
   voluntaryPinned:  loadLS(LS_KEY_VOL_PINNED, {}),
   voluntaryPending: loadLS(LS_KEY_VOL_PENDING, {}),
+  voluntaryBackup:  loadLS(LS_KEY_VOL_BACKUP, {}),
   // 用户自定义排序覆盖 (null = 用 priority.json 默认; Array<name> = 自定义顺序)
   priorityOverrides: loadLS(LS_KEY_PRIORITY_OVR, { schools: null, cities: null, majorClasses: null, majors: null }),
   // 用户手动修改的 plan 字段 (e.g. ref25Score) — { [planId]: { ref25Score, ref25Rank } }
@@ -554,6 +557,7 @@ watch(() => Array.from(store.favorites), v => saveLS(LS_KEY_FAV, v));
 watch(() => store.voluntaryLists, v => saveLS(LS_KEY_VOL_LISTS, v), { deep: true });
 watch(() => store.voluntaryPinned,  v => saveLS(LS_KEY_VOL_PINNED, v),  { deep: true });
 watch(() => store.voluntaryPending, v => saveLS(LS_KEY_VOL_PENDING, v), { deep: true });
+watch(() => store.voluntaryBackup,  v => saveLS(LS_KEY_VOL_BACKUP, v),  { deep: true });
 watch(() => store.activeVoluntaryName, v => saveLS(LS_KEY_VOL_ACTIVE, v));
 // 保证 active 名字总是 valid (lists 为空时建一个 "默认")
 if (!store.voluntaryLists || !Object.keys(store.voluntaryLists).length) {
@@ -3219,6 +3223,17 @@ createApp({
     function setPendingActive(arr) {
       store.voluntaryPending = { ...store.voluntaryPending, [store.activeVoluntaryName]: arr };
     }
+    function getBackupActive() {
+      return store.voluntaryBackup[store.activeVoluntaryName] || null;
+    }
+    function setBackupActive(snap) {
+      store.voluntaryBackup = { ...store.voluntaryBackup, [store.activeVoluntaryName]: snap };
+    }
+    function clearBackupActive() {
+      const next = { ...store.voluntaryBackup };
+      delete next[store.activeVoluntaryName];
+      store.voluntaryBackup = next;
+    }
     // 26 等位次 lookup (id -> rank26). 缺则给 Infinity (排到最后)
     function rank26ForPlan(p) {
       if (!p || !scoreRank.value) return Infinity;
@@ -3272,6 +3287,7 @@ createApp({
       store.voluntaryLists  = renameKey(store.voluntaryLists);
       store.voluntaryPinned = renameKey(store.voluntaryPinned);
       store.voluntaryPending = renameKey(store.voluntaryPending);
+      store.voluntaryBackup = renameKey(store.voluntaryBackup);
       store.activeVoluntaryName = newName;
     }
     function duplicateVoluntaryList() {
@@ -3303,6 +3319,7 @@ createApp({
       store.voluntaryLists  = dropKey(store.voluntaryLists);
       store.voluntaryPinned = dropKey(store.voluntaryPinned);
       store.voluntaryPending = dropKey(store.voluntaryPending);
+      store.voluntaryBackup = dropKey(store.voluntaryBackup);
       store.activeVoluntaryName = Object.keys(store.voluntaryLists)[0];
     }
     function switchVoluntaryList(name) {
@@ -3334,56 +3351,42 @@ createApp({
         runAutoSort();   // V9: 新加入的不锁定; 自动按 26 位次插入合适位置
       }
     }
-    // V9: 移动操作 = 给 plan 加 pending (固定到目标位置), 其它非锁定项按 26 位次重排.
-    // 目标位置如果有锁定/待确认项, 该项让位 — 失去 pinned/pending 状态, 回到自动排序池.
-    // 即用户始终可以移动, 不会被任何锁定 "卡住". 若误踢了锁定项, 用 ↩ 撤销 (该项回到 26 位次位置).
+    // V9 (rewritten per user spec):
+    // 移动 = splice + insert (保持各项相对顺序), 不在 move 期间 auto-sort.
+    // 第一次 move (本次编辑会话) 触发: 整数组 + 当时 pinned 进 backup;
+    //   把所有原 pinned 转入 pending (整理期间一切位置都待重新确认).
+    // 之后 move 只更新数组 + 把移动项加入 pending.
+    // ✓ 全部确认 → pending → pinned, 清 backup;
+    // ↩ 全部撤销 → 数组+pinned 从 backup 还原, 清 pending+backup, runAutoSort.
     function markPendingMoveTo(id, targetIdx) {
       const ids = [...voluntary.value];
       const cur = ids.indexOf(id);
       if (cur < 0) return;
       const N = ids.length;
       targetIdx = Math.max(0, Math.min(N - 1, targetIdx));
-      if (cur === targetIdx) return;   // 没动
-      const m = planByIdMap.value;
-      const pinned = pinnedSet.value;
-      const targetId = ids[targetIdx];
-      // 目标位置是 confirmed-pinned → 弹确认 (避免误踢锁定)
-      if (pinned.has(targetId) && targetId !== id) {
-        const tp = m[targetId];
-        const tname = tp ? `${tp.schoolName} · ${tp.majorName26 || tp.majorName25 || ''}` : targetId;
-        if (!confirm(`目标位置 #${targetIdx + 1} 已锁定:\n  📌 ${tname}\n\n移动会取消该项锁定, 是否继续?`)) {
-          return;
+      if (cur === targetIdx) return;
+      // 首次进入编辑会话: snapshot + pinned → pending
+      if (!getBackupActive()) {
+        setBackupActive({
+          ids: [...voluntary.value],
+          pinned: [...pinnedIdsOfActive()],
+        });
+        const pn = pinnedIdsOfActive();
+        if (pn.length) {
+          setPinnedActive([]);
+          const pd = pendingIdsOfActive();
+          const merged = [...pd];
+          for (const x of pn) if (!merged.includes(x)) merged.push(x);
+          setPendingActive(merged);
         }
       }
-      const fixed = fixedSet.value;
-      const fixedSlots = new Array(N).fill(null);
-      const free = [];
-      ids.forEach((x, i) => {
-        if (x === id) return;
-        if (fixed.has(x)) fixedSlots[i] = x;
-        else free.push(x);
-      });
-      // 目标位置如有 fixed 项, 让位: 加入 free 池, 同时清掉它的 pinned/pending 状态
-      if (fixedSlots[targetIdx]) {
-        const displaced = fixedSlots[targetIdx];
-        fixedSlots[targetIdx] = null;
-        free.push(displaced);
-        const pn = pinnedIdsOfActive();
-        if (pn.includes(displaced))   setPinnedActive(pn.filter(x => x !== displaced));
-        const pd = pendingIdsOfActive();
-        if (pd.includes(displaced))   setPendingActive(pd.filter(x => x !== displaced));
-      }
-      fixedSlots[targetIdx] = id;
-      // 移动的 plan: 加入 pending (若不是 pinned)
-      if (!pinned.has(id)) {
-        const pd = pendingIdsOfActive();
-        if (!pd.includes(id)) setPendingActive([...pd, id]);
-      }
-      // free 排序 (26 位次升序)
-      free.sort((a, b) => rank26ForPlan(m[a]) - rank26ForPlan(m[b]));
-      let fi = 0;
-      const out = fixedSlots.map(s => s ?? free[fi++]);
-      voluntary.value = out;
+      // splice + insert (保留各项相对顺序; 不 auto-sort)
+      const [item] = ids.splice(cur, 1);
+      ids.splice(targetIdx, 0, item);
+      voluntary.value = ids;
+      // 移动项加入 pending
+      const pd = pendingIdsOfActive();
+      if (!pd.includes(id)) setPendingActive([...pd, id]);
     }
     function moveVoluntaryUp(id) {
       const i = voluntary.value.indexOf(id);
@@ -3396,35 +3399,28 @@ createApp({
     function moveVoluntaryToTop(id) { markPendingMoveTo(id, 0); }
     function moveVoluntaryToBottom(id) { markPendingMoveTo(id, voluntary.value.length - 1); }
     // V9: 锁定确认 / 撤销 / 解锁
+    // 单条确认: pending → pinned. 其它 pending 保持 (用户继续整理).
     function confirmPin(id) {
       const pd = pendingIdsOfActive();
       if (!pd.includes(id)) return;
       setPendingActive(pd.filter(x => x !== id));
       const pn = pinnedIdsOfActive();
       if (!pn.includes(id)) setPinnedActive([...pn, id]);
+      // pending 全清空时, backup 也失效
+      if (!pendingIdsOfActive().length) clearBackupActive();
     }
-    // 当前位置直接锁定 (不需先移动)
-    function pinAtCurrent(id) {
-      const pn = pinnedIdsOfActive();
-      if (pn.includes(id)) return;
-      setPinnedActive([...pn, id]);
-      // 同时清掉 pending (若有)
-      const pd = pendingIdsOfActive();
-      if (pd.includes(id)) setPendingActive(pd.filter(x => x !== id));
-    }
-    // 一键锁定所有当前显示位置 (满意当前排序时使用)
-    function pinAllCurrent() {
-      const ids = voluntary.value;
-      if (!ids.length) return;
-      if (!confirm(`把当前 ${ids.length} 项全部锁定到现在的位置?\n之后新增项目仍按 26 位次自动排, 锁定项不动.`)) return;
-      setPinnedActive([...ids]);
-      setPendingActive([]);
-    }
+    // 单条撤销: 这条退出 pending. 若它在 backup.pinned 中 (原本就 pinned), 恢复 pinned.
     function cancelPending(id) {
       const pd = pendingIdsOfActive();
       if (!pd.includes(id)) return;
       setPendingActive(pd.filter(x => x !== id));
-      runAutoSort();
+      const bk = getBackupActive();
+      if (bk && bk.pinned && bk.pinned.includes(id)) {
+        const pn = pinnedIdsOfActive();
+        if (!pn.includes(id)) setPinnedActive([...pn, id]);
+      }
+      if (!pendingIdsOfActive().length) clearBackupActive();
+      runAutoSort();   // 撤销后, 该 plan 若不在 pinned, 由自动排序决定位置
     }
     function unpinConfirmed(id) {
       const pn = pinnedIdsOfActive();
@@ -3432,6 +3428,26 @@ createApp({
       setPinnedActive(pn.filter(x => x !== id));
       runAutoSort();
     }
+    // 当前位置直接锁定 (不需先移动) — 不进入"整理会话", 不影响 backup
+    function pinAtCurrent(id) {
+      const pn = pinnedIdsOfActive();
+      if (pn.includes(id)) return;
+      setPinnedActive([...pn, id]);
+      const pd = pendingIdsOfActive();
+      if (pd.includes(id)) setPendingActive(pd.filter(x => x !== id));
+      // 若 pending 因此清空, 清 backup
+      if (!pendingIdsOfActive().length && getBackupActive()) clearBackupActive();
+    }
+    // 一键锁定所有当前位置 (无 pending 编辑会话时使用)
+    function pinAllCurrent() {
+      const ids = voluntary.value;
+      if (!ids.length) return;
+      if (!confirm(`把当前 ${ids.length} 项全部锁定到现在的位置?\n之后新增项目仍按 26 位次自动排, 锁定项不动.`)) return;
+      setPinnedActive([...ids]);
+      setPendingActive([]);
+      clearBackupActive();
+    }
+    // 全部确认: pending → pinned (含原 backup pinned), 清 backup
     function confirmAllPending() {
       const pd = pendingIdsOfActive();
       if (!pd.length) return;
@@ -3440,17 +3456,29 @@ createApp({
       for (const id of pd) if (!merged.includes(id)) merged.push(id);
       setPinnedActive(merged);
       setPendingActive([]);
+      clearBackupActive();
     }
+    // 全部撤销: 数组 + pinned 从 backup 完整回滚 (彻底回到编辑前)
     function cancelAllPending() {
-      if (!pendingIdsOfActive().length) return;
+      const bk = getBackupActive();
+      if (!bk) {
+        // 没有编辑会话, 但可能孤立 pending → 简单清空
+        if (pendingIdsOfActive().length) setPendingActive([]);
+        runAutoSort();
+        return;
+      }
+      voluntary.value = [...bk.ids];
+      setPinnedActive([...(bk.pinned || [])]);
       setPendingActive([]);
-      runAutoSort();
+      clearBackupActive();
+      runAutoSort();   // backup 中 unpinned 部分按 26 位次重排 (与编辑前一致)
     }
     function clearVoluntary() {
       if (confirm(`确认清空当前志愿单 "${store.activeVoluntaryName}" (${voluntary.value.length} 项)?`)) {
         voluntary.value = [];
         setPinnedActive([]);
         setPendingActive([]);
+        clearBackupActive();
       }
     }
     function toggleExpand(id) {
