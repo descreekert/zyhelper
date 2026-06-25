@@ -451,6 +451,16 @@ tr.main-row-expanded td { background: rgba(59, 130, 246, 0.04); }
   display: inline-block;
   margin-right: 4px;
 }
+/* V9: 志愿表 选中行高亮 */
+.vol-row-selected > td, .vol-row-selected > th {
+  background: #eff6ff !important;
+  box-shadow: inset 0 0 0 2px #3b82f6;
+}
+.vol-actions-header {
+  background: #f1f5f9;
+  font-weight: 500;
+}
+
 /* V8: 聚合表展开行子表 */
 .recommend-detail-table { background: #fafbfc; border-collapse: collapse; }
 .recommend-detail-table th { background: #f1f5f9; font-weight: 600; padding: 4px 8px !important; }

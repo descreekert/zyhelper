@@ -392,6 +392,7 @@
             :score-rank="scoreRank"
             :pinned-set="pinnedSet"
             :pending-set="pendingSet"
+            :selected-vol-id="voluntarySelectedId"
             @page-change="currentPage = $event"
             @open-detail="openDetail"
             @toggle-compare="toggleCompare"
@@ -411,6 +412,7 @@
             @vol-cancel-pending="cancelPending"
             @vol-unpin="unpinConfirmed"
             @vol-pin-at-current="pinAtCurrent"
+            @vol-select="selectVoluntaryRow"
           ></result-list>
         </main>
       </div>

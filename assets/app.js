@@ -1391,11 +1391,12 @@ const ResultList = {
           "columns", "sortKeys", "cwb", "paneTargets",
           "voluntary", "voluntarySet", "columnWidths", "planOverrides",
           "recommendData", "scoreRank",
-          "pinnedSet", "pendingSet"],
+          "pinnedSet", "pendingSet", "selectedVolId"],
   emits: ["page-change", "open-detail", "toggle-compare", "toggle-favorite", "toggle-expand",
           "sort-col", "col-drop", "col-resize",
           "toggle-voluntary", "vol-up", "vol-down", "vol-top", "vol-bottom",
           "vol-confirm-pin", "vol-cancel-pending", "vol-unpin", "vol-pin-at-current",
+          "vol-select",
           "edit-score", "revert-score"],
   setup(props, { emit }) {
     function fmtDuration(p) { return formatDuration(p.duration || p.duration25); }
@@ -1463,6 +1464,7 @@ const ResultList = {
     // V9: 锁定 / 待确认 状态查询
     function isPinned(id) { return props.pinnedSet && props.pinnedSet.has(id); }
     function isPending(id) { return props.pendingSet && props.pendingSet.has(id); }
+    function isSelected(id) { return props.selectedVolId === id; }
     function cellValue(p, key) {
       switch (key) {
         case "city":    return p.city;
@@ -1540,7 +1542,7 @@ const ResultList = {
              onColDragStart, onColDrop, startResize, colWidth,
              paneLists, paneCounts, volIdx,
              score25Of, rank25Of, score26Of, rank26Of,
-             isPinned, isPending,
+             isPinned, isPending, isSelected,
              editingScore, editingValue, startEditScore, commitEditScore, cancelEditScore, isEdited };
   },
   computed: {
@@ -1710,8 +1712,28 @@ const ResultList = {
             <tr>
               <!-- voluntary: 序号列 -->
               <th v-if="viewMode==='voluntary'" style="width:40px" class="text-center">#</th>
-              <!-- voluntary: 操作列 (前置) -->
-              <th v-if="viewMode==='voluntary'" style="width:130px" class="text-center">操作</th>
+              <!-- voluntary: 操作列 (前置). 表头放 ⇈↑↓⇊, 作用于选中行, 移动时按钮位置不变 -->
+              <th v-if="viewMode==='voluntary'" style="width:160px" class="text-center vol-actions-header">
+                <template v-if="selectedVolId">
+                  <span class="text-xs text-blue-600 mr-1" title="操作下面这一行">▶</span>
+                  <button @click.stop="$emit('vol-top', selectedVolId)"
+                          class="px-1 hover:bg-blue-100 rounded"
+                          :title="'选中行 → 顶部 (智能: 锁定项→#1, 非锁定项→上方第一个锁定行下面)'">⇈</button>
+                  <button @click.stop="$emit('vol-up', selectedVolId)"
+                          class="px-1 hover:bg-blue-100 rounded"
+                          title="选中行 ↑ 上移一格">↑</button>
+                  <button @click.stop="$emit('vol-down', selectedVolId)"
+                          class="px-1 hover:bg-blue-100 rounded"
+                          title="选中行 ↓ 下移一格">↓</button>
+                  <button @click.stop="$emit('vol-bottom', selectedVolId)"
+                          class="px-1 hover:bg-blue-100 rounded"
+                          :title="'选中行 → 底部 (智能: 锁定项→末尾, 非锁定项→下方第一个锁定行上面)'">⇊</button>
+                  <button @click.stop="$emit('vol-select', selectedVolId)"
+                          class="ml-1 px-1 text-slate-400 hover:text-red-500 text-xs"
+                          title="取消选中">×</button>
+                </template>
+                <span v-else class="text-xs text-slate-400" title="点左侧 # 序号选中行, 然后这里出现移动按钮">操作 (点 # 选中)</span>
+              </th>
               <th v-for="c in columns" :key="c.key"
                   :class="['col-'+c.key, c.fixed ? 'fixed-col' : '']"
                   :style="{ width: colWidth(c) + 'px' }"
@@ -1738,31 +1760,30 @@ const ResultList = {
           <tbody>
             <template v-for="(p, idx) in plans" :key="p.id">
               <tr class="hover:bg-slate-50 cursor-pointer"
-                  :class="[rowTier(p) ? 'tier-row-'+rowTier(p) : '', isExpanded(p.id) ? 'main-row-expanded' : '']"
+                  :class="[rowTier(p) ? 'tier-row-'+rowTier(p) : '', isExpanded(p.id) ? 'main-row-expanded' : '',
+                           viewMode==='voluntary' && isSelected(p.id) ? 'vol-row-selected' : '']"
                   @click="$emit('toggle-expand', p.id)">
-                <!-- voluntary: 序号列 + 锁定状态 -->
-                <th v-if="viewMode==='voluntary'" class="vol-num-cell text-center"
-                    :class="isPinned(p.id) ? 'bg-blue-50' : isPending(p.id) ? 'bg-amber-50' : ''">
+                <!-- voluntary: 序号列 (可点选中) + 锁定状态 -->
+                <th v-if="viewMode==='voluntary'" class="vol-num-cell text-center cursor-pointer"
+                    :class="[
+                      isPinned(p.id) ? 'bg-blue-50' : isPending(p.id) ? 'bg-amber-50' : '',
+                      isSelected(p.id) ? 'ring-2 ring-blue-500 ring-inset bg-blue-100' : 'hover:bg-blue-50'
+                    ]"
+                    title="点击选中此行, 然后用表头的 ⇈↑↓⇊ 移动 (再点取消选中)"
+                    @click.stop="$emit('vol-select', p.id)">
+                  <span v-if="isSelected(p.id)" class="text-blue-700 font-bold">▶</span>
                   {{ idx + 1 }}
                   <span v-if="isPinned(p.id)" class="text-blue-600" title="已锁定 (不参与自动排序)">📌</span>
                   <span v-else-if="isPending(p.id)" class="text-amber-600" title="待确认 (移动后未确认, 下次自动排序会还原)">⏳</span>
                 </th>
-                <!-- voluntary: 操作列 (前置: 上下移 / 锁定操作 / 移除 / 详情) -->
+                <!-- voluntary: 操作列 (前置: 锁定状态动作 / 移除 / 详情). 移动按钮已上移到表头 -->
                 <td v-if="viewMode==='voluntary'" class="text-center vol-actions">
-                  <button @click.stop="$emit('vol-top', p.id)" :disabled="idx === 0"
-                          class="px-1 hover:text-blue-600 disabled:opacity-30" title="置顶 (移动后需 ✓ 确认)">⇈</button>
-                  <button @click.stop="$emit('vol-up', p.id)" :disabled="idx === 0"
-                          class="px-1 hover:text-blue-600 disabled:opacity-30" title="上移 (移动后需 ✓ 确认)">↑</button>
-                  <button @click.stop="$emit('vol-down', p.id)" :disabled="idx === plans.length-1"
-                          class="px-1 hover:text-blue-600 disabled:opacity-30" title="下移 (移动后需 ✓ 确认)">↓</button>
-                  <button @click.stop="$emit('vol-bottom', p.id)" :disabled="idx === plans.length-1"
-                          class="px-1 hover:text-blue-600 disabled:opacity-30" title="置底 (移动后需 ✓ 确认)">⇊</button>
                   <!-- pending: 显示 ✓ 确认 / ↩ 撤销 -->
                   <template v-if="isPending(p.id)">
                     <button @click.stop="$emit('vol-confirm-pin', p.id)"
-                            class="px-1 text-green-600 hover:text-green-700 font-bold" title="确认锁定到当前位置">✓</button>
+                            class="px-1 text-green-600 hover:text-green-700 font-bold" title="确认锁定 (任意一行 ✓ = 全部确认)">✓</button>
                     <button @click.stop="$emit('vol-cancel-pending', p.id)"
-                            class="px-1 text-amber-600 hover:text-amber-700" title="撤销移动 (回到自动排序位置)">↩</button>
+                            class="px-1 text-amber-600 hover:text-amber-700" title="撤销 (该项回到自动排序位置)">↩</button>
                   </template>
                   <!-- pinned: 显示 🔓 解锁 -->
                   <button v-else-if="isPinned(p.id)" @click.stop="$emit('vol-unpin', p.id)"
@@ -3342,6 +3363,11 @@ createApp({
       get() { return store.voluntaryLists[store.activeVoluntaryName] || []; },
       set(arr) { store.voluntaryLists[store.activeVoluntaryName] = arr; },
     });
+    // V9: 当前选中行 (用于在表头点 ⇈↑↓⇊ 操作选中行, 避免每次跟着移动重新点)
+    const voluntarySelectedId = ref(null);
+    function selectVoluntaryRow(id) {
+      voluntarySelectedId.value = (voluntarySelectedId.value === id) ? null : id;
+    }
     // V9: 锁定 / 待确认 (按 listName keyed; 数组语义 = Set, 用 Array 以便 LS 序列化)
     function pinnedIdsOfActive() {
       return store.voluntaryPinned[store.activeVoluntaryName] || [];
@@ -3399,6 +3425,8 @@ createApp({
     watch([() => store.activeVoluntaryName, scoreRank], () => {
       runAutoSort();
     });
+    // 切表清选中
+    watch(() => store.activeVoluntaryName, () => { voluntarySelectedId.value = null; });
     // 多列表管理
     function newVoluntaryList(name) {
       if (!name) {
@@ -3479,6 +3507,7 @@ createApp({
         if (pn.length !== pinnedIdsOfActive().length) setPinnedActive(pn);
         if (pd.length !== pendingIdsOfActive().length) setPendingActive(pd);
         voluntary.value = arr;
+        if (voluntarySelectedId.value === id) voluntarySelectedId.value = null;
         runAutoSort();
       } else {
         arr.push(id);
@@ -3523,6 +3552,12 @@ createApp({
       const pd = pendingIdsOfActive();
       if (!pd.includes(id)) setPendingActive([...pd, id]);
     }
+    // "原本锁定" = 编辑前的 pinned (backup.pinned 优先, 没编辑会话时用当前 pinned)
+    function isOriginallyPinned(id) {
+      const bk = getBackupActive();
+      if (bk && Array.isArray(bk.pinned)) return bk.pinned.includes(id);
+      return pinnedSet.value.has(id);
+    }
     function moveVoluntaryUp(id) {
       const i = voluntary.value.indexOf(id);
       if (i > 0) markPendingMoveTo(id, i - 1);
@@ -3531,8 +3566,37 @@ createApp({
       const i = voluntary.value.indexOf(id);
       if (i >= 0 && i < voluntary.value.length - 1) markPendingMoveTo(id, i + 1);
     }
-    function moveVoluntaryToTop(id) { markPendingMoveTo(id, 0); }
-    function moveVoluntaryToBottom(id) { markPendingMoveTo(id, voluntary.value.length - 1); }
+    // ⇈ 上移到顶 (智能):
+    //   原本锁定行 → 直接到 #1
+    //   非锁定行 → 移到"上方第一个锁定行"的下面 (没锁定时到顶)
+    function moveVoluntaryToTop(id) {
+      const ids = voluntary.value;
+      const cur = ids.indexOf(id);
+      if (cur <= 0) return;
+      let target = 0;
+      if (!isOriginallyPinned(id)) {
+        for (let i = cur - 1; i >= 0; i--) {
+          if (isOriginallyPinned(ids[i])) { target = i + 1; break; }
+        }
+      }
+      if (target !== cur) markPendingMoveTo(id, target);
+    }
+    // ⇊ 下移到底 (智能, 对称):
+    //   原本锁定行 → 直接到末尾
+    //   非锁定行 → 移到"下方第一个锁定行"的上面
+    function moveVoluntaryToBottom(id) {
+      const ids = voluntary.value;
+      const cur = ids.indexOf(id);
+      const N = ids.length;
+      if (cur < 0 || cur >= N - 1) return;
+      let target = N - 1;
+      if (!isOriginallyPinned(id)) {
+        for (let i = cur + 1; i < N; i++) {
+          if (isOriginallyPinned(ids[i])) { target = i - 1; break; }
+        }
+      }
+      if (target !== cur) markPendingMoveTo(id, target);
+    }
     // V9: 锁定确认 / 撤销 / 解锁
     // 单条 ✓ = 全部确认 (用户表达"整理完了, 这次都按现在的来"; 不必逐条确认)
     function confirmPin(id) {
@@ -3609,6 +3673,7 @@ createApp({
         setPinnedActive([]);
         setPendingActive([]);
         clearBackupActive();
+        voluntarySelectedId.value = null;
       }
     }
     function toggleExpand(id) {
@@ -3961,6 +4026,7 @@ createApp({
       voluntaryPendingCount: computed(() => pendingSet.value.size),
       confirmPin, cancelPending, unpinConfirmed, confirmAllPending, cancelAllPending,
       pinAtCurrent, pinAllCurrent,
+      voluntarySelectedId, selectVoluntaryRow,
       resetFilters, onApplyTier, reloadData,
       exportCsv, toggleDark,
       savePreset, loadPreset, deletePreset, renamePreset, copyShareLink,
