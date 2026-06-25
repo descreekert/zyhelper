@@ -10,6 +10,7 @@
 依赖: openpyxl
 """
 
+import csv
 import datetime
 import json
 import re
@@ -20,6 +21,18 @@ import openpyxl
 
 SRC = Path("/Users/banlibo/Desktop/高考/new/2026高考-物理-志愿_2026.xlsx")
 OUT_DIR = Path(__file__).resolve().parent.parent / "data"
+
+# === V9: 专业保研率 新算法数据源 ===
+# 算法 (per major):
+#   1. 在 school_majors_data 找 (校, 专) -> 学院
+#      兜底: 院校-学院-专业保研率.csv 也含 (校, 专, 学院) 映射
+#   2. base_rate = 校保研率 (plan.schoolBaoyan)
+#   3. override_rate = 院校-学院保研率.csv 的 (校, 学院) 命中
+#   4. rate = override if 命中 else base
+#   5. 输出 "{专业}({学院},{rate%})"
+SCHOOL_MAJORS_DATA = Path("/Users/banlibo/Desktop/高考/old/院校-学院-专业/school_majors_data")
+COLLEGE_BAOYAN_CSV = Path("/Users/banlibo/Desktop/高考/new/工具/保研率/院校-学院保研率.csv")
+MAJOR_BAOYAN_CSV   = Path("/Users/banlibo/Desktop/高考/new/工具/保研率/院校-学院-专业保研率.csv")  # 也用作 (校,专)->学院 fallback
 
 # ----- 工具 -----
 def to_int(v):
@@ -499,10 +512,96 @@ def slim_plan(obj, parent_key=None):
 
 
 # ----- 各 JSON 独立生成器 (数据-1: 模块化, 支持只重生成某一项) -----
+def _norm_school(s):
+    """学校名归一: 全角括号 → 半角. 与 scraper 的 clean_school_name 一致."""
+    if not s: return ""
+    return str(s).replace("(", "(").replace(")", ")").strip()
+
+
+def load_baoyan_sources():
+    """加载新算法所需 3 个数据源.
+    返回:
+        sm2c:    dict[(校归一, 专业)] -> 学院
+        sc2rate: dict[(校归一, 学院)] -> rate(float)
+    """
+    sm2c = {}
+    if SCHOOL_MAJORS_DATA.exists():
+        for f in sorted(SCHOOL_MAJORS_DATA.glob("*.csv")):
+            school = _norm_school(f.stem)
+            with f.open(encoding="utf-8-sig") as fh:
+                for r in csv.DictReader(fh):
+                    college = (r.get("学院") or "").strip()
+                    major   = (r.get("专业") or "").strip()
+                    if school and college and major:
+                        sm2c.setdefault((school, major), college)
+    # fallback: 院校-学院-专业保研率.csv 也含 (校, 学院, 专业) 三元组
+    if MAJOR_BAOYAN_CSV.exists():
+        with MAJOR_BAOYAN_CSV.open(encoding="utf-8-sig") as fh:
+            for r in csv.DictReader(fh):
+                sch = _norm_school(r.get("学校") or "")
+                col = (r.get("学院") or "").strip()
+                m   = (r.get("专业") or "").strip()
+                if sch and col and m:
+                    sm2c.setdefault((sch, m), col)
+    sc2rate = {}
+    if COLLEGE_BAOYAN_CSV.exists():
+        with COLLEGE_BAOYAN_CSV.open(encoding="utf-8-sig") as fh:
+            for r in csv.DictReader(fh):
+                sch  = _norm_school(r.get("学校名称") or "")
+                col  = (r.get("院系") or "").strip()
+                rate = r.get("保研率")
+                if not (sch and col and rate): continue
+                try:
+                    sc2rate[(sch, col)] = float(rate)
+                except (ValueError, TypeError):
+                    pass
+    return sm2c, sc2rate
+
+
+def recompute_baoyan_detail(plans):
+    """V9: 用新算法重算 plan.baoyanDetail.
+       - 每个所含专业 → 在该校找学院; 找不到则跳过该专业
+       - 默认用 校保研率; 找到学院级保研率则覆盖
+       - 输出 'M(C,XX%)' 列表逗号拼接; 全空则置 ""
+    Returns: (n_items_college_override, n_items_school_base, n_plans_no_output)
+    """
+    sm2c, sc2rate = load_baoyan_sources()
+    over, base, miss = 0, 0, 0
+    for p in plans:
+        majors = p.get("containedMajors") or []
+        school = _norm_school(p.get("schoolName") or "")
+        base_rate = p.get("schoolBaoyan")    # float | None
+        items = []
+        for m in majors:
+            college = sm2c.get((school, m))
+            if not college:
+                continue
+            override = sc2rate.get((school, college))
+            rate = override if override is not None else base_rate
+            if rate is None:
+                continue
+            pct = round(rate * 100)
+            items.append(f"{m}({college},{pct}%)")
+            if override is not None:
+                over += 1
+            else:
+                base += 1
+        if items:
+            p["baoyanDetail"] = ",".join(items)
+        else:
+            p["baoyanDetail"] = ""
+            miss += 1
+    return over, base, miss
+
+
 def build_plans_json(wb, out_dir):
     print("加载招生计划 ...")
     plans = load_plans(wb)
     print(f"  共 {len(plans)} 条")
+    # V9: 用新算法重算 26 专业保研率 (取代 xlsx 中预计算列)
+    print("重算 26专业保研率 (新算法: 校保研率保底 + 学院保研率覆盖) ...")
+    over, base, miss = recompute_baoyan_detail(plans)
+    print(f"  学院级命中: {over} 项 | 校级保底: {base} 项 | 无学院数据 → 空: {miss} plans")
     plans_slim = [slim_plan(p) for p in plans]
     p = out_dir / "plans.json"
     p.write_text(json.dumps(plans_slim, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
