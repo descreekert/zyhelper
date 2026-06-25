@@ -3534,15 +3534,10 @@ createApp({
     function moveVoluntaryToTop(id) { markPendingMoveTo(id, 0); }
     function moveVoluntaryToBottom(id) { markPendingMoveTo(id, voluntary.value.length - 1); }
     // V9: 锁定确认 / 撤销 / 解锁
-    // 单条确认: pending → pinned. 其它 pending 保持 (用户继续整理).
+    // 单条 ✓ = 全部确认 (用户表达"整理完了, 这次都按现在的来"; 不必逐条确认)
     function confirmPin(id) {
-      const pd = pendingIdsOfActive();
-      if (!pd.includes(id)) return;
-      setPendingActive(pd.filter(x => x !== id));
-      const pn = pinnedIdsOfActive();
-      if (!pn.includes(id)) setPinnedActive([...pn, id]);
-      // pending 全清空时, backup 也失效
-      if (!pendingIdsOfActive().length) clearBackupActive();
+      if (!pendingIdsOfActive().includes(id)) return;
+      confirmAllPending();
     }
     // 单条撤销: 这条退出 pending. 若它在 backup.pinned 中 (原本就 pinned), 恢复 pinned.
     function cancelPending(id) {
