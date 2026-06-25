@@ -1391,7 +1391,7 @@ const ResultList = {
           "columns", "sortKeys", "cwb", "paneTargets",
           "voluntary", "voluntarySet", "columnWidths", "planOverrides",
           "recommendData", "scoreRank",
-          "pinnedSet", "pendingSet", "selectedVolId"],
+          "pinnedSet", "pendingSet", "backupPinnedSet", "selectedVolId"],
   emits: ["page-change", "open-detail", "toggle-compare", "toggle-favorite", "toggle-expand",
           "sort-col", "col-drop", "col-resize",
           "toggle-voluntary", "vol-up", "vol-down", "vol-top", "vol-bottom",
@@ -1464,6 +1464,7 @@ const ResultList = {
     // V9: 锁定 / 待确认 状态查询
     function isPinned(id) { return props.pinnedSet && props.pinnedSet.has(id); }
     function isPending(id) { return props.pendingSet && props.pendingSet.has(id); }
+    function wasPinned(id) { return props.backupPinnedSet && props.backupPinnedSet.has(id); }
     function isSelected(id) { return props.selectedVolId === id; }
     function cellValue(p, key) {
       switch (key) {
@@ -1542,7 +1543,7 @@ const ResultList = {
              onColDragStart, onColDrop, startResize, colWidth,
              paneLists, paneCounts, volIdx,
              score25Of, rank25Of, score26Of, rank26Of,
-             isPinned, isPending, isSelected,
+             isPinned, isPending, wasPinned, isSelected,
              editingScore, editingValue, startEditScore, commitEditScore, cancelEditScore, isEdited };
   },
   computed: {
@@ -1777,6 +1778,11 @@ const ResultList = {
                   :data-vol-row-id="viewMode==='voluntary' ? p.id : null"
                   @click="$emit('toggle-expand', p.id)">
                 <!-- voluntary: 序号列 (可点选中) + 锁定状态 -->
+                <!-- 图标含义:
+                     📌 (蓝)  = 已确认锁定
+                     📌 (黄)  = 原本锁定, 编辑期间暂为待确认 (✓ 全部确认即恢复 📌)
+                     ⏳ (黄)  = 本次编辑刚移动的, 原本未锁定
+                -->
                 <th v-if="viewMode==='voluntary'" class="vol-num-cell text-center cursor-pointer"
                     :class="[
                       isPinned(p.id) ? 'bg-blue-50' : isPending(p.id) ? 'bg-amber-50' : '',
@@ -1787,7 +1793,12 @@ const ResultList = {
                   <span v-if="isSelected(p.id)" class="text-blue-700 font-bold">▶</span>
                   {{ idx + 1 }}
                   <span v-if="isPinned(p.id)" class="text-blue-600" title="已锁定 (不参与自动排序)">📌</span>
-                  <span v-else-if="isPending(p.id)" class="text-amber-600" title="待确认 (移动后未确认, 下次自动排序会还原)">⏳</span>
+                  <template v-else-if="isPending(p.id)">
+                    <span v-if="wasPinned(p.id)" class="text-amber-600"
+                          title="原本锁定 — 编辑期间暂为待确认, ✓ 全部确认即恢复锁定">📌</span>
+                    <span v-else class="text-amber-600"
+                          title="本次编辑刚移动 — ✓ 全部确认即锁定到当前位置, ↩ 全部撤销则丢弃">⏳</span>
+                  </template>
                 </th>
                 <!-- voluntary: 行内操作只剩 锁定切换 / 移除 / 详情. ✓↩⇈↑↓⇊ 全在表头 -->
                 <td v-if="viewMode==='voluntary'" class="text-center vol-actions">
@@ -3385,6 +3396,11 @@ createApp({
     const pinnedSet = computed(() => new Set(pinnedIdsOfActive()));
     const pendingSet = computed(() => new Set(pendingIdsOfActive()));
     const fixedSet = computed(() => new Set([...pinnedSet.value, ...pendingSet.value]));
+    // 编辑前的 pinned 集合 (用于区分: "原本锁定但暂为 pending" vs "刚被移动的 pending")
+    const backupPinnedSet = computed(() => {
+      const bk = store.voluntaryBackup[store.activeVoluntaryName];
+      return new Set(bk && Array.isArray(bk.pinned) ? bk.pinned : []);
+    });
     function setPinnedActive(arr) {
       store.voluntaryPinned = { ...store.voluntaryPinned, [store.activeVoluntaryName]: arr };
     }
@@ -4061,7 +4077,7 @@ createApp({
       voluntaryTierCounts, exportVoluntaryByTier, exportVoluntaryHtml,
       exportVoluntaryJson, importVoluntaryJson, mergeFromOtherList,
       // V9: 锁定/待确认
-      pinnedSet, pendingSet,
+      pinnedSet, pendingSet, backupPinnedSet,
       voluntaryPinnedCount: computed(() => pinnedSet.value.size),
       voluntaryPendingCount: computed(() => pendingSet.value.size),
       confirmPin, cancelPending, unpinConfirmed, confirmAllPending, cancelAllPending,
