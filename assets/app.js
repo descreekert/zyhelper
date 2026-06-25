@@ -1712,19 +1712,9 @@ const ResultList = {
             <tr>
               <!-- voluntary: 序号列 -->
               <th v-if="viewMode==='voluntary'" style="width:40px" class="text-center">#</th>
-              <!-- voluntary: 操作列表头. 集中放整次编辑的全局动作 (✓↩) + 选中行的移动 (⇈↑↓⇊) -->
-              <th v-if="viewMode==='voluntary'" style="width:200px" class="text-center vol-actions-header">
-                <!-- 编辑会话: 全部确认 / 全部撤销 -->
-                <template v-if="pendingSet && pendingSet.size > 0">
-                  <button @click.stop="$emit('vol-confirm-all')"
-                          class="px-1.5 text-green-700 hover:bg-green-100 rounded font-bold"
-                          title="全部确认: 把所有 ⏳ 升级为 📌 锁定">✓</button>
-                  <button @click.stop="$emit('vol-cancel-all')"
-                          class="px-1.5 text-amber-700 hover:bg-amber-100 rounded"
-                          title="全部撤销: 数组+pinned 完整回滚到编辑前">↩</button>
-                  <span class="text-slate-300 mx-0.5">|</span>
-                </template>
-                <!-- 选中行: 移动按钮 -->
+              <!-- voluntary: 操作列表头. 移动按钮在前, ✓↩ 在后 (按用户操作时序 + 避免按钮位移误操作) -->
+              <th v-if="viewMode==='voluntary'" style="width:220px" class="text-center vol-actions-header">
+                <!-- 选中行: 移动按钮 (固定位置) -->
                 <template v-if="selectedVolId">
                   <span class="text-xs text-blue-600 mr-1" title="操作选中行">▶</span>
                   <button @click.stop="$emit('vol-top', selectedVolId)"
@@ -1742,6 +1732,16 @@ const ResultList = {
                   <button @click.stop="$emit('vol-select', selectedVolId)"
                           class="ml-0.5 px-1 text-slate-400 hover:text-red-500 text-xs"
                           title="取消选中">×</button>
+                </template>
+                <!-- 编辑会话: 全部确认 / 全部撤销 (放后面, 避免按钮位移导致误操作) -->
+                <template v-if="pendingSet && pendingSet.size > 0">
+                  <span v-if="selectedVolId" class="text-slate-300 mx-0.5">|</span>
+                  <button @click.stop="$emit('vol-confirm-all')"
+                          class="px-1.5 text-green-700 hover:bg-green-100 rounded font-bold"
+                          title="全部确认: 把所有 ⏳ 升级为 📌 锁定">✓</button>
+                  <button @click.stop="$emit('vol-cancel-all')"
+                          class="px-1.5 text-amber-700 hover:bg-amber-100 rounded"
+                          title="全部撤销: 数组+pinned 完整回滚到编辑前">↩</button>
                 </template>
                 <span v-if="!(pendingSet && pendingSet.size > 0) && !selectedVolId"
                       class="text-xs text-slate-400">操作 (点 # 选中)</span>
