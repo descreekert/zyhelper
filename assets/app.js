@@ -1396,7 +1396,7 @@ const ResultList = {
           "sort-col", "col-drop", "col-resize",
           "toggle-voluntary", "vol-up", "vol-down", "vol-top", "vol-bottom",
           "vol-confirm-pin", "vol-cancel-pending", "vol-unpin", "vol-pin-at-current",
-          "vol-select",
+          "vol-select", "vol-confirm-all", "vol-cancel-all",
           "edit-score", "revert-score"],
   setup(props, { emit }) {
     function fmtDuration(p) { return formatDuration(p.duration || p.duration25); }
@@ -1712,10 +1712,21 @@ const ResultList = {
             <tr>
               <!-- voluntary: 序号列 -->
               <th v-if="viewMode==='voluntary'" style="width:40px" class="text-center">#</th>
-              <!-- voluntary: 操作列 (前置). 表头放 ⇈↑↓⇊, 作用于选中行, 移动时按钮位置不变 -->
-              <th v-if="viewMode==='voluntary'" style="width:160px" class="text-center vol-actions-header">
+              <!-- voluntary: 操作列表头. 集中放整次编辑的全局动作 (✓↩) + 选中行的移动 (⇈↑↓⇊) -->
+              <th v-if="viewMode==='voluntary'" style="width:200px" class="text-center vol-actions-header">
+                <!-- 编辑会话: 全部确认 / 全部撤销 -->
+                <template v-if="pendingSet && pendingSet.size > 0">
+                  <button @click.stop="$emit('vol-confirm-all')"
+                          class="px-1.5 text-green-700 hover:bg-green-100 rounded font-bold"
+                          title="全部确认: 把所有 ⏳ 升级为 📌 锁定">✓</button>
+                  <button @click.stop="$emit('vol-cancel-all')"
+                          class="px-1.5 text-amber-700 hover:bg-amber-100 rounded"
+                          title="全部撤销: 数组+pinned 完整回滚到编辑前">↩</button>
+                  <span class="text-slate-300 mx-0.5">|</span>
+                </template>
+                <!-- 选中行: 移动按钮 -->
                 <template v-if="selectedVolId">
-                  <span class="text-xs text-blue-600 mr-1" title="操作下面这一行">▶</span>
+                  <span class="text-xs text-blue-600 mr-1" title="操作选中行">▶</span>
                   <button @click.stop="$emit('vol-top', selectedVolId)"
                           class="px-1 hover:bg-blue-100 rounded"
                           :title="'选中行 → 顶部 (智能: 锁定项→#1, 非锁定项→上方第一个锁定行下面)'">⇈</button>
@@ -1729,10 +1740,11 @@ const ResultList = {
                           class="px-1 hover:bg-blue-100 rounded"
                           :title="'选中行 → 底部 (智能: 锁定项→末尾, 非锁定项→下方第一个锁定行上面)'">⇊</button>
                   <button @click.stop="$emit('vol-select', selectedVolId)"
-                          class="ml-1 px-1 text-slate-400 hover:text-red-500 text-xs"
+                          class="ml-0.5 px-1 text-slate-400 hover:text-red-500 text-xs"
                           title="取消选中">×</button>
                 </template>
-                <span v-else class="text-xs text-slate-400" title="点左侧 # 序号选中行, 然后这里出现移动按钮">操作 (点 # 选中)</span>
+                <span v-if="!(pendingSet && pendingSet.size > 0) && !selectedVolId"
+                      class="text-xs text-slate-400">操作 (点 # 选中)</span>
               </th>
               <th v-for="c in columns" :key="c.key"
                   :class="['col-'+c.key, c.fixed ? 'fixed-col' : '']"
@@ -1776,21 +1788,15 @@ const ResultList = {
                   <span v-if="isPinned(p.id)" class="text-blue-600" title="已锁定 (不参与自动排序)">📌</span>
                   <span v-else-if="isPending(p.id)" class="text-amber-600" title="待确认 (移动后未确认, 下次自动排序会还原)">⏳</span>
                 </th>
-                <!-- voluntary: 操作列 (前置: 锁定状态动作 / 移除 / 详情). 移动按钮已上移到表头 -->
+                <!-- voluntary: 行内操作只剩 锁定切换 / 移除 / 详情. ✓↩⇈↑↓⇊ 全在表头 -->
                 <td v-if="viewMode==='voluntary'" class="text-center vol-actions">
-                  <!-- pending: 显示 ✓ 确认 / ↩ 撤销 -->
-                  <template v-if="isPending(p.id)">
-                    <button @click.stop="$emit('vol-confirm-pin', p.id)"
-                            class="px-1 text-green-600 hover:text-green-700 font-bold" title="确认锁定 (任意一行 ✓ = 全部确认)">✓</button>
-                    <button @click.stop="$emit('vol-cancel-pending', p.id)"
-                            class="px-1 text-amber-600 hover:text-amber-700" title="撤销 (该项回到自动排序位置)">↩</button>
-                  </template>
-                  <!-- pinned: 显示 🔓 解锁 -->
-                  <button v-else-if="isPinned(p.id)" @click.stop="$emit('vol-unpin', p.id)"
+                  <!-- pinned: 🔓 解锁 -->
+                  <button v-if="isPinned(p.id)" @click.stop="$emit('vol-unpin', p.id)"
                           class="px-1 text-blue-600 hover:text-blue-800" title="解锁 (重新参与自动排序)">🔓</button>
-                  <!-- 未锁定 & 非 pending: 显示 📌 直接锁定 -->
+                  <!-- 未锁定 (含 pending): 📌 直接锁定到当前位置 -->
                   <button v-else @click.stop="$emit('vol-pin-at-current', p.id)"
-                          class="px-1 text-slate-400 hover:text-blue-600" title="锁定到当前位置 (无需先移动)">📌</button>
+                          class="px-1 text-slate-400 hover:text-blue-600"
+                          :title="isPending(p.id) ? '锁定本行 (其它 ⏳ 不变, 用表头 ✓ 全部确认)' : '锁定到当前位置 (无需先移动)'">📌</button>
                   <button @click.stop="$emit('toggle-voluntary', p.id)"
                           class="px-1 text-red-500 hover:text-red-700" title="移除">✕</button>
                   <button @click.stop="$emit('open-detail', p)"
