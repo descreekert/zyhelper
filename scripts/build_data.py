@@ -559,14 +559,16 @@ def load_baoyan_sources():
 
 
 def recompute_baoyan_detail(plans):
-    """V9: 用新算法重算 plan.baoyanDetail.
-       - 每个所含专业 → 在该校找学院; 找不到则跳过该专业
-       - 默认用 校保研率; 找到学院级保研率则覆盖
-       - 输出 'M(C,XX%)' 列表逗号拼接; 全空则置 ""
-    Returns: (n_items_college_override, n_items_school_base, n_plans_no_output)
+    """V9: 用新算法重算 plan.baoyanDetail. 4 档:
+       (a) 学院已知 + 学院级 rate    → 'M(学院,X%)'  [override]
+       (b) 学院已知 + 仅校保研率      → 'M(学院,X%)'  [school base]
+       (c) 学院未知 + 有校保研率      → 'M(本校,X%)'   [unknown college fallback]
+       (d) 学院未知 + 无校保研率      → skip 该 major
+       全 plan 一项都没出 → baoyanDetail = ""
+    Returns: dict 统计.
     """
     sm2c, sc2rate = load_baoyan_sources()
-    over, base, miss = 0, 0, 0
+    cnt = dict(override=0, school_base=0, unknown_college=0, skip=0, empty_plans=0)
     for p in plans:
         majors = p.get("containedMajors") or []
         school = _norm_school(p.get("schoolName") or "")
@@ -574,24 +576,32 @@ def recompute_baoyan_detail(plans):
         items = []
         for m in majors:
             college = sm2c.get((school, m))
-            if not college:
-                continue
-            override = sc2rate.get((school, college))
-            rate = override if override is not None else base_rate
-            if rate is None:
-                continue
-            pct = round(rate * 100)
-            items.append(f"{m}({college},{pct}%)")
-            if override is not None:
-                over += 1
+            if college:
+                override = sc2rate.get((school, college))
+                if override is not None:
+                    pct = round(override * 100)
+                    items.append(f"{m}({college},{pct}%)")
+                    cnt["override"] += 1
+                elif base_rate is not None:
+                    pct = round(base_rate * 100)
+                    items.append(f"{m}({college},{pct}%)")
+                    cnt["school_base"] += 1
+                else:
+                    cnt["skip"] += 1
             else:
-                base += 1
+                # 学院未知 → 用 校保研率, college 字段填"本校"以示来源
+                if base_rate is not None:
+                    pct = round(base_rate * 100)
+                    items.append(f"{m}(本校,{pct}%)")
+                    cnt["unknown_college"] += 1
+                else:
+                    cnt["skip"] += 1
         if items:
             p["baoyanDetail"] = ",".join(items)
         else:
             p["baoyanDetail"] = ""
-            miss += 1
-    return over, base, miss
+            cnt["empty_plans"] += 1
+    return cnt
 
 
 def build_plans_json(wb, out_dir):
@@ -599,9 +609,13 @@ def build_plans_json(wb, out_dir):
     plans = load_plans(wb)
     print(f"  共 {len(plans)} 条")
     # V9: 用新算法重算 26 专业保研率 (取代 xlsx 中预计算列)
-    print("重算 26专业保研率 (新算法: 校保研率保底 + 学院保研率覆盖) ...")
-    over, base, miss = recompute_baoyan_detail(plans)
-    print(f"  学院级命中: {over} 项 | 校级保底: {base} 项 | 无学院数据 → 空: {miss} plans")
+    print("重算 26专业保研率 (新算法 4 档) ...")
+    bc = recompute_baoyan_detail(plans)
+    print(f"  (a) 学院已知 + 学院级 rate:     {bc['override']} 项")
+    print(f"  (b) 学院已知 + 校保研率:        {bc['school_base']} 项")
+    print(f"  (c) 学院未知 + 校保研率(本校):  {bc['unknown_college']} 项")
+    print(f"  (d) 跳过 (校保研率也没有):      {bc['skip']} 项")
+    print(f"  全空 plans (一项都没出):       {bc['empty_plans']} 条")
     plans_slim = [slim_plan(p) for p in plans]
     p = out_dir / "plans.json"
     p.write_text(json.dumps(plans_slim, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
