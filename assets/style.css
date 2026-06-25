@@ -163,7 +163,12 @@ body {
   border: 1px solid #e2e8f0;
   border-radius: 4px;
   background: white;
+  /* V9: 出现横向滚动条时留 18px 给最后一行, 避免被滚动条遮挡 */
+  scrollbar-gutter: stable;
 }
+.table-scroll > table { margin-bottom: 18px; }
+/* 聚合表 (用 overflow-x-auto 包) 同处理 */
+.overflow-x-auto > table { margin-bottom: 18px; }
 .resizable-table {
   table-layout: fixed;
   border-collapse: collapse;
