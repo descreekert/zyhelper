@@ -521,28 +521,28 @@ def _norm_school(s):
 def load_baoyan_sources():
     """加载新算法所需 3 个数据源.
     返回:
-        sm2c:    dict[(校归一, 专业)] -> 学院
+        sm2c:    dict[(校归一, 专业)] -> [学院1, 学院2, ...]  (保留顺序, 去重)
+                 同一专业可能跨多个学院 (例: 华科 光电信息科学与工程 → 化学与化工学院 / 光学与电子信息学院)
         sc2rate: dict[(校归一, 学院)] -> rate(float)
     """
     sm2c = {}
+    def add(sch, m, col):
+        if not (sch and m and col): return
+        lst = sm2c.setdefault((sch, m), [])
+        if col not in lst: lst.append(col)
     if SCHOOL_MAJORS_DATA.exists():
         for f in sorted(SCHOOL_MAJORS_DATA.glob("*.csv")):
             school = _norm_school(f.stem)
             with f.open(encoding="utf-8-sig") as fh:
                 for r in csv.DictReader(fh):
-                    college = (r.get("学院") or "").strip()
-                    major   = (r.get("专业") or "").strip()
-                    if school and college and major:
-                        sm2c.setdefault((school, major), college)
+                    add(school, (r.get("专业") or "").strip(), (r.get("学院") or "").strip())
     # fallback: 院校-学院-专业保研率.csv 也含 (校, 学院, 专业) 三元组
     if MAJOR_BAOYAN_CSV.exists():
         with MAJOR_BAOYAN_CSV.open(encoding="utf-8-sig") as fh:
             for r in csv.DictReader(fh):
-                sch = _norm_school(r.get("学校") or "")
-                col = (r.get("学院") or "").strip()
-                m   = (r.get("专业") or "").strip()
-                if sch and col and m:
-                    sm2c.setdefault((sch, m), col)
+                add(_norm_school(r.get("学校") or ""),
+                    (r.get("专业") or "").strip(),
+                    (r.get("学院") or "").strip())
     sc2rate = {}
     if COLLEGE_BAOYAN_CSV.exists():
         with COLLEGE_BAOYAN_CSV.open(encoding="utf-8-sig") as fh:
@@ -568,28 +568,36 @@ def recompute_baoyan_detail(plans):
     Returns: dict 统计.
     """
     sm2c, sc2rate = load_baoyan_sources()
-    cnt = dict(override=0, school_base=0, unknown_college=0, skip=0, empty_plans=0)
+    cnt = dict(override=0, school_base=0, unknown_college=0, skip=0, empty_plans=0,
+               multi_college=0)
     for p in plans:
         majors = p.get("containedMajors") or []
         school = _norm_school(p.get("schoolName") or "")
         base_rate = p.get("schoolBaoyan")    # float | None
         items = []
         for m in majors:
-            college = sm2c.get((school, m))
-            if college:
-                override = sc2rate.get((school, college))
-                if override is not None:
-                    pct = round(override * 100)
-                    items.append(f"{m}({college},{pct}%)")
+            colleges = sm2c.get((school, m)) or []
+            if colleges:
+                # 多学院: 每个学院找学院级 rate, 没有则用 base_rate.
+                # 学院名用 '|' 拼接; rate 取所有非空命中的最大值, 没命中用 base_rate.
+                if len(colleges) > 1:
+                    cnt["multi_college"] += 1
+                overrides = [sc2rate.get((school, c)) for c in colleges]
+                hit = [v for v in overrides if v is not None]
+                if hit:
+                    rate = max(hit)
                     cnt["override"] += 1
                 elif base_rate is not None:
-                    pct = round(base_rate * 100)
-                    items.append(f"{m}({college},{pct}%)")
+                    rate = base_rate
                     cnt["school_base"] += 1
                 else:
                     cnt["skip"] += 1
+                    continue
+                colleges_str = "|".join(colleges)
+                pct = round(rate * 100)
+                items.append(f"{m}({colleges_str},{pct}%)")
             else:
-                # 学院未知 → 用 校保研率, college 字段填"本校"以示来源
+                # 学院未知 → 校保研率 + '本校' 占位
                 if base_rate is not None:
                     pct = round(base_rate * 100)
                     items.append(f"{m}(本校,{pct}%)")
@@ -616,6 +624,7 @@ def build_plans_json(wb, out_dir):
     print(f"  (c) 学院未知 + 校保研率(本校):  {bc['unknown_college']} 项")
     print(f"  (d) 跳过 (校保研率也没有):      {bc['skip']} 项")
     print(f"  全空 plans (一项都没出):       {bc['empty_plans']} 条")
+    print(f"  多学院专业 (| 拼接):           {bc['multi_college']} 项")
     plans_slim = [slim_plan(p) for p in plans]
     p = out_dir / "plans.json"
     p.write_text(json.dumps(plans_slim, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
