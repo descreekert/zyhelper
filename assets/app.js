@@ -3174,10 +3174,8 @@ createApp({
       alert(`从 "${srcName}" 合并到 "${store.activeVoluntaryName}":\n  新增 ${added} 项 (${srcIds.length - added} 项已存在)`);
     }
 
-    // 志愿单按档导出
-    // V9: 严格保留 voluntary.value 的实际顺序 (含 pinned 锁定位 + 自动排序的位置).
-    //     Tier 分组只是分段输出, 段内顺序 = 志愿表中实际看到的顺序.
-    //     新增 锁定 列: 📌 锁定 / ⏳ 待确认 / 自动
+    // 志愿单 CSV 导出 (按当前表实际顺序, 不分档分组)
+    // V9: 严格保留 voluntary.value 顺序 (含 pinned 锁定位 + 自动排序). 档作为一列.
     function exportVoluntaryByTier() {
       if (!voluntary.value.length) { alert("志愿单为空"); return; }
       const m = planByIdMap.value;
@@ -3198,28 +3196,18 @@ createApp({
         return /[",\n]/.test(s) ? `"${s}"` : s;
       };
       const lockOf = (id) => pinSet.has(id) ? "📌 锁定" : pendSet.has(id) ? "⏳ 待确认" : "自动";
-      // 按 tier 分组, 段内顺序 = voluntary.value 顺序 (即用户在志愿表中看到的顺序)
-      const groups = { chong: [], wen: [], bao: [], other: [] };
+      const tierLabel = { chong: "冲", wen: "稳", bao: "保" };
+      const lines = ["志愿序号,档,锁定状态,26等位分,26等位次," + head.join(",")];
       voluntary.value.forEach((id, i) => {
         const p = m[id];
         if (!p) return;
         const t = cwb.value ? planTier(p, cwb.value) : null;
-        (groups[t] || groups.other).push({ p, id, idx: i + 1 });
+        const e = equiv(p.isStopped ? p.score25 : p.ref25Score);
+        lines.push(
+          `#${i + 1},${esc(tierLabel[t] || "")},${esc(lockOf(id))},${esc(e.score26)},${esc(e.rank26)},`
+          + cols.map(c => esc(p[c])).join(",")
+        );
       });
-      const lines = ["档,志愿序号,锁定状态,26等位分,26等位次," + head.join(",")];
-      const labels = { chong: "冲档", wen: "稳档", bao: "保档", other: "未分类" };
-      for (const tier of ["chong", "wen", "bao", "other"]) {
-        const g = groups[tier];
-        if (!g.length) continue;
-        lines.push(`${labels[tier]} (${g.length} 条):`);
-        for (const { p, id, idx } of g) {
-          const e = equiv(p.isStopped ? p.score25 : p.ref25Score);
-          lines.push(
-            `${labels[tier]},#${idx},${esc(lockOf(id))},${esc(e.score26)},${esc(e.rank26)},`
-            + cols.map(c => esc(p[c])).join(",")
-          );
-        }
-      }
       const blob = new Blob([new Uint8Array([0xEF, 0xBB, 0xBF]), lines.join("\n")], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a'); a.href = url;

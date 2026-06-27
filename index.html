@@ -266,7 +266,7 @@
                 <span class="text-green-600">保 {{ voluntaryTierCounts.bao }}/{{ paneTargets.bao }}</span>)
               </span>
               <button @click="exportVoluntaryHtml" v-if="voluntary.length" class="text-xs ml-2 text-blue-600 hover:underline">📤 HTML</button>
-              <button @click="exportVoluntaryByTier" v-if="voluntary.length" class="text-xs ml-1 text-amber-600 hover:underline">📤 按档 CSV</button>
+              <button @click="exportVoluntaryByTier" v-if="voluntary.length" class="text-xs ml-1 text-amber-600 hover:underline" title="按当前表顺序导出 CSV (档作为一列)">📤 CSV</button>
               <button @click="exportVoluntaryJson" v-if="voluntary.length" class="text-xs ml-1 text-purple-600 hover:underline" title="导出 JSON (可跨设备/版本导入)">📤 JSON</button>
               <button @click="importVoluntaryJson" class="text-xs ml-1 text-green-600 hover:underline" title="从 JSON 文件导入: 合并/替换/新建">📥 导入 JSON</button>
               <button @click="mergeFromOtherList" v-if="Object.keys(store.voluntaryLists).length > 1" class="text-xs ml-1 text-cyan-600 hover:underline" title="从其它志愿单合并到当前">🔀 合并</button>
