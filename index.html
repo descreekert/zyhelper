@@ -265,7 +265,8 @@
                 <span class="text-amber-600">稳 {{ voluntaryTierCounts.wen }}/{{ paneTargets.wen }}</span>,
                 <span class="text-green-600">保 {{ voluntaryTierCounts.bao }}/{{ paneTargets.bao }}</span>)
               </span>
-              <button @click="exportVoluntaryHtml" v-if="voluntary.length" class="text-xs ml-2 text-blue-600 hover:underline">📤 HTML</button>
+              <button @click="ui.showVoluntaryAnalysis = true" v-if="voluntary.length" class="text-xs ml-2 text-indigo-600 hover:underline font-bold" title="冲稳保/分数分布/学校扎堆 等">📊 分析</button>
+              <button @click="exportVoluntaryHtml" v-if="voluntary.length" class="text-xs ml-1 text-blue-600 hover:underline">📤 HTML</button>
               <button @click="exportVoluntaryByTier" v-if="voluntary.length" class="text-xs ml-1 text-amber-600 hover:underline" title="按当前表顺序导出 CSV (档作为一列)">📤 CSV</button>
               <button @click="exportVoluntaryJson" v-if="voluntary.length" class="text-xs ml-1 text-purple-600 hover:underline" title="导出 JSON (可跨设备/版本导入)">📤 JSON</button>
               <button @click="importVoluntaryJson" class="text-xs ml-1 text-green-600 hover:underline" title="从 JSON 文件导入: 合并/替换/新建">📥 导入 JSON</button>
@@ -437,6 +438,22 @@
         @save="savePriorityOverrides"
         @reset="resetPriorityOverrides"
       ></priority-settings>
+
+      <!-- 志愿分析 modal -->
+      <voluntary-analysis
+        v-if="ui.showVoluntaryAnalysis"
+        :analysis="voluntaryAnalysis"
+        :list-name="store.activeVoluntaryName"
+        :anchor-override="ui.analysisAnchor25"
+        :expanded-schools="ui.analysisExpandedSchools"
+        @close="ui.showVoluntaryAnalysis = false"
+        @set-anchor="v => ui.analysisAnchor25 = v"
+        @toggle-school="n => {
+          const i = ui.analysisExpandedSchools.indexOf(n);
+          if (i >= 0) ui.analysisExpandedSchools.splice(i, 1);
+          else ui.analysisExpandedSchools.push(n);
+        }"
+      ></voluntary-analysis>
 
       <!-- Detail drawer -->
       <detail-drawer

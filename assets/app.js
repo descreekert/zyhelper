@@ -113,6 +113,20 @@ function score26FromRank26(rank, scoreRank) {
   return table[table.length - 1]?.[0] ?? null;
 }
 
+// V9: 26 分数 → 25 等位分 (志愿分析用. equivFromScore25 的反函数)
+function equiv25FromScore26(score26, scoreRank) {
+  if (!score26 || !scoreRank) return null;
+  const eq = scoreRank.equivalent || [];
+  for (const r of eq) if (r.score26 === score26) return r.score25;
+  // 兜底: 26score → 26rank → 25 一分一段反查同位次 25score
+  const r26 = rank26FromScore26(score26, scoreRank);
+  if (r26 == null) return null;
+  const osr25 = scoreRank.oneScoreOneRank?.["2025"];
+  if (!osr25) return null;
+  for (const [s, , cum] of osr25) if (cum >= r26) return s;
+  return null;
+}
+
 // 25 分数 → 26 等位分 + 26 等位次
 // 优先查 equivalent 表 (人工/精确); 不在范围则用 25 一分一段 + 26 一分一段 反查
 function equivFromScore25(score25, scoreRank) {
@@ -541,6 +555,9 @@ const ui = reactive({
   showRatioPanel: false,
   showMoreMenu: false,
   showPrioritySettings: false,
+  showVoluntaryAnalysis: false,
+  analysisAnchor25: null,        // 用户手调 25 等位分 (null = 自动)
+  analysisExpandedSchools: [],   // 学校行展开 id 列表
   detailPlan: null,
   myScore: 0,
   myRank: 0,
@@ -2720,12 +2737,239 @@ const PrioritySettings = {
   `,
 };
 
+// V9: 志愿分析 modal
+const VoluntaryAnalysis = {
+  props: ["analysis", "listName", "anchorOverride", "expandedSchools"],
+  emits: ["close", "set-anchor", "toggle-school"],
+  setup(props, { emit }) {
+    const maxScoreCount = computed(() => {
+      if (!props.analysis) return 1;
+      return Math.max(1, ...props.analysis.byScore.map(r => r.count));
+    });
+    const maxSchoolCount = computed(() => {
+      if (!props.analysis) return 1;
+      return Math.max(1, ...props.analysis.bySchool.map(r => r.count));
+    });
+    const anchorInput = ref("");
+    watch(() => props.analysis, (a) => {
+      if (a) anchorInput.value = String(a.anchor25 || "");
+    }, { immediate: true });
+    function commitAnchor() {
+      const v = parseInt(anchorInput.value, 10);
+      emit("set-anchor", v > 0 ? v : null);
+    }
+    function resetAnchor() {
+      anchorInput.value = String(props.analysis?.autoAnchor25 || "");
+      emit("set-anchor", null);
+    }
+    return { maxScoreCount, maxSchoolCount, anchorInput, commitAnchor, resetAnchor };
+  },
+  template: `
+    <div class="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+         @click.self="$emit('close')">
+      <div class="bg-white rounded-lg shadow-2xl w-full max-w-5xl max-h-[92vh] flex flex-col text-sm">
+        <div class="flex items-center justify-between p-3 border-b">
+          <h3 class="font-bold text-lg">📊 志愿分析 — {{ listName }}</h3>
+          <button @click="$emit('close')" class="text-2xl leading-none text-slate-400 hover:text-red-500">×</button>
+        </div>
+        <div v-if="!analysis" class="flex-1 flex items-center justify-center text-slate-400 py-12">
+          请先在顶部输入 26 分数, 且志愿单不为空
+        </div>
+        <div v-else class="flex-1 overflow-y-auto p-4 space-y-4">
+          <!-- 总览 + anchor 调整 -->
+          <section>
+            <div class="text-xs text-slate-500 mb-1">总览 (统计基于 plan.25 参考分)</div>
+            <div class="flex flex-wrap items-center gap-4 text-sm bg-slate-50 rounded p-2">
+              <span>26 分数: <b class="text-blue-600">{{ analysis.my26 }}</b></span>
+              <span title="自动从 26 分数转出 25 等位分; 可手调">
+                25 等位分 anchor:
+                <input type="number" v-model="anchorInput" @change="commitAnchor" @blur="commitAnchor"
+                       class="w-16 border rounded px-1 py-0.5 text-center font-bold text-blue-700">
+                <button @click="resetAnchor" class="ml-1 text-xs text-slate-400 hover:text-blue-600" title="自动 (= 25 等位 {{ analysis.autoAnchor25 }})">⟲</button>
+              </span>
+              <span>志愿: <b class="text-blue-600">{{ analysis.total }}</b> 项</span>
+              <span>26 计划: <b class="text-blue-600">{{ analysis.totalEnroll }}</b> 人</span>
+            </div>
+            <div class="grid grid-cols-4 gap-2 mt-2 text-xs">
+              <div class="bg-red-50 border border-red-200 rounded p-2">
+                <div class="text-red-700 font-bold">冲 [{{ analysis.ranges.chong.lo }}-{{ analysis.ranges.chong.hi }}]</div>
+                <div>{{ analysis.tiers.chong.items.length }} 项 · {{ analysis.tiers.chong.enroll }} 人</div>
+              </div>
+              <div class="bg-amber-50 border border-amber-200 rounded p-2">
+                <div class="text-amber-700 font-bold">稳 [{{ analysis.ranges.wen.lo }}-{{ analysis.ranges.wen.hi }}]</div>
+                <div>{{ analysis.tiers.wen.items.length }} 项 · {{ analysis.tiers.wen.enroll }} 人</div>
+              </div>
+              <div class="bg-green-50 border border-green-200 rounded p-2">
+                <div class="text-green-700 font-bold">保 [{{ analysis.ranges.bao.lo }}-{{ analysis.ranges.bao.hi }}]</div>
+                <div>{{ analysis.tiers.bao.items.length }} 项 · {{ analysis.tiers.bao.enroll }} 人</div>
+              </div>
+              <div class="bg-slate-100 border border-slate-200 rounded p-2">
+                <div class="text-slate-600 font-bold">范围外</div>
+                <div>{{ analysis.tiers.out.items.length }} 项 · {{ analysis.tiers.out.enroll }} 人</div>
+              </div>
+            </div>
+            <div class="text-[10px] text-slate-400 mt-1">本分析规则: 冲 +6~+15 / 稳 -5~+5 / 保 -20~-6 (相对 25 等位分)</div>
+          </section>
+
+          <!-- 占比柱 -->
+          <section>
+            <div class="text-xs text-slate-500 mb-1">冲稳保占比 (项数)</div>
+            <div class="flex h-7 rounded overflow-hidden text-xs text-white font-bold">
+              <div v-if="analysis.tiers.chong.items.length" class="bg-red-500 flex items-center justify-center"
+                   :style="{ flex: analysis.tiers.chong.items.length }">冲 {{ analysis.tiers.chong.items.length }}</div>
+              <div v-if="analysis.tiers.wen.items.length" class="bg-amber-500 flex items-center justify-center"
+                   :style="{ flex: analysis.tiers.wen.items.length }">稳 {{ analysis.tiers.wen.items.length }}</div>
+              <div v-if="analysis.tiers.bao.items.length" class="bg-green-500 flex items-center justify-center"
+                   :style="{ flex: analysis.tiers.bao.items.length }">保 {{ analysis.tiers.bao.items.length }}</div>
+              <div v-if="analysis.tiers.out.items.length" class="bg-slate-400 flex items-center justify-center"
+                   :style="{ flex: analysis.tiers.out.items.length }">外 {{ analysis.tiers.out.items.length }}</div>
+            </div>
+          </section>
+
+          <!-- 按分数 (含 gap) -->
+          <section>
+            <div class="text-xs text-slate-500 mb-1">每个 25 参考分 (含空档, 共 {{ analysis.byScore.length }} 分)</div>
+            <div class="border rounded max-h-72 overflow-y-auto bg-white">
+              <table class="w-full text-xs">
+                <thead class="sticky top-0 bg-slate-100">
+                  <tr>
+                    <th class="px-2 py-1 text-left w-14">分数</th>
+                    <th class="px-2 py-1 text-left w-10">档</th>
+                    <th class="px-2 py-1 text-center w-10">N</th>
+                    <th class="px-2 py-1 text-center w-14">26 计划</th>
+                    <th class="px-2 py-1 text-left">分布</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="r in analysis.byScore" :key="r.score"
+                      :class="r.count === 0 ? 'opacity-50' : ''">
+                    <td class="px-2 py-0.5">{{ r.score }}</td>
+                    <td class="px-2 py-0.5">
+                      <span v-if="r.tier==='chong'" class="text-red-600">冲</span>
+                      <span v-else-if="r.tier==='wen'" class="text-amber-600">稳</span>
+                      <span v-else-if="r.tier==='bao'" class="text-green-600">保</span>
+                      <span v-else class="text-slate-400">外</span>
+                    </td>
+                    <td class="px-2 py-0.5 text-center">{{ r.count || '-' }}</td>
+                    <td class="px-2 py-0.5 text-center">{{ r.enroll || '-' }}</td>
+                    <td class="px-2 py-0.5">
+                      <div v-if="r.count" class="h-3 rounded"
+                           :class="r.tier==='chong'?'bg-red-400':r.tier==='wen'?'bg-amber-400':r.tier==='bao'?'bg-green-400':'bg-slate-400'"
+                           :style="{ width: (r.count / maxScoreCount * 100) + '%', minWidth: '8px' }"></div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <!-- 按学校 (可展开) -->
+          <section>
+            <div class="text-xs text-slate-500 mb-1">每所学校 ({{ analysis.bySchool.length }} 所) — 点行展开详情</div>
+            <div class="border rounded max-h-96 overflow-y-auto bg-white">
+              <table class="w-full text-xs">
+                <thead class="sticky top-0 bg-slate-100">
+                  <tr>
+                    <th class="px-2 py-1 text-left">学校</th>
+                    <th class="px-2 py-1 text-center w-10">N</th>
+                    <th class="px-2 py-1 text-center w-12">26计划</th>
+                    <th class="px-2 py-1 text-center w-8 text-red-600">冲</th>
+                    <th class="px-2 py-1 text-center w-8 text-amber-600">稳</th>
+                    <th class="px-2 py-1 text-center w-8 text-green-600">保</th>
+                    <th class="px-2 py-1 text-left">分布</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template v-for="s in analysis.bySchool" :key="s.name">
+                    <tr class="border-t hover:bg-slate-50 cursor-pointer"
+                        @click="$emit('toggle-school', s.name)">
+                      <td class="px-2 py-0.5">
+                        <span class="text-slate-400 mr-1">{{ expandedSchools.includes(s.name) ? '▾' : '▸' }}</span>
+                        {{ s.name }}
+                      </td>
+                      <td class="px-2 py-0.5 text-center font-bold">{{ s.count }}</td>
+                      <td class="px-2 py-0.5 text-center">{{ s.enroll }}</td>
+                      <td class="px-2 py-0.5 text-center text-red-600">{{ s.tiers.chong || '-' }}</td>
+                      <td class="px-2 py-0.5 text-center text-amber-600">{{ s.tiers.wen || '-' }}</td>
+                      <td class="px-2 py-0.5 text-center text-green-600">{{ s.tiers.bao || '-' }}</td>
+                      <td class="px-2 py-0.5">
+                        <div class="flex h-3 rounded overflow-hidden" :style="{ width: (s.count / maxSchoolCount * 100) + '%', minWidth: '8px' }">
+                          <div v-if="s.tiers.chong" class="bg-red-400" :style="{ flex: s.tiers.chong }"></div>
+                          <div v-if="s.tiers.wen" class="bg-amber-400" :style="{ flex: s.tiers.wen }"></div>
+                          <div v-if="s.tiers.bao" class="bg-green-400" :style="{ flex: s.tiers.bao }"></div>
+                          <div v-if="s.tiers.out" class="bg-slate-400" :style="{ flex: s.tiers.out }"></div>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr v-if="expandedSchools.includes(s.name)" class="bg-slate-50">
+                      <td colspan="7" class="px-2 py-1">
+                        <table class="w-full text-[11px] bg-white border rounded">
+                          <thead>
+                            <tr class="bg-slate-100">
+                              <th class="px-2 py-1 text-left">城市</th>
+                              <th class="px-2 py-1 text-left">26 招生专业</th>
+                              <th class="px-2 py-1 text-center w-12">档</th>
+                              <th class="px-2 py-1 text-center w-16">25 分/位</th>
+                              <th class="px-2 py-1 text-center w-12">26 计划</th>
+                              <th class="px-2 py-1 text-center w-12">学费</th>
+                              <th class="px-2 py-1 text-left">备注</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr v-for="it in s.items" :key="it.id" class="border-t">
+                              <td class="px-2 py-0.5">{{ it.plan.city || '—' }}</td>
+                              <td class="px-2 py-0.5">{{ it.plan.majorName26 || it.plan.majorName25 || '—' }}</td>
+                              <td class="px-2 py-0.5 text-center">
+                                <span v-if="analysis.ranges.chong.lo <= it.score25 && it.score25 <= analysis.ranges.chong.hi" class="text-red-600">冲</span>
+                                <span v-else-if="analysis.ranges.wen.lo <= it.score25 && it.score25 <= analysis.ranges.wen.hi" class="text-amber-600">稳</span>
+                                <span v-else-if="analysis.ranges.bao.lo <= it.score25 && it.score25 <= analysis.ranges.bao.hi" class="text-green-600">保</span>
+                                <span v-else class="text-slate-400">外</span>
+                              </td>
+                              <td class="px-2 py-0.5 text-center"><b>{{ it.score25 || '—' }}</b>/{{ it.rank25 || '—' }}</td>
+                              <td class="px-2 py-0.5 text-center">{{ it.enroll || '—' }}</td>
+                              <td class="px-2 py-0.5 text-center">{{ it.plan.tuition || '—' }}</td>
+                              <td class="px-2 py-0.5">{{ (it.plan.remarks || '').slice(0, 50) }}</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <!-- Insights -->
+          <section v-if="analysis.insights.length">
+            <div class="text-xs text-slate-500 mb-1">💡 建议 ({{ analysis.insights.length }})</div>
+            <ul class="space-y-1">
+              <li v-for="(t, i) in analysis.insights" :key="i"
+                  class="text-sm px-2 py-1 rounded border"
+                  :class="t.level==='danger' ? 'bg-red-50 border-red-200 text-red-800' :
+                          t.level==='warn'   ? 'bg-amber-50 border-amber-200 text-amber-800' :
+                                               'bg-blue-50 border-blue-200 text-blue-800'">
+                {{ t.text }}
+              </li>
+            </ul>
+          </section>
+          <section v-else>
+            <div class="text-sm text-green-700 bg-green-50 border border-green-200 px-3 py-2 rounded">
+              ✓ 没有发现明显异常 (冲稳保配比、分布、扎堆等)
+            </div>
+          </section>
+        </div>
+      </div>
+    </div>
+  `,
+};
+
 // ========== 主 App ==========
 
 createApp({
   components: {
     ScoreTool, FilterPanel, ResultList, PlanCard, DetailDrawer, CompareBar, FavoritesBar,
-    PrioritySettings, KeywordAutocomplete,
+    PrioritySettings, KeywordAutocomplete, VoluntaryAnalysis,
   },
   setup() {
     const loading = ref(true);
@@ -2996,6 +3240,143 @@ createApp({
         if (t) c[t]++;
       }
       return c;
+    });
+    // V9: 志愿分析
+    // 锚点: 用户 25 等位分 (从 myScore 26 自动转, 也可在 modal 手调 ui.analysisAnchor25)
+    // tier 规则 (用 plan.ref25Score 比 anchor25):
+    //   冲: anchor25 +6 ~ +15
+    //   稳: anchor25 -5 ~ +5
+    //   保: anchor25 -20 ~ -6
+    // 同时统计 26 计划人数 (enrollNum26 || enrollNum25)
+    const voluntaryAnalysis = computed(() => {
+      if (!scoreRank.value || !ui.myScore) return null;
+      const autoAnchor = equiv25FromScore26(ui.myScore, scoreRank.value);
+      const anchor25 = (ui.analysisAnchor25 && ui.analysisAnchor25 > 0)
+        ? ui.analysisAnchor25 : autoAnchor;
+      if (!anchor25) return null;
+      const m = planByIdMap.value;
+      const items = [];
+      for (const id of voluntary.value) {
+        const p = m[id];
+        if (!p) continue;
+        const s25 = p.isStopped ? (p.score25 ?? null) : (p.ref25Score ?? null);
+        const r25 = p.isStopped ? (p.rank25 ?? null) : (p.ref25Rank ?? null);
+        const enroll = p.enrollNum26 || p.enrollNum25 || 0;
+        items.push({ id, plan: p, score25: s25, rank25: r25, enroll });
+      }
+      const ranges = {
+        chong: { lo: anchor25 + 6,  hi: anchor25 + 15 },
+        wen:   { lo: anchor25 - 5,  hi: anchor25 + 5  },
+        bao:   { lo: anchor25 - 20, hi: anchor25 - 6  },
+      };
+      const tierOf = (s) => {
+        if (s == null) return "out";
+        if (s >= ranges.chong.lo && s <= ranges.chong.hi) return "chong";
+        if (s >= ranges.wen.lo   && s <= ranges.wen.hi)   return "wen";
+        if (s >= ranges.bao.lo   && s <= ranges.bao.hi)   return "bao";
+        return "out";
+      };
+      const tiers = {
+        chong: { items: [], enroll: 0 },
+        wen:   { items: [], enroll: 0 },
+        bao:   { items: [], enroll: 0 },
+        out:   { items: [], enroll: 0 },
+      };
+      let totalEnroll = 0;
+      for (const it of items) {
+        const t = tierOf(it.score25);
+        tiers[t].items.push(it);
+        tiers[t].enroll += it.enroll;
+        totalEnroll += it.enroll;
+      }
+      // 按分数分布 (含 gap)
+      const scoreMap = new Map();   // score → { count, enroll }
+      for (const it of items) {
+        if (it.score25 == null) continue;
+        const r = scoreMap.get(it.score25) || { count: 0, enroll: 0 };
+        r.count++; r.enroll += it.enroll;
+        scoreMap.set(it.score25, r);
+      }
+      const lo = Math.min(ranges.bao.lo, ...[...scoreMap.keys(), Infinity]);
+      const hi = Math.max(ranges.chong.hi, ...[...scoreMap.keys(), -Infinity]);
+      const byScore = [];
+      for (let s = hi; s >= lo; s--) {
+        const r = scoreMap.get(s) || { count: 0, enroll: 0 };
+        byScore.push({ score: s, count: r.count, enroll: r.enroll, tier: tierOf(s) });
+      }
+      // 按学校
+      const schoolMap = new Map();
+      for (const it of items) {
+        const k = it.plan.schoolName;
+        if (!schoolMap.has(k)) schoolMap.set(k, {
+          name: k, count: 0, enroll: 0,
+          tiers: { chong: 0, wen: 0, bao: 0, out: 0 },
+          items: [],
+        });
+        const row = schoolMap.get(k);
+        row.count++;
+        row.enroll += it.enroll;
+        row.tiers[tierOf(it.score25)]++;
+        row.items.push(it);
+      }
+      const bySchool = Array.from(schoolMap.values()).sort((a, b) =>
+        b.count - a.count || a.name.localeCompare(b.name));
+      // Insights
+      const insights = [];
+      const total = items.length;
+      if (paneTargets.value && total >= 10) {
+        const tt = paneTargets.value;
+        ["chong", "wen", "bao"].forEach(k => {
+          const lbl = { chong: "冲", wen: "稳", bao: "保" }[k];
+          const a = tiers[k].items.length;
+          const t = tt[k] || 0;
+          if (t > 0) {
+            if (a < Math.max(1, Math.round(t * 0.6))) {
+              insights.push({ level: "warn", text: `${lbl} 档 ${a} 项, 明显低于目标 ${t}, 建议补 ${t - a} 项` });
+            } else if (a > Math.round(t * 1.4)) {
+              insights.push({ level: "info", text: `${lbl} 档 ${a} 项, 超目标 ${t}, 可酌情删减` });
+            }
+          }
+        });
+      }
+      if (tiers.out.items.length) {
+        insights.push({ level: "warn", text: `${tiers.out.items.length} 项不在 冲/稳/保 任何范围 (按本分析规则); 考虑剔除或调整` });
+      }
+      // 分数 gap
+      let gapStart = null, gaps = [];
+      for (const r of byScore) {
+        if (r.count === 0) { if (gapStart == null) gapStart = r.score; }
+        else { if (gapStart != null) {
+            const len = gapStart - r.score;
+            if (len >= 3) gaps.push({ from: gapStart, to: r.score + 1, len });
+            gapStart = null;
+        }}
+      }
+      if (gaps.length) {
+        const top = gaps.slice(0, 3).map(g => `${g.to}-${g.from} (${g.len} 分空白)`).join("、");
+        insights.push({ level: "info", text: `分数空档: ${top}; 可考虑补志愿填空` });
+      }
+      const heavy = bySchool.filter(s => s.count >= 5);
+      if (heavy.length) {
+        insights.push({ level: "warn", text: `单校扎堆: ${heavy.map(s => `${s.name}(${s.count})`).join("、")}; 单校录取被限,建议分散` });
+      }
+      if (total < 30) insights.push({ level: "warn", text: `志愿总数 ${total} 偏少; 辽宁物理类常见 80-112` });
+      else if (total > 120) insights.push({ level: "info", text: `志愿总数 ${total} 偏多; 注意每条质量` });
+      if (tiers.chong.items.length > tiers.bao.items.length * 2 && tiers.bao.items.length > 0) {
+        insights.push({ level: "warn", text: `冲 ${tiers.chong.items.length} > 保 ${tiers.bao.items.length} × 2, 风险偏高, 建议加保档` });
+      }
+      if (!tiers.bao.items.length && total > 0) {
+        insights.push({ level: "danger", text: `保档为空! 极高风险, 必须补充保底志愿` });
+      }
+      // 计划人数维度
+      if (totalEnroll && tiers.bao.enroll < totalEnroll * 0.15) {
+        insights.push({ level: "warn", text: `保档 26 计划人数仅 ${tiers.bao.enroll} (占 ${(tiers.bao.enroll/totalEnroll*100).toFixed(0)}%), 保底名额偏少` });
+      }
+      return {
+        items, tiers, byScore, bySchool, ranges,
+        my26: ui.myScore, autoAnchor25: autoAnchor, anchor25,
+        total, totalEnroll, insights,
+      };
     });
     // 志愿单 HTML 导出 (志愿填报标准 6 列格式)
     async function exportVoluntaryHtml() {
@@ -4173,7 +4554,7 @@ createApp({
       voluntary, voluntarySet, isInVoluntary, voluntaryIndex, toggleVoluntary,
       moveVoluntaryUp, moveVoluntaryDown, moveVoluntaryToTop, moveVoluntaryToBottom, clearVoluntary,
       newVoluntaryList, renameVoluntaryList, duplicateVoluntaryList, deleteVoluntaryList, switchVoluntaryList,
-      voluntaryTierCounts, exportVoluntaryByTier, exportVoluntaryHtml,
+      voluntaryTierCounts, exportVoluntaryByTier, exportVoluntaryHtml, voluntaryAnalysis,
       exportVoluntaryJson, importVoluntaryJson, mergeFromOtherList,
       // V9: 锁定/待确认
       pinnedSet, pendingSet, backupPinnedSet,
