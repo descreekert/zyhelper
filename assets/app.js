@@ -2864,12 +2864,14 @@ const VoluntaryAnalysis = {
             </div>
           </section>
 
+          <!-- 按分数 + 按学校 并排 (PC) / 上下 (mobile), 都不滚动完整显示 -->
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <!-- 按分数 (含 gap, 含录取比率) -->
           <section>
             <div class="text-xs text-slate-500 mb-1">
-              每个 25 参考分 (含空档, 共 {{ analysis.byScore.length }} 分) — <b>同分人数</b>(26)按 25→26 等位映射查 2026 一分一段
+              每个 25 参考分 (含空档, 共 {{ analysis.byScore.length }} 分) — <b>同分</b>(26)按 25→26 等位映射查 2026 一分一段
             </div>
-            <div class="border rounded max-h-80 overflow-y-auto bg-white">
+            <div class="border rounded bg-white">
               <table class="w-full text-xs">
                 <thead class="sticky top-0 bg-slate-100">
                   <tr>
@@ -2954,7 +2956,7 @@ const VoluntaryAnalysis = {
           <!-- 按学校 (可展开) -->
           <section>
             <div class="text-xs text-slate-500 mb-1">每所学校 ({{ analysis.bySchool.length }} 所) — 点行展开详情</div>
-            <div class="border rounded max-h-96 overflow-y-auto bg-white">
+            <div class="border rounded bg-white">
               <table class="w-full text-xs">
                 <thead class="sticky top-0 bg-slate-100">
                   <tr>
@@ -3027,6 +3029,7 @@ const VoluntaryAnalysis = {
               </table>
             </div>
           </section>
+          </div><!-- /grid: 按分数 + 按学校 -->
 
           <!-- Insights -->
           <section v-if="analysis.insights.length">
