@@ -447,6 +447,7 @@
         :anchor-override="ui.analysisAnchor25"
         :rank-override="ui.analysisAnchorRank26"
         :expanded-schools="ui.analysisExpandedSchools"
+        :expanded-scores="ui.analysisExpandedScores"
         @close="ui.showVoluntaryAnalysis = false"
         @set-anchor="v => ui.analysisAnchor25 = v"
         @set-rank="v => ui.analysisAnchorRank26 = v"
@@ -454,6 +455,11 @@
           const i = ui.analysisExpandedSchools.indexOf(n);
           if (i >= 0) ui.analysisExpandedSchools.splice(i, 1);
           else ui.analysisExpandedSchools.push(n);
+        }"
+        @toggle-score="s => {
+          const i = ui.analysisExpandedScores.indexOf(s);
+          if (i >= 0) ui.analysisExpandedScores.splice(i, 1);
+          else ui.analysisExpandedScores.push(s);
         }"
       ></voluntary-analysis>
 

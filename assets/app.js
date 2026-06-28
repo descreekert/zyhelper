@@ -559,6 +559,7 @@ const ui = reactive({
   analysisAnchor25: null,        // 用户手调 25 等位分 (null = 自动)
   analysisAnchorRank26: null,    // 用户手调 26 实际位次 (null = 用 myRank, 用户提到"按 8150 作实际预测")
   analysisExpandedSchools: [],   // 学校行展开 id 列表
+  analysisExpandedScores: [],    // 一分一段行展开 (25 score) 列表
   detailPlan: null,
   myScore: 0,
   myRank: 0,
@@ -2740,8 +2741,8 @@ const PrioritySettings = {
 
 // V9: 志愿分析 modal
 const VoluntaryAnalysis = {
-  props: ["analysis", "listName", "anchorOverride", "rankOverride", "expandedSchools"],
-  emits: ["close", "set-anchor", "set-rank", "toggle-school"],
+  props: ["analysis", "listName", "anchorOverride", "rankOverride", "expandedSchools", "expandedScores"],
+  emits: ["close", "set-anchor", "set-rank", "toggle-school", "toggle-score"],
   setup(props, { emit }) {
     const maxScoreCount = computed(() => {
       if (!props.analysis) return 1;
@@ -2883,32 +2884,67 @@ const VoluntaryAnalysis = {
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="r in analysis.byScore" :key="r.score"
-                      :class="r.count === 0 ? 'opacity-50' : ''">
-                    <td class="px-2 py-0.5"><b>{{ r.score }}</b></td>
-                    <td class="px-2 py-0.5 text-center">
-                      <span v-if="r.tier==='chong'" class="text-red-600">冲</span>
-                      <span v-else-if="r.tier==='wen'" class="text-amber-600">稳</span>
-                      <span v-else-if="r.tier==='bao'" class="text-green-600">保</span>
-                      <span v-else class="text-slate-400">外</span>
-                    </td>
-                    <td class="px-2 py-0.5 text-center text-slate-500">{{ r.equiv26 ?? '—' }}</td>
-                    <td class="px-2 py-0.5 text-center">{{ r.count || '-' }}</td>
-                    <td class="px-2 py-0.5 text-center">{{ r.enroll || '-' }}</td>
-                    <td class="px-2 py-0.5 text-center">{{ r.cnt26 ?? '—' }}</td>
-                    <td class="px-2 py-0.5 text-center text-slate-500">{{ r.weightedCnt ?? '—' }}</td>
-                    <td class="px-2 py-0.5 text-center text-slate-500">
-                      <span v-if="r.ratio != null">{{ (r.ratio * 100).toFixed(0) }}%</span>
-                      <span v-else>—</span>
-                    </td>
-                    <td class="px-2 py-0.5 text-center">
-                      <span v-if="r.weightedRatio != null"
-                            :class="r.weightedRatio >= 1 ? 'text-green-700 font-bold' : r.weightedRatio >= 0.5 ? 'text-amber-700 font-bold' : 'text-red-600'">
-                        {{ r.weightedRatio >= 5 ? '>500%' : (r.weightedRatio * 100).toFixed(0) + '%' }}
-                      </span>
-                      <span v-else class="text-slate-300">—</span>
-                    </td>
-                  </tr>
+                  <template v-for="r in analysis.byScore" :key="r.score">
+                    <tr :class="[
+                          r.count === 0 ? 'opacity-50' : 'cursor-pointer hover:bg-slate-50',
+                          expandedScores.includes(r.score) ? 'bg-slate-100' : '']"
+                        @click="r.count > 0 && $emit('toggle-score', r.score)">
+                      <td class="px-2 py-0.5">
+                        <span v-if="r.count > 0" class="text-slate-400 mr-1">{{ expandedScores.includes(r.score) ? '▾' : '▸' }}</span>
+                        <b>{{ r.score }}</b>
+                      </td>
+                      <td class="px-2 py-0.5 text-center">
+                        <span v-if="r.tier==='chong'" class="text-red-600">冲</span>
+                        <span v-else-if="r.tier==='wen'" class="text-amber-600">稳</span>
+                        <span v-else-if="r.tier==='bao'" class="text-green-600">保</span>
+                        <span v-else class="text-slate-400">外</span>
+                      </td>
+                      <td class="px-2 py-0.5 text-center text-slate-500">{{ r.equiv26 ?? '—' }}</td>
+                      <td class="px-2 py-0.5 text-center">{{ r.count || '-' }}</td>
+                      <td class="px-2 py-0.5 text-center">{{ r.enroll || '-' }}</td>
+                      <td class="px-2 py-0.5 text-center">{{ r.cnt26 ?? '—' }}</td>
+                      <td class="px-2 py-0.5 text-center text-slate-500">{{ r.weightedCnt ?? '—' }}</td>
+                      <td class="px-2 py-0.5 text-center text-slate-500">
+                        <span v-if="r.ratio != null">{{ (r.ratio * 100).toFixed(0) }}%</span>
+                        <span v-else>—</span>
+                      </td>
+                      <td class="px-2 py-0.5 text-center">
+                        <span v-if="r.weightedRatio != null"
+                              :class="r.weightedRatio >= 1 ? 'text-green-700 font-bold' : r.weightedRatio >= 0.5 ? 'text-amber-700 font-bold' : 'text-red-600'">
+                          {{ r.weightedRatio >= 5 ? '>500%' : (r.weightedRatio * 100).toFixed(0) + '%' }}
+                        </span>
+                        <span v-else class="text-slate-300">—</span>
+                      </td>
+                    </tr>
+                    <tr v-if="r.count > 0 && expandedScores.includes(r.score)" class="bg-slate-50">
+                      <td colspan="9" class="px-2 py-1">
+                        <table class="w-full text-[11px] bg-white border rounded">
+                          <thead>
+                            <tr class="bg-slate-100">
+                              <th class="px-2 py-1 text-left">学校</th>
+                              <th class="px-2 py-1 text-left">城市</th>
+                              <th class="px-2 py-1 text-left">26 招生专业</th>
+                              <th class="px-2 py-1 text-center w-14">25 分/位</th>
+                              <th class="px-2 py-1 text-center w-12">26 计划</th>
+                              <th class="px-2 py-1 text-center w-12">学费</th>
+                              <th class="px-2 py-1 text-left">备注</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr v-for="it in r.items" :key="it.id" class="border-t">
+                              <td class="px-2 py-0.5">{{ it.plan.schoolName }}</td>
+                              <td class="px-2 py-0.5">{{ it.plan.city || '—' }}</td>
+                              <td class="px-2 py-0.5">{{ it.plan.majorName26 || it.plan.majorName25 || '—' }}</td>
+                              <td class="px-2 py-0.5 text-center"><b>{{ it.score25 || '—' }}</b>/{{ it.rank25 || '—' }}</td>
+                              <td class="px-2 py-0.5 text-center">{{ it.enroll || '—' }}</td>
+                              <td class="px-2 py-0.5 text-center">{{ it.plan.tuition || '—' }}</td>
+                              <td class="px-2 py-0.5">{{ (it.plan.remarks || '').slice(0, 50) }}</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </td>
+                    </tr>
+                  </template>
                 </tbody>
               </table>
             </div>
@@ -3341,11 +3377,12 @@ createApp({
         totalEnroll += it.enroll;
       }
       // 按分数分布 (含 gap)
-      const scoreMap = new Map();   // score → { count, enroll }
+      const scoreMap = new Map();   // score → { count, enroll, items }
       for (const it of items) {
         if (it.score25 == null) continue;
-        const r = scoreMap.get(it.score25) || { count: 0, enroll: 0 };
+        const r = scoreMap.get(it.score25) || { count: 0, enroll: 0, items: [] };
         r.count++; r.enroll += it.enroll;
+        r.items.push(it);
         scoreMap.set(it.score25, r);
       }
       const lo = Math.min(ranges.bao.lo, ...[...scoreMap.keys(), Infinity]);
@@ -3363,7 +3400,7 @@ createApp({
         ? ui.analysisAnchorRank26 : ui.myRank;
       const byScore = [];
       for (let s = hi; s >= lo; s--) {
-        const r = scoreMap.get(s) || { count: 0, enroll: 0 };
+        const r = scoreMap.get(s) || { count: 0, enroll: 0, items: [] };
         const eq = equivFromScore25(s, scoreRank.value);
         const cnt26 = (eq.score26 != null) ? (cnt26Map.get(eq.score26) ?? null) : null;
         const cum26 = (eq.score26 != null) ? (cum26Map.get(eq.score26) ?? null) : null;
@@ -3383,7 +3420,7 @@ createApp({
         }
         const tier = tierOf(s);
         byScore.push({
-          score: s, count: r.count, enroll: r.enroll, tier,
+          score: s, count: r.count, enroll: r.enroll, items: r.items, tier,
           equiv26: eq.score26, equiv26Rank: eq.rank26,
           cnt26, cum26, weightedCnt, ratio, weightedRatio,
         });
