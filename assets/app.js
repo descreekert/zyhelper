@@ -557,6 +557,7 @@ const ui = reactive({
   showPrioritySettings: false,
   showVoluntaryAnalysis: false,
   analysisAnchor25: null,        // 用户手调 25 等位分 (null = 自动)
+  analysisAnchorRank26: null,    // 用户手调 26 实际位次 (null = 用 myRank, 用户提到"按 8150 作实际预测")
   analysisExpandedSchools: [],   // 学校行展开 id 列表
   detailPlan: null,
   myScore: 0,
@@ -2739,8 +2740,8 @@ const PrioritySettings = {
 
 // V9: 志愿分析 modal
 const VoluntaryAnalysis = {
-  props: ["analysis", "listName", "anchorOverride", "expandedSchools"],
-  emits: ["close", "set-anchor", "toggle-school"],
+  props: ["analysis", "listName", "anchorOverride", "rankOverride", "expandedSchools"],
+  emits: ["close", "set-anchor", "set-rank", "toggle-school"],
   setup(props, { emit }) {
     const maxScoreCount = computed(() => {
       if (!props.analysis) return 1;
@@ -2751,8 +2752,12 @@ const VoluntaryAnalysis = {
       return Math.max(1, ...props.analysis.bySchool.map(r => r.count));
     });
     const anchorInput = ref("");
+    const rankInput = ref("");
     watch(() => props.analysis, (a) => {
-      if (a) anchorInput.value = String(a.anchor25 || "");
+      if (a) {
+        anchorInput.value = String(a.anchor25 || "");
+        rankInput.value = String(a.userRank26 || "");
+      }
     }, { immediate: true });
     function commitAnchor() {
       const v = parseInt(anchorInput.value, 10);
@@ -2762,7 +2767,17 @@ const VoluntaryAnalysis = {
       anchorInput.value = String(props.analysis?.autoAnchor25 || "");
       emit("set-anchor", null);
     }
-    return { maxScoreCount, maxSchoolCount, anchorInput, commitAnchor, resetAnchor };
+    function commitRank() {
+      const v = parseInt(rankInput.value, 10);
+      emit("set-rank", v > 0 ? v : null);
+    }
+    function resetRank() {
+      rankInput.value = String(props.analysis?.myRank26 || "");
+      emit("set-rank", null);
+    }
+    return { maxScoreCount, maxSchoolCount,
+             anchorInput, commitAnchor, resetAnchor,
+             rankInput, commitRank, resetRank };
   },
   template: `
     <div class="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
@@ -2782,10 +2797,16 @@ const VoluntaryAnalysis = {
             <div class="flex flex-wrap items-center gap-4 text-sm bg-slate-50 rounded p-2">
               <span>26 分数: <b class="text-blue-600">{{ analysis.my26 }}</b></span>
               <span title="自动从 26 分数转出 25 等位分; 可手调">
-                25 等位分 anchor:
+                25 等位:
                 <input type="number" v-model="anchorInput" @change="commitAnchor" @blur="commitAnchor"
                        class="w-16 border rounded px-1 py-0.5 text-center font-bold text-blue-700">
-                <button @click="resetAnchor" class="ml-1 text-xs text-slate-400 hover:text-blue-600" title="自动 (= 25 等位 {{ analysis.autoAnchor25 }})">⟲</button>
+                <button @click="resetAnchor" class="ml-1 text-xs text-slate-400 hover:text-blue-600" title="自动 (= {{ analysis.autoAnchor25 }})">⟲</button>
+              </span>
+              <span title="加权录取比率用. 默认 = 输入框里的 myRank, 可调 (例 8324→8150)">
+                26 实际预测位次:
+                <input type="number" v-model="rankInput" @change="commitRank" @blur="commitRank"
+                       class="w-20 border rounded px-1 py-0.5 text-center font-bold text-purple-700">
+                <button @click="resetRank" class="ml-1 text-xs text-slate-400 hover:text-purple-600" title="自动 (= myRank {{ analysis.myRank26 }})">⟲</button>
               </span>
               <span>志愿: <b class="text-blue-600">{{ analysis.total }}</b> 项</span>
               <span>26 计划: <b class="text-blue-600">{{ analysis.totalEnroll }}</b> 人</span>
@@ -2794,17 +2815,26 @@ const VoluntaryAnalysis = {
               <div class="bg-red-50 border border-red-200 rounded p-2">
                 <div class="text-red-700 font-bold">冲 [{{ analysis.ranges.chong.lo }}-{{ analysis.ranges.chong.hi }}]</div>
                 <div>{{ analysis.tiers.chong.items.length }} 项 · 招{{ analysis.tiers.chong.enroll }} / 同{{ analysis.tiers.chong.cnt26 || '?' }} 人</div>
-                <div v-if="analysis.tiers.chong.ratio != null" class="font-bold mt-0.5">比率 {{ (analysis.tiers.chong.ratio * 100).toFixed(1) }}%</div>
+                <div class="mt-0.5">
+                  <span class="text-slate-500" title="未加权: 招生/同分">原 {{ analysis.tiers.chong.ratio != null ? (analysis.tiers.chong.ratio * 100).toFixed(1) + '%' : '—' }}</span>
+                  <span v-if="analysis.tiers.chong.weightedRatio != null" class="ml-2 font-bold text-red-800" title="加权: 招生/(用户位次相关的实际竞争人数)">加权 {{ (analysis.tiers.chong.weightedRatio * 100).toFixed(1) }}%</span>
+                </div>
               </div>
               <div class="bg-amber-50 border border-amber-200 rounded p-2">
                 <div class="text-amber-700 font-bold">稳 [{{ analysis.ranges.wen.lo }}-{{ analysis.ranges.wen.hi }}]</div>
                 <div>{{ analysis.tiers.wen.items.length }} 项 · 招{{ analysis.tiers.wen.enroll }} / 同{{ analysis.tiers.wen.cnt26 || '?' }} 人</div>
-                <div v-if="analysis.tiers.wen.ratio != null" class="font-bold mt-0.5">比率 {{ (analysis.tiers.wen.ratio * 100).toFixed(1) }}%</div>
+                <div class="mt-0.5">
+                  <span class="text-slate-500">原 {{ analysis.tiers.wen.ratio != null ? (analysis.tiers.wen.ratio * 100).toFixed(1) + '%' : '—' }}</span>
+                  <span v-if="analysis.tiers.wen.weightedRatio != null" class="ml-2 font-bold text-amber-800">加权 {{ (analysis.tiers.wen.weightedRatio * 100).toFixed(1) }}%</span>
+                </div>
               </div>
               <div class="bg-green-50 border border-green-200 rounded p-2">
                 <div class="text-green-700 font-bold">保 [{{ analysis.ranges.bao.lo }}-{{ analysis.ranges.bao.hi }}]</div>
                 <div>{{ analysis.tiers.bao.items.length }} 项 · 招{{ analysis.tiers.bao.enroll }} / 同{{ analysis.tiers.bao.cnt26 || '?' }} 人</div>
-                <div v-if="analysis.tiers.bao.ratio != null" class="font-bold mt-0.5">比率 {{ (analysis.tiers.bao.ratio * 100).toFixed(1) }}%</div>
+                <div class="mt-0.5">
+                  <span class="text-slate-500">原 {{ analysis.tiers.bao.ratio != null ? (analysis.tiers.bao.ratio * 100).toFixed(1) + '%' : '—' }}</span>
+                  <span v-if="analysis.tiers.bao.weightedRatio != null" class="ml-2 font-bold text-green-800">加权 {{ (analysis.tiers.bao.weightedRatio * 100).toFixed(1) }}%</span>
+                </div>
               </div>
               <div class="bg-slate-100 border border-slate-200 rounded p-2">
                 <div class="text-slate-600 font-bold">范围外</div>
@@ -2843,12 +2873,13 @@ const VoluntaryAnalysis = {
                   <tr>
                     <th class="px-2 py-1 text-left w-12">25 分</th>
                     <th class="px-2 py-1 text-center w-8">档</th>
-                    <th class="px-2 py-1 text-center w-12">→26等</th>
+                    <th class="px-2 py-1 text-center w-12" title="25→26 等位分">→26</th>
                     <th class="px-2 py-1 text-center w-8">N</th>
                     <th class="px-2 py-1 text-center w-12">26招生</th>
-                    <th class="px-2 py-1 text-center w-12">26同分</th>
-                    <th class="px-2 py-1 text-center w-14">录取比率</th>
-                    <th class="px-2 py-1 text-left">分布</th>
+                    <th class="px-2 py-1 text-center w-12" title="26 同分人数 (一分一段本分人数)">26同分</th>
+                    <th class="px-2 py-1 text-center w-12" title="加权同分 = 你位次相关的实际竞争对手数">加权同</th>
+                    <th class="px-2 py-1 text-center w-12">原比率</th>
+                    <th class="px-2 py-1 text-center w-14">加权比率</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2865,17 +2896,17 @@ const VoluntaryAnalysis = {
                     <td class="px-2 py-0.5 text-center">{{ r.count || '-' }}</td>
                     <td class="px-2 py-0.5 text-center">{{ r.enroll || '-' }}</td>
                     <td class="px-2 py-0.5 text-center">{{ r.cnt26 ?? '—' }}</td>
+                    <td class="px-2 py-0.5 text-center text-slate-500">{{ r.weightedCnt ?? '—' }}</td>
+                    <td class="px-2 py-0.5 text-center text-slate-500">
+                      <span v-if="r.ratio != null">{{ (r.ratio * 100).toFixed(0) }}%</span>
+                      <span v-else>—</span>
+                    </td>
                     <td class="px-2 py-0.5 text-center">
-                      <span v-if="r.ratio != null"
-                            :class="r.ratio >= 1 ? 'text-green-700 font-bold' : r.ratio >= 0.5 ? 'text-amber-700' : 'text-red-600'">
-                        {{ (r.ratio * 100).toFixed(0) }}%
+                      <span v-if="r.weightedRatio != null"
+                            :class="r.weightedRatio >= 1 ? 'text-green-700 font-bold' : r.weightedRatio >= 0.5 ? 'text-amber-700 font-bold' : 'text-red-600'">
+                        {{ r.weightedRatio >= 5 ? '>500%' : (r.weightedRatio * 100).toFixed(0) + '%' }}
                       </span>
                       <span v-else class="text-slate-300">—</span>
-                    </td>
-                    <td class="px-2 py-0.5">
-                      <div v-if="r.count" class="h-3 rounded"
-                           :class="r.tier==='chong'?'bg-red-400':r.tier==='wen'?'bg-amber-400':r.tier==='bao'?'bg-green-400':'bg-slate-400'"
-                           :style="{ width: (r.count / maxScoreCount * 100) + '%', minWidth: '8px' }"></div>
                     </td>
                   </tr>
                 </tbody>
@@ -3319,31 +3350,52 @@ createApp({
       }
       const lo = Math.min(ranges.bao.lo, ...[...scoreMap.keys(), Infinity]);
       const hi = Math.max(ranges.chong.hi, ...[...scoreMap.keys(), -Infinity]);
-      // 用于查 2026 一分一段 本分人数 (按 26 score)
+      // 用于查 2026 一分一段 本分人数 + 累计人数 (按 26 score)
       const osr26 = scoreRank.value?.oneScoreOneRank?.["2026"];
-      const cnt26Map = new Map();
-      if (osr26) for (const [sc, cnt] of osr26) cnt26Map.set(sc, cnt);
+      const cnt26Map = new Map();    // 26 score → 本分人数
+      const cum26Map = new Map();    // 26 score → 累计人数
+      if (osr26) for (const [sc, cnt, cum] of osr26) {
+        cnt26Map.set(sc, cnt);
+        cum26Map.set(sc, cum);
+      }
+      // 用户 26 位次 anchor (可手调, 例: 用户 myRank=8324 但想用 8150 做实际预测)
+      const userRank26 = (ui.analysisAnchorRank26 && ui.analysisAnchorRank26 > 0)
+        ? ui.analysisAnchorRank26 : ui.myRank;
       const byScore = [];
       for (let s = hi; s >= lo; s--) {
         const r = scoreMap.get(s) || { count: 0, enroll: 0 };
         const eq = equivFromScore25(s, scoreRank.value);
         const cnt26 = (eq.score26 != null) ? (cnt26Map.get(eq.score26) ?? null) : null;
+        const cum26 = (eq.score26 != null) ? (cum26Map.get(eq.score26) ?? null) : null;
         const ratio = (r.enroll > 0 && cnt26 > 0) ? r.enroll / cnt26 : null;
+        // 加权同分: 用户在 S26 内的"竞争对手数"
+        //   累计 X = cum26; 本分 N = cnt26; 用户位次 R = userRank26
+        //   R ≤ X - N  (用户超越该分)        → 加权 = 1 (录取近似 100%)
+        //   X-N < R ≤ X (用户与该分同分)     → 加权 = R - (X - N)
+        //   R > X      (用户低于该分)         → 加权 = N (全员竞争)
+        let weightedCnt = null, weightedRatio = null;
+        if (cnt26 != null && cum26 != null && userRank26 > 0) {
+          const start = cum26 - cnt26;
+          if (userRank26 <= start) weightedCnt = 1;
+          else if (userRank26 <= cum26) weightedCnt = Math.max(1, userRank26 - start);
+          else weightedCnt = cnt26;
+          if (r.enroll > 0) weightedRatio = r.enroll / weightedCnt;
+        }
         const tier = tierOf(s);
         byScore.push({
           score: s, count: r.count, enroll: r.enroll, tier,
-          equiv26: eq.score26, equiv26Rank: eq.rank26, cnt26, ratio,
+          equiv26: eq.score26, equiv26Rank: eq.rank26,
+          cnt26, cum26, weightedCnt, ratio, weightedRatio,
         });
-        // 累计到 tier 的 26 同分人数 (整个 tier 分数范围内, 每分 cnt26 都计入,
-        // 不论该分数是否有志愿 — 反映"该档分数段内总考生数")
         if (tier !== "out" && cnt26 != null) {
           tiers[tier].cnt26 += cnt26;
+          if (weightedCnt != null) tiers[tier].weightedCnt = (tiers[tier].weightedCnt || 0) + weightedCnt;
         }
       }
-      // tier 录取比率
       for (const k of ["chong", "wen", "bao", "out"]) {
         const t = tiers[k];
         t.ratio = (t.enroll > 0 && t.cnt26 > 0) ? t.enroll / t.cnt26 : null;
+        t.weightedRatio = (t.enroll > 0 && t.weightedCnt > 0) ? t.enroll / t.weightedCnt : null;
       }
       // 按学校
       const schoolMap = new Map();
@@ -3416,6 +3468,7 @@ createApp({
       return {
         items, tiers, byScore, bySchool, ranges,
         my26: ui.myScore, autoAnchor25: autoAnchor, anchor25,
+        myRank26: ui.myRank, userRank26,        // 实际用的 26 位次 anchor
         total, totalEnroll, insights,
       };
     });

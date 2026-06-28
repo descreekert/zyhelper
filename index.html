@@ -445,9 +445,11 @@
         :analysis="voluntaryAnalysis"
         :list-name="store.activeVoluntaryName"
         :anchor-override="ui.analysisAnchor25"
+        :rank-override="ui.analysisAnchorRank26"
         :expanded-schools="ui.analysisExpandedSchools"
         @close="ui.showVoluntaryAnalysis = false"
         @set-anchor="v => ui.analysisAnchor25 = v"
+        @set-rank="v => ui.analysisAnchorRank26 = v"
         @toggle-school="n => {
           const i = ui.analysisExpandedSchools.indexOf(n);
           if (i >= 0) ui.analysisExpandedSchools.splice(i, 1);
