@@ -145,10 +145,11 @@ function computeAdmitProb(plan, userRank25) {
   }
   const heat = majorHeat(plan);
   const effPlanRank = planRank25 * (1 + heat.pct);
-  const k = 20;
-  const x = (effPlanRank - userRank25) / effPlanRank;
-  const prob = 1 / (1 + Math.exp(-k * x));
-  return { prob: Math.max(0.01, Math.min(0.98, prob)), isUncertain: false, heat, effPlanRank };
+  // 绝对位次差 / SCALE (SCALE ≈ 5 分的位次跨度, 高考典型年间波动)
+  const SCALE = 1500;
+  const diff = effPlanRank - userRank25;   // 正 = 你比门槛靠前; 负 = 比门槛靠后
+  const prob = 1 / (1 + Math.exp(-diff / SCALE));
+  return { prob: Math.max(0.02, Math.min(0.98, prob)), isUncertain: false, heat, effPlanRank, diff };
 }
 
 // V9: 26 分数 → 25 等位分 (志愿分析用. equivFromScore25 的反函数)
@@ -337,6 +338,7 @@ const COLUMNS = [
   { key: "diff",    label: "变化",     width: 100, sortable: false },
   { key: "score",   label: "分数 25/26",   width: 100, sortable: true,  sortField: "ref25Score" },
   { key: "rank",    label: "位次 25/26",   width: 120, sortable: true,  sortField: "ref25Rank" },
+  { key: "admitProb", label: "录取率", width: 70, sortable: false },
   { key: "conf",    label: "可信度",   width: 60,  sortable: true,  sortField: "refConfidence" },
   { key: "eval",    label: "学科评估", width: 130, sortable: false },
   { key: "soft",    label: "软科评级", width: 90,  sortable: false },
@@ -1451,7 +1453,7 @@ const ResultList = {
           "columns", "sortKeys", "cwb", "paneTargets",
           "voluntary", "voluntarySet", "columnWidths", "planOverrides",
           "recommendData", "scoreRank",
-          "pinnedSet", "pendingSet", "backupPinnedSet", "selectedVolIds"],
+          "pinnedSet", "pendingSet", "backupPinnedSet", "selectedVolIds", "admitProbFn"],
   emits: ["page-change", "open-detail", "toggle-compare", "toggle-favorite", "toggle-expand",
           "sort-col", "col-drop", "col-resize",
           "toggle-voluntary", "vol-up", "vol-down", "vol-top", "vol-bottom",
@@ -1523,6 +1525,7 @@ const ResultList = {
     function score26Of(p) { return getEquiv(score25Of(p)).score26; }
     function rank26Of(p) { return getEquiv(score25Of(p)).rank26; }
     // V9: 锁定 / 待确认 状态查询
+    function getAdmit(p) { return props.admitProbFn ? props.admitProbFn(p) : null; }
     function isPinned(id) { return props.pinnedSet && props.pinnedSet.has(id); }
     function isPending(id) { return props.pendingSet && props.pendingSet.has(id); }
     function wasPinned(id) { return props.backupPinnedSet && props.backupPinnedSet.has(id); }
@@ -1605,7 +1608,7 @@ const ResultList = {
              onColDragStart, onColDrop, startResize, colWidth,
              paneLists, paneCounts, volIdx,
              score25Of, rank25Of, score26Of, rank26Of,
-             isPinned, isPending, wasPinned, isSelected, selectedCount,
+             isPinned, isPending, wasPinned, isSelected, selectedCount, getAdmit,
              editingScore, editingValue, startEditScore, commitEditScore, cancelEditScore, isEdited };
   },
   computed: {
@@ -1930,6 +1933,21 @@ const ResultList = {
                     <span>{{ rank25Of(p) ?? '—' }}</span>
                     <span class="text-slate-400 mx-0.5">/</span>
                     <span class="text-slate-500">{{ rank26Of(p) ?? '—' }}</span>
+                  </td>
+                  <td v-else-if="c.key==='admitProb'" :class="['col-'+c.key, 'text-center']">
+                    <template v-if="getAdmit(p)">
+                      <template v-if="getAdmit(p).prob != null">
+                        <span :class="getAdmit(p).prob >= 0.7 ? 'text-green-700 font-bold' : getAdmit(p).prob >= 0.4 ? 'text-amber-700 font-bold' : 'text-red-600 font-bold'"
+                              :title="'热度: ' + (getAdmit(p).heat ? getAdmit(p).heat.name : '—') + (getAdmit(p).effPlanRank ? ', 有效位次 ' + Math.round(getAdmit(p).effPlanRank) : '')">
+                          {{ (getAdmit(p).prob * 100).toFixed(0) }}%
+                        </span>
+                        <span v-if="getAdmit(p).heat && getAdmit(p).heat.idx >= 4" class="ml-0.5 text-[9px]"
+                              :class="getAdmit(p).heat.idx >= 6 ? 'text-red-500' : 'text-amber-500'"
+                              :title="getAdmit(p).heat.name">🔥</span>
+                      </template>
+                      <span v-else class="text-slate-400" title="新增专业, 无 25 参考">新?</span>
+                    </template>
+                    <span v-else class="text-slate-300">—</span>
                   </td>
                   <td v-else-if="c.key==='tuition'" :class="['col-'+c.key, 'text-right']">{{ cellValue(p, c.key) }}</td>
                   <td v-else-if="c.key==='conf'" :class="'col-'+c.key"><conf-badge :conf="cellValue(p, c.key)"></conf-badge></td>
@@ -4059,6 +4077,20 @@ createApp({
       }
       return c;
     });
+
+    // V9: 用户 25 等位位次 (录取率计算用)
+    //   priority: ui.analysisAnchor25 (手调) > equiv25(myScore) auto
+    const userRank25Anchor = computed(() => {
+      const sr = scoreRank.value;
+      if (!sr) return null;
+      let s25 = (ui.analysisAnchor25 > 0) ? ui.analysisAnchor25
+              : (ui.myScore > 0 ? equiv25FromScore26(ui.myScore, sr) : null);
+      if (!s25) return null;
+      return rank25FromScore25(s25, sr);
+    });
+    function admitProbFor(plan) {
+      return computeAdmitProb(plan, userRank25Anchor.value);
+    }
 
     // tier 映射 (id -> 'chong'|'wen'|'bao'|null)
     // voluntary 模式用 relaxed (每条都归一档); 其它模式用 strict
