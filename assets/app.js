@@ -135,21 +135,27 @@ function majorHeat(plan) {
 }
 function computeAdmitProb(plan, userRank25) {
   if (!plan) return { prob: null, isUncertain: true };
-  // 新增专业: 无 25 参考, 标记不确定
   if (plan.isNew === "新增") {
     return { prob: null, isUncertain: true, reason: "新增", heat: majorHeat(plan) };
   }
-  const planRank25 = plan.ref25Rank || plan.rank25 || null;
-  if (!planRank25 || !userRank25) {
+  const r25  = plan.ref25Rank || plan.rank25 || null;   // 25 当年门槛
+  const ravg = plan.avgRank || null;                     // 多年平均门槛 (22-25)
+  // 参考位次 = ref25 与 avgRank 的 50/50 平均 (平滑大小年波动); 缺一者 → 用另一者
+  let refRank = null;
+  if (r25 && ravg) refRank = Math.round((r25 + ravg) / 2);
+  else refRank = r25 || ravg;
+  if (!refRank || !userRank25) {
     return { prob: null, isUncertain: true, reason: "位次缺失", heat: majorHeat(plan) };
   }
   const heat = majorHeat(plan);
-  const effPlanRank = planRank25 * (1 + heat.pct);
-  // 绝对位次差 / SCALE (SCALE ≈ 5 分的位次跨度, 高考典型年间波动)
-  const SCALE = 1500;
-  const diff = effPlanRank - userRank25;   // 正 = 你比门槛靠前; 负 = 比门槛靠后
+  const effPlanRank = refRank * (1 + heat.pct);
+  const SCALE = 1500;     // ≈ 5 分高考波动 (位次跨度)
+  const diff = effPlanRank - userRank25;
   const prob = 1 / (1 + Math.exp(-diff / SCALE));
-  return { prob: Math.max(0.02, Math.min(0.98, prob)), isUncertain: false, heat, effPlanRank, diff };
+  return {
+    prob: Math.max(0.02, Math.min(0.98, prob)),
+    isUncertain: false, heat, refRank, ref25: r25, avgRank: ravg, effPlanRank, diff,
+  };
 }
 
 // V9: 26 分数 → 25 等位分 (志愿分析用. equivFromScore25 的反函数)
@@ -1938,7 +1944,11 @@ const ResultList = {
                     <template v-if="getAdmit(p)">
                       <template v-if="getAdmit(p).prob != null">
                         <span :class="getAdmit(p).prob >= 0.7 ? 'text-green-700 font-bold' : getAdmit(p).prob >= 0.4 ? 'text-amber-700 font-bold' : 'text-red-600 font-bold'"
-                              :title="'热度: ' + (getAdmit(p).heat ? getAdmit(p).heat.name : '—') + (getAdmit(p).effPlanRank ? ', 有效位次 ' + Math.round(getAdmit(p).effPlanRank) : '')">
+                              :title="'热度: ' + (getAdmit(p).heat ? getAdmit(p).heat.name : '—') +
+                                       ' | 参考位次 ' + (getAdmit(p).refRank ?? '?') +
+                                       ' (25=' + (getAdmit(p).ref25 ?? '?') + ' 平均=' + (getAdmit(p).avgRank ?? '?') + ')' +
+                                       ' | 有效位次 ' + (getAdmit(p).effPlanRank ? Math.round(getAdmit(p).effPlanRank) : '?') +
+                                       ' | diff ' + (getAdmit(p).diff != null ? (getAdmit(p).diff > 0 ? '+' + getAdmit(p).diff.toFixed(0) : getAdmit(p).diff.toFixed(0)) : '?')">
                           {{ (getAdmit(p).prob * 100).toFixed(0) }}%
                         </span>
                         <span v-if="getAdmit(p).heat && getAdmit(p).heat.idx >= 4" class="ml-0.5 text-[9px]"
