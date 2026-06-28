@@ -3448,16 +3448,18 @@ const VoluntaryReport = {
             </div>
             <div class="mt-3">
               <b>各档录取率最高 Top 3:</b>
-              <div v-for="k in ['chong','wen','bao']" :key="k" v-if="summary.topByTier[k].length" class="mt-1 pl-3 border-l-2"
-                   :class="k==='chong'?'border-red-400':k==='wen'?'border-amber-400':'border-green-400'">
-                <span class="font-bold" :class="k==='chong'?'text-red-700':k==='wen'?'text-amber-700':'text-green-700'">
-                  {{ {chong:'冲',wen:'稳',bao:'保'}[k] }}档
-                </span>:
-                <span v-for="it in summary.topByTier[k]" :key="it.id" class="ml-2">
-                  {{ it.plan.schoolName }} · {{ (it.plan.majorName26 || it.plan.majorName25 || '').slice(0, 20) }}
-                  <b class="text-green-700">{{ fmtProb(it.admit) }}</b> ;
-                </span>
-              </div>
+              <template v-for="k in ['chong','wen','bao']" :key="k">
+                <div v-if="summary.topByTier[k].length" class="mt-1 pl-3 border-l-2"
+                     :class="k==='chong'?'border-red-400':k==='wen'?'border-amber-400':'border-green-400'">
+                  <span class="font-bold" :class="k==='chong'?'text-red-700':k==='wen'?'text-amber-700':'text-green-700'">
+                    {{ {chong:'冲',wen:'稳',bao:'保'}[k] }}档
+                  </span>:
+                  <span v-for="it in summary.topByTier[k]" :key="it.id" class="ml-2">
+                    {{ it.plan.schoolName }} · {{ (it.plan.majorName26 || it.plan.majorName25 || '').slice(0, 20) }}
+                    <b class="text-green-700">{{ fmtProb(it.admit) }}</b> ;
+                  </span>
+                </div>
+              </template>
             </div>
           </div>
         </section>
@@ -3552,8 +3554,8 @@ const VoluntaryReport = {
         </section>
 
         <!-- 5. 冲稳保详情 -->
-        <section v-for="k in ['chong','wen','bao']" :key="'tier-'+k"
-                 v-if="analysis.tiers[k].items.length"
+        <template v-for="k in ['chong','wen','bao']" :key="'tier-'+k">
+        <section v-if="analysis.tiers[k].items.length"
                  class="mb-6 page-break-before">
           <h2 class="text-lg font-bold mb-2 px-2 py-1 border-l-4"
               :class="k==='chong'?'bg-red-50 border-red-600 text-red-800':k==='wen'?'bg-amber-50 border-amber-600 text-amber-800':'bg-green-50 border-green-600 text-green-800'">
@@ -3587,6 +3589,7 @@ const VoluntaryReport = {
             </tbody>
           </table>
         </section>
+        </template><!-- /v-for tier -->
 
         <!-- 6. 分数总览 -->
         <section class="mb-6 page-break-before">
