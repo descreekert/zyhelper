@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>2026 物理类志愿填报助手</title>
-  <link rel="stylesheet" href="assets/style.css?v=admit-v3-avg">
+  <link rel="stylesheet" href="assets/style.css?v=v9-report">
   <script src="https://unpkg.com/vue@3.4.21/dist/vue.global.prod.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/chart.js@4.4.2/dist/chart.umd.js"></script>
@@ -267,6 +267,9 @@
               </span>
               <button v-if="voluntary.length && store.viewMode==='voluntary'" @click="store.viewMode = 'analysis'" class="text-xs ml-2 text-indigo-600 hover:underline font-bold" title="冲稳保/分数分布/学校扎堆 等">📊 分析</button>
               <button v-if="store.viewMode==='analysis'" @click="store.viewMode = 'voluntary'" class="text-xs ml-2 text-blue-600 hover:underline font-bold">← 返回志愿表</button>
+              <button v-if="voluntary.length && (store.viewMode==='voluntary' || store.viewMode==='analysis')"
+                      @click="store.viewMode = 'report'" class="text-xs ml-2 text-purple-600 hover:underline font-bold"
+                      title="生成完整 PDF 报告 (志愿表 + 分析 + 详情)">📄 PDF 报告</button>
               <button @click="exportVoluntaryHtml" v-if="voluntary.length" class="text-xs ml-1 text-blue-600 hover:underline">📤 HTML</button>
               <button @click="exportVoluntaryByTier" v-if="voluntary.length" class="text-xs ml-1 text-amber-600 hover:underline" title="按当前表顺序导出 CSV (档作为一列)">📤 CSV</button>
               <button @click="exportVoluntaryJson" v-if="voluntary.length" class="text-xs ml-1 text-purple-600 hover:underline" title="导出 JSON (可跨设备/版本导入)">📤 JSON</button>
@@ -376,6 +379,18 @@
             </select>
           </div>
 
+          <!-- PDF 报告视图 -->
+          <voluntary-report
+            v-if="store.viewMode === 'report'"
+            :analysis="voluntaryAnalysis"
+            :list-name="store.activeVoluntaryName"
+            :voluntary="voluntary"
+            :plan-by-id="planByIdMap"
+            :admit-prob-fn="admitProbFor"
+            :score-rank="scoreRank"
+            @close="store.viewMode = 'voluntary'"
+          ></voluntary-report>
+
           <!-- 志愿分析视图 (普通页面, 不弹窗) -->
           <voluntary-analysis
             v-if="store.viewMode === 'analysis'"
@@ -408,7 +423,7 @@
 
           <!-- Result list (其它视图) -->
           <result-list
-            v-if="store.viewMode !== 'analysis'"
+            v-if="store.viewMode !== 'analysis' && store.viewMode !== 'report'"
             :plans="paged"
             :total="filtered.length"
             :current-page="currentPage"
@@ -487,6 +502,6 @@
     </template>
   </div>
 
-  <script src="assets/app.js?v=admit-v3-avg"></script>
+  <script src="assets/app.js?v=v9-report"></script>
 </body>
 </html>

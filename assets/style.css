@@ -443,6 +443,31 @@ tr.main-row-expanded td { background: rgba(59, 130, 246, 0.04); }
 .keyword-toolbar > div { padding: 2px 4px !important; }
 .keyword-toolbar input { font-size: 12px; padding: 2px 4px; }
 
+/* === V9: PDF 报告 === */
+.voluntary-report { background: #f8fafc; min-height: 100vh; }
+.voluntary-report .report-content { box-shadow: 0 0 8px rgba(0,0,0,.05); }
+.voluntary-report .page-break-before { page-break-before: always; }
+.voluntary-report .page-break-inside-avoid { page-break-inside: avoid; }
+.voluntary-report table { font-size: 10px; }
+.voluntary-report table th, .voluntary-report table td { padding: 2px 4px; }
+
+@media print {
+  /* 隐藏所有非报告内容 */
+  body * { visibility: hidden; }
+  .voluntary-report, .voluntary-report * { visibility: visible; }
+  .voluntary-report { position: absolute; left: 0; top: 0; width: 100%; background: white; }
+  .voluntary-report .no-print { display: none !important; }
+  .voluntary-report .report-content {
+    box-shadow: none; padding: 8mm !important; max-width: none !important;
+  }
+  .voluntary-report .page-break-before { page-break-before: always; }
+  .voluntary-report .page-break-inside-avoid { page-break-inside: avoid; }
+  .voluntary-report table { font-size: 9px; }
+  .voluntary-report h1 { font-size: 18px; }
+  .voluntary-report h2 { font-size: 13px; }
+  @page { margin: 8mm; size: A4; }
+}
+
 /* === V9: 分析视图 分数聚合表 === */
 .analysis-score-table { border-collapse: separate; border-spacing: 0; }
 .analysis-score-table thead th {
