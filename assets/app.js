@@ -2937,7 +2937,9 @@ const VoluntaryAnalysis = {
                   <tr>
                     <th class="px-2 py-1 text-left w-12">25 分</th>
                     <th class="px-2 py-1 text-center w-8">档</th>
-                    <th class="px-2 py-1 text-center w-12" title="25→26 等位分">→26</th>
+                    <th class="px-2 py-1 text-center w-12" title="25 一分一段累计位次">25位次</th>
+                    <th class="px-2 py-1 text-center w-14" title="该分 - anchor25 (正=上冲, 负=下保)">Δ分</th>
+                    <th class="px-2 py-1 text-center w-14" title="anchor25位次 - 该分位次 (正=上冲, 负=下保)">Δ位次</th>
                     <th class="px-2 py-1 text-center w-8">N</th>
                     <th class="px-2 py-1 text-center w-12">26招生</th>
                     <th class="px-2 py-1 text-center w-12" title="26 同分人数 (一分一段本分人数)">26同分</th>
@@ -2959,13 +2961,27 @@ const VoluntaryAnalysis = {
                         <span v-else-if="r.tier==='bao'" class="text-green-600">保</span>
                         <span v-else class="text-slate-400">外</span>
                       </td>
-                      <td class="px-2 py-0.5 text-center text-slate-500">{{ r.equiv26 ?? '—' }}</td>
+                      <td class="px-2 py-0.5 text-center text-slate-500">{{ r.rank25 ?? '—' }}</td>
+                      <td class="px-2 py-0.5 text-center">
+                        <span v-if="r.deltaScore != null"
+                              :class="r.deltaScore > 0 ? 'text-red-600' : r.deltaScore < 0 ? 'text-green-700' : 'text-amber-700'">
+                          {{ r.deltaScore > 0 ? '↑+' + r.deltaScore : r.deltaScore < 0 ? '↓' + r.deltaScore : '0' }}
+                        </span>
+                        <span v-else class="text-slate-300">—</span>
+                      </td>
+                      <td class="px-2 py-0.5 text-center">
+                        <span v-if="r.deltaRank != null"
+                              :class="r.deltaRank > 0 ? 'text-red-600' : r.deltaRank < 0 ? 'text-green-700' : 'text-amber-700'">
+                          {{ r.deltaRank > 0 ? '↑+' + r.deltaRank : r.deltaRank < 0 ? '↓' + r.deltaRank : '0' }}
+                        </span>
+                        <span v-else class="text-slate-300">—</span>
+                      </td>
                       <td class="px-2 py-0.5 text-center">{{ r.count || '-' }}</td>
                       <td class="px-2 py-0.5 text-center">{{ r.enroll || '-' }}</td>
                       <td class="px-2 py-0.5 text-center">{{ r.cnt26 ?? '—' }}</td>
                     </tr>
                     <tr v-if="r.count > 0 && expandedScores.includes(r.score)" class="bg-slate-50">
-                      <td colspan="6" class="px-2 py-1">
+                      <td colspan="8" class="px-2 py-1">
                         <table class="w-full text-[11px] bg-white border rounded">
                           <thead>
                             <tr class="bg-slate-100">
@@ -3467,6 +3483,8 @@ createApp({
       // 用户 26 位次 anchor (可手调, 例: 用户 myRank=8324 但想用 8150 做实际预测)
       const userRank26 = (ui.analysisAnchorRank26 && ui.analysisAnchorRank26 > 0)
         ? ui.analysisAnchorRank26 : ui.myRank;
+      // anchor 的 25 位次 (用于 Δ 计算)
+      const anchorRank25 = rank25FromScore25(anchor25, scoreRank.value);
       const byScore = [];
       for (let s = hi; s >= lo; s--) {
         const r = scoreMap.get(s) || { count: 0, enroll: 0, items: [] };
@@ -3488,10 +3506,16 @@ createApp({
           if (r.enroll > 0) weightedRatio = r.enroll / weightedCnt;
         }
         const tier = tierOf(s);
+        // 25 年口径 Δ: row.score 与 anchor25 的差; row 25 位次 与 anchor 25 位次的差
+        // 约定 正=上冲 (分高/位次更靠前); 负=下保 (分低/位次更靠后)
+        const rowRank25 = rank25FromScore25(s, scoreRank.value);
+        const deltaScore = anchor25 != null ? (s - anchor25) : null;
+        const deltaRank  = (anchorRank25 != null && rowRank25 != null) ? (anchorRank25 - rowRank25) : null;
         byScore.push({
           score: s, count: r.count, enroll: r.enroll, items: r.items, tier,
           equiv26: eq.score26, equiv26Rank: eq.rank26,
           cnt26, cum26, weightedCnt, ratio, weightedRatio,
+          rank25: rowRank25, deltaScore, deltaRank,
         });
         if (tier !== "out" && cnt26 != null) {
           tiers[tier].cnt26 += cnt26;
