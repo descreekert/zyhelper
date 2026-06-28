@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>2026 物理类志愿填报助手</title>
-  <link rel="stylesheet" href="assets/style.css?v=layout-2col">
+  <link rel="stylesheet" href="assets/style.css?v=tier-detail">
   <script src="https://unpkg.com/vue@3.4.21/dist/vue.global.prod.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/chart.js@4.4.2/dist/chart.umd.js"></script>
@@ -386,6 +386,7 @@
             :rank-override="ui.analysisAnchorRank26"
             :expanded-schools="ui.analysisExpandedSchools"
             :expanded-scores="ui.analysisExpandedScores"
+            :expanded-tiers="ui.analysisExpandedTiers"
             @close="store.viewMode = 'voluntary'"
             @set-anchor="v => ui.analysisAnchor25 = v"
             @set-rank="v => ui.analysisAnchorRank26 = v"
@@ -398,6 +399,11 @@
               const i = ui.analysisExpandedScores.indexOf(s);
               if (i >= 0) ui.analysisExpandedScores.splice(i, 1);
               else ui.analysisExpandedScores.push(s);
+            }"
+            @toggle-tier="k => {
+              const i = ui.analysisExpandedTiers.indexOf(k);
+              if (i >= 0) ui.analysisExpandedTiers.splice(i, 1);
+              else ui.analysisExpandedTiers.push(k);
             }"
           ></voluntary-analysis>
 
@@ -481,6 +487,6 @@
     </template>
   </div>
 
-  <script src="assets/app.js?v=layout-2col"></script>
+  <script src="assets/app.js?v=tier-detail"></script>
 </body>
 </html>

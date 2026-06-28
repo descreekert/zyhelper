@@ -560,6 +560,7 @@ const ui = reactive({
   analysisAnchorRank26: null,    // 用户手调 26 实际位次 (null = 用 myRank, 用户提到"按 8150 作实际预测")
   analysisExpandedSchools: [],   // 学校行展开 id 列表
   analysisExpandedScores: [],    // 一分一段行展开 (25 score) 列表
+  analysisExpandedTiers: [],     // 冲稳保卡片展开 ['chong','wen','bao','out']
   detailPlan: null,
   myScore: 0,
   myRank: 0,
@@ -2741,8 +2742,8 @@ const PrioritySettings = {
 
 // V9: 志愿分析 (普通视图 + 兼容 modal). prop.embedded=true 时去掉 modal 外壳
 const VoluntaryAnalysis = {
-  props: ["analysis", "listName", "anchorOverride", "rankOverride", "expandedSchools", "expandedScores", "embedded"],
-  emits: ["close", "set-anchor", "set-rank", "toggle-school", "toggle-score"],
+  props: ["analysis", "listName", "anchorOverride", "rankOverride", "expandedSchools", "expandedScores", "expandedTiers", "embedded"],
+  emits: ["close", "set-anchor", "set-rank", "toggle-school", "toggle-score", "toggle-tier"],
   setup(props, { emit }) {
     const maxScoreCount = computed(() => {
       if (!props.analysis) return 1;
@@ -2813,35 +2814,94 @@ const VoluntaryAnalysis = {
               <span>志愿: <b class="text-blue-600">{{ analysis.total }}</b> 项</span>
               <span>26 计划: <b class="text-blue-600">{{ analysis.totalEnroll }}</b> 人</span>
             </div>
-            <div class="grid grid-cols-4 gap-2 mt-2 text-xs">
-              <div class="bg-red-50 border border-red-200 rounded p-2">
-                <div class="text-red-700 font-bold">冲 [{{ analysis.ranges.chong.lo }}-{{ analysis.ranges.chong.hi }}]</div>
-                <div>{{ analysis.tiers.chong.items.length }} 项 · 招{{ analysis.tiers.chong.enroll }} / 同{{ analysis.tiers.chong.cnt26 || '?' }} 人</div>
-                <div class="mt-0.5">
-                  <span class="text-slate-500" title="未加权: 招生/同分">原 {{ analysis.tiers.chong.ratio != null ? (analysis.tiers.chong.ratio * 100).toFixed(1) + '%' : '—' }}</span>
-                  <span v-if="analysis.tiers.chong.weightedRatio != null" class="ml-2 font-bold text-red-800" title="加权: 招生/(用户位次相关的实际竞争人数)">加权 {{ (analysis.tiers.chong.weightedRatio * 100).toFixed(1) }}%</span>
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 mt-2 text-xs">
+              <div v-for="k in ['chong','wen','bao','out']" :key="k"
+                   :class="[
+                     'border rounded p-2 cursor-pointer',
+                     k==='chong' ? 'bg-red-50 border-red-200' :
+                     k==='wen'   ? 'bg-amber-50 border-amber-200' :
+                     k==='bao'   ? 'bg-green-50 border-green-200' :
+                                   'bg-slate-100 border-slate-200',
+                     expandedTiers.includes(k) ? 'ring-2 ring-offset-1' : ''
+                   ]"
+                   @click="$emit('toggle-tier', k)">
+                <div class="flex justify-between items-center">
+                  <span :class="{ chong: 'text-red-700', wen: 'text-amber-700', bao: 'text-green-700', out: 'text-slate-600' }[k]" class="font-bold">
+                    {{ {chong:'冲',wen:'稳',bao:'保',out:'范围外'}[k] }}
+                    <span v-if="k !== 'out'" class="font-normal text-[10px] text-slate-500">[{{ analysis.ranges[k].lo }}-{{ analysis.ranges[k].hi }}]</span>
+                  </span>
+                  <span class="text-slate-400 text-xs">{{ expandedTiers.includes(k) ? '▾' : '▸' }}</span>
+                </div>
+                <div class="mt-1">
+                  <b>{{ analysis.tiers[k].items.length }}</b> 项
+                  <span v-if="analysis.tiers[k].newItems.length"
+                        :class="k==='chong'?'text-red-600':k==='wen'?'text-amber-700':k==='bao'?'text-green-700':'text-slate-500'"
+                        title="新增专业 (无 25 年参考, 录取概率不确定)">
+                    (确定 {{ analysis.tiers[k].confirmedItems.length }} · <b class="underline decoration-dotted">新 {{ analysis.tiers[k].newItems.length }}</b>)
+                  </span>
+                </div>
+                <div>26招 <b>{{ analysis.tiers[k].enroll }}</b><span v-if="analysis.tiers[k].newEnroll" class="text-[10px] text-slate-500"> (新{{ analysis.tiers[k].newEnroll }})</span> / 同分 {{ analysis.tiers[k].cnt26 || '?' }}</div>
+                <div v-if="k !== 'out'" class="mt-0.5 flex justify-between">
+                  <span class="text-slate-500">原 {{ analysis.tiers[k].ratio != null ? (analysis.tiers[k].ratio * 100).toFixed(1) + '%' : '—' }}</span>
+                  <span v-if="analysis.tiers[k].weightedRatio != null"
+                        :class="k==='chong'?'text-red-800 font-bold':k==='wen'?'text-amber-800 font-bold':'text-green-800 font-bold'">
+                    加权 {{ (analysis.tiers[k].weightedRatio * 100).toFixed(1) }}%
+                  </span>
                 </div>
               </div>
-              <div class="bg-amber-50 border border-amber-200 rounded p-2">
-                <div class="text-amber-700 font-bold">稳 [{{ analysis.ranges.wen.lo }}-{{ analysis.ranges.wen.hi }}]</div>
-                <div>{{ analysis.tiers.wen.items.length }} 项 · 招{{ analysis.tiers.wen.enroll }} / 同{{ analysis.tiers.wen.cnt26 || '?' }} 人</div>
-                <div class="mt-0.5">
-                  <span class="text-slate-500">原 {{ analysis.tiers.wen.ratio != null ? (analysis.tiers.wen.ratio * 100).toFixed(1) + '%' : '—' }}</span>
-                  <span v-if="analysis.tiers.wen.weightedRatio != null" class="ml-2 font-bold text-amber-800">加权 {{ (analysis.tiers.wen.weightedRatio * 100).toFixed(1) }}%</span>
-                </div>
+            </div>
+
+            <!-- tier 展开详细表 -->
+            <div v-for="k in ['chong','wen','bao','out']" :key="'exp-'+k"
+                 v-show="expandedTiers.includes(k) && analysis.tiers[k].items.length"
+                 class="mt-2 border rounded bg-white">
+              <div class="px-3 py-1.5 text-xs font-bold flex justify-between items-center"
+                   :class="k==='chong'?'bg-red-50 text-red-700':k==='wen'?'bg-amber-50 text-amber-700':k==='bao'?'bg-green-50 text-green-700':'bg-slate-100 text-slate-700'">
+                <span>{{ {chong:'冲',wen:'稳',bao:'保',out:'范围外'}[k] }}档详细 ({{ analysis.tiers[k].items.length }} 项)</span>
+                <button @click.stop="$emit('toggle-tier', k)" class="text-slate-400 hover:text-slate-600">收起 ×</button>
               </div>
-              <div class="bg-green-50 border border-green-200 rounded p-2">
-                <div class="text-green-700 font-bold">保 [{{ analysis.ranges.bao.lo }}-{{ analysis.ranges.bao.hi }}]</div>
-                <div>{{ analysis.tiers.bao.items.length }} 项 · 招{{ analysis.tiers.bao.enroll }} / 同{{ analysis.tiers.bao.cnt26 || '?' }} 人</div>
-                <div class="mt-0.5">
-                  <span class="text-slate-500">原 {{ analysis.tiers.bao.ratio != null ? (analysis.tiers.bao.ratio * 100).toFixed(1) + '%' : '—' }}</span>
-                  <span v-if="analysis.tiers.bao.weightedRatio != null" class="ml-2 font-bold text-green-800">加权 {{ (analysis.tiers.bao.weightedRatio * 100).toFixed(1) }}%</span>
-                </div>
-              </div>
-              <div class="bg-slate-100 border border-slate-200 rounded p-2">
-                <div class="text-slate-600 font-bold">范围外</div>
-                <div>{{ analysis.tiers.out.items.length }} 项 · {{ analysis.tiers.out.enroll }} 人</div>
-              </div>
+              <table class="w-full text-[11px]">
+                <thead class="bg-slate-100">
+                  <tr>
+                    <th class="px-2 py-1 text-left">标识</th>
+                    <th class="px-2 py-1 text-left">学校</th>
+                    <th class="px-2 py-1 text-left">城市</th>
+                    <th class="px-2 py-1 text-left">26 招生专业</th>
+                    <th class="px-2 py-1 text-center w-14">25 分/位</th>
+                    <th class="px-2 py-1 text-center w-12">26 计划</th>
+                    <th class="px-2 py-1 text-center w-12">学费</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <!-- 确定 -->
+                  <tr v-for="it in analysis.tiers[k].confirmedItems" :key="it.id" class="border-t">
+                    <td class="px-2 py-0.5">
+                      <span v-if="it.plan.diff" class="badge-diff" title="25 vs 26 有变化">变</span>
+                    </td>
+                    <td class="px-2 py-0.5">{{ it.plan.schoolName }}</td>
+                    <td class="px-2 py-0.5">{{ it.plan.city || '—' }}</td>
+                    <td class="px-2 py-0.5">{{ it.plan.majorName26 || it.plan.majorName25 || '—' }}</td>
+                    <td class="px-2 py-0.5 text-center"><b>{{ it.score25 || '—' }}</b>/{{ it.rank25 || '—' }}</td>
+                    <td class="px-2 py-0.5 text-center">{{ it.enroll || '—' }}</td>
+                    <td class="px-2 py-0.5 text-center">{{ it.plan.tuition || '—' }}</td>
+                  </tr>
+                  <!-- 不确定 (新增) -->
+                  <tr v-if="analysis.tiers[k].newItems.length" class="bg-yellow-50 border-t border-yellow-200">
+                    <td colspan="7" class="px-2 py-1 text-yellow-800 text-xs font-bold">
+                      ⚠ 不确定 — {{ analysis.tiers[k].newItems.length }} 个新增专业 (无 25 年参考, 录取概率不可靠)
+                    </td>
+                  </tr>
+                  <tr v-for="it in analysis.tiers[k].newItems" :key="'n-'+it.id" class="border-t bg-yellow-50/50">
+                    <td class="px-2 py-0.5"><span class="badge-new">新</span></td>
+                    <td class="px-2 py-0.5">{{ it.plan.schoolName }}</td>
+                    <td class="px-2 py-0.5">{{ it.plan.city || '—' }}</td>
+                    <td class="px-2 py-0.5">{{ it.plan.majorName26 || it.plan.majorName25 || '—' }}</td>
+                    <td class="px-2 py-0.5 text-center"><b>{{ it.score25 || '—' }}</b>/{{ it.rank25 || '—' }}</td>
+                    <td class="px-2 py-0.5 text-center">{{ it.enroll || '—' }}</td>
+                    <td class="px-2 py-0.5 text-center">{{ it.plan.tuition || '—' }}</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
             <div class="text-[10px] text-slate-400 mt-1">
               本分析规则: 冲 +6~+15 / 稳 -5~+5 / 保 -20~-6 (相对 25 等位分).
@@ -2881,9 +2941,6 @@ const VoluntaryAnalysis = {
                     <th class="px-2 py-1 text-center w-8">N</th>
                     <th class="px-2 py-1 text-center w-12">26招生</th>
                     <th class="px-2 py-1 text-center w-12" title="26 同分人数 (一分一段本分人数)">26同分</th>
-                    <th class="px-2 py-1 text-center w-12" title="加权同分 = 你位次相关的实际竞争对手数">加权同</th>
-                    <th class="px-2 py-1 text-center w-12">原比率</th>
-                    <th class="px-2 py-1 text-center w-14">加权比率</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2906,21 +2963,9 @@ const VoluntaryAnalysis = {
                       <td class="px-2 py-0.5 text-center">{{ r.count || '-' }}</td>
                       <td class="px-2 py-0.5 text-center">{{ r.enroll || '-' }}</td>
                       <td class="px-2 py-0.5 text-center">{{ r.cnt26 ?? '—' }}</td>
-                      <td class="px-2 py-0.5 text-center text-slate-500">{{ r.weightedCnt ?? '—' }}</td>
-                      <td class="px-2 py-0.5 text-center text-slate-500">
-                        <span v-if="r.ratio != null">{{ (r.ratio * 100).toFixed(0) }}%</span>
-                        <span v-else>—</span>
-                      </td>
-                      <td class="px-2 py-0.5 text-center">
-                        <span v-if="r.weightedRatio != null"
-                              :class="r.weightedRatio >= 1 ? 'text-green-700 font-bold' : r.weightedRatio >= 0.5 ? 'text-amber-700 font-bold' : 'text-red-600'">
-                          {{ r.weightedRatio >= 5 ? '>500%' : (r.weightedRatio * 100).toFixed(0) + '%' }}
-                        </span>
-                        <span v-else class="text-slate-300">—</span>
-                      </td>
                     </tr>
                     <tr v-if="r.count > 0 && expandedScores.includes(r.score)" class="bg-slate-50">
-                      <td colspan="9" class="px-2 py-1">
+                      <td colspan="6" class="px-2 py-1">
                         <table class="w-full text-[11px] bg-white border rounded">
                           <thead>
                             <tr class="bg-slate-100">
@@ -2934,10 +2979,15 @@ const VoluntaryAnalysis = {
                             </tr>
                           </thead>
                           <tbody>
-                            <tr v-for="it in r.items" :key="it.id" class="border-t">
+                            <tr v-for="it in r.items" :key="it.id" class="border-t"
+                                :class="it.plan.isNew==='新增' ? 'bg-yellow-50/50' : ''">
                               <td class="px-2 py-0.5">{{ it.plan.schoolName }}</td>
                               <td class="px-2 py-0.5">{{ it.plan.city || '—' }}</td>
-                              <td class="px-2 py-0.5">{{ it.plan.majorName26 || it.plan.majorName25 || '—' }}</td>
+                              <td class="px-2 py-0.5">
+                                <span v-if="it.plan.isNew==='新增'" class="badge-new">新</span>
+                                <span v-else-if="it.plan.diff" class="badge-diff" :title="it.plan.diff">变</span>
+                                {{ it.plan.majorName26 || it.plan.majorName25 || '—' }}
+                              </td>
                               <td class="px-2 py-0.5 text-center"><b>{{ it.score25 || '—' }}</b>/{{ it.rank25 || '—' }}</td>
                               <td class="px-2 py-0.5 text-center">{{ it.enroll || '—' }}</td>
                               <td class="px-2 py-0.5 text-center">{{ it.plan.tuition || '—' }}</td>
@@ -3006,9 +3056,14 @@ const VoluntaryAnalysis = {
                             </tr>
                           </thead>
                           <tbody>
-                            <tr v-for="it in s.items" :key="it.id" class="border-t">
+                            <tr v-for="it in s.items" :key="it.id" class="border-t"
+                                :class="it.plan.isNew==='新增' ? 'bg-yellow-50/50' : ''">
                               <td class="px-2 py-0.5">{{ it.plan.city || '—' }}</td>
-                              <td class="px-2 py-0.5">{{ it.plan.majorName26 || it.plan.majorName25 || '—' }}</td>
+                              <td class="px-2 py-0.5">
+                                <span v-if="it.plan.isNew==='新增'" class="badge-new">新</span>
+                                <span v-else-if="it.plan.diff" class="badge-diff" :title="it.plan.diff">变</span>
+                                {{ it.plan.majorName26 || it.plan.majorName25 || '—' }}
+                              </td>
                               <td class="px-2 py-0.5 text-center">
                                 <span v-if="analysis.ranges.chong.lo <= it.score25 && it.score25 <= analysis.ranges.chong.hi" class="text-red-600">冲</span>
                                 <span v-else-if="analysis.ranges.wen.lo <= it.score25 && it.score25 <= analysis.ranges.wen.hi" class="text-amber-600">稳</span>
@@ -3368,10 +3423,10 @@ createApp({
         return "out";
       };
       const tiers = {
-        chong: { items: [], enroll: 0, cnt26: 0 },
-        wen:   { items: [], enroll: 0, cnt26: 0 },
-        bao:   { items: [], enroll: 0, cnt26: 0 },
-        out:   { items: [], enroll: 0, cnt26: 0 },
+        chong: { items: [], enroll: 0, cnt26: 0, newItems: [], confirmedItems: [], newEnroll: 0, changedCount: 0 },
+        wen:   { items: [], enroll: 0, cnt26: 0, newItems: [], confirmedItems: [], newEnroll: 0, changedCount: 0 },
+        bao:   { items: [], enroll: 0, cnt26: 0, newItems: [], confirmedItems: [], newEnroll: 0, changedCount: 0 },
+        out:   { items: [], enroll: 0, cnt26: 0, newItems: [], confirmedItems: [], newEnroll: 0, changedCount: 0 },
       };
       let totalEnroll = 0;
       for (const it of items) {
@@ -3379,6 +3434,16 @@ createApp({
         tiers[t].items.push(it);
         tiers[t].enroll += it.enroll;
         totalEnroll += it.enroll;
+        // "不确定" = 新增专业 (无 25 历史参考); "变化" = 有改动 (仍有参考)
+        const isNew = it.plan.isNew === "新增";
+        const isChanged = !!it.plan.diff && !isNew;
+        if (isNew) {
+          tiers[t].newItems.push(it);
+          tiers[t].newEnroll += it.enroll;
+        } else {
+          tiers[t].confirmedItems.push(it);
+        }
+        if (isChanged) tiers[t].changedCount++;
       }
       // 按分数分布 (含 gap)
       const scoreMap = new Map();   // score → { count, enroll, items }
