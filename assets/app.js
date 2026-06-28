@@ -2753,6 +2753,31 @@ const VoluntaryAnalysis = {
       if (!props.analysis) return 1;
       return Math.max(1, ...props.analysis.bySchool.map(r => r.count));
     });
+    // 合并连续空分行: 多个 count=0 折成一行 (例: "631 - 629 共 3 分无志愿")
+    const byScoreCompact = computed(() => {
+      if (!props.analysis) return [];
+      const out = [];
+      let gap = null;
+      const flush = () => {
+        if (!gap) return;
+        const len = gap.from - gap.to + 1;
+        out.push({ type: "gap", from: gap.from, to: gap.to, len, tiers: gap.tiers });
+        gap = null;
+      };
+      // byScore 是 score 降序 (hi → lo)
+      for (const r of props.analysis.byScore) {
+        if (r.count === 0) {
+          if (!gap) gap = { from: r.score, to: r.score, tiers: new Set() };
+          gap.to = r.score;  // 越往后越小
+          gap.tiers.add(r.tier);
+        } else {
+          flush();
+          out.push({ type: "row", data: r });
+        }
+      }
+      flush();
+      return out;
+    });
     const anchorInput = ref("");
     const rankInput = ref("");
     watch(() => props.analysis, (a) => {
@@ -2777,7 +2802,7 @@ const VoluntaryAnalysis = {
       rankInput.value = String(props.analysis?.myRank26 || "");
       emit("set-rank", null);
     }
-    return { maxScoreCount, maxSchoolCount,
+    return { maxScoreCount, maxSchoolCount, byScoreCompact,
              anchorInput, commitAnchor, resetAnchor,
              rankInput, commitRank, resetRank };
   },
@@ -2931,56 +2956,67 @@ const VoluntaryAnalysis = {
             <div class="text-xs text-slate-500 mb-1">
               每个 25 参考分 (含空档, 共 {{ analysis.byScore.length }} 分) — <b>同分</b>(26)按 25→26 等位映射查 2026 一分一段
             </div>
-            <div class="border rounded bg-white">
-              <table class="w-full text-xs">
-                <thead class="sticky top-0 bg-slate-100">
-                  <tr>
-                    <th class="px-2 py-1 text-left w-12">25 分</th>
-                    <th class="px-2 py-1 text-center w-8">档</th>
-                    <th class="px-2 py-1 text-center w-12" title="25 一分一段累计位次">25位次</th>
-                    <th class="px-2 py-1 text-center w-14" title="该分 - anchor25 (正=上冲, 负=下保)">Δ分</th>
-                    <th class="px-2 py-1 text-center w-14" title="anchor25位次 - 该分位次 (正=上冲, 负=下保)">Δ位次</th>
-                    <th class="px-2 py-1 text-center w-8">N</th>
-                    <th class="px-2 py-1 text-center w-12">26招生</th>
-                    <th class="px-2 py-1 text-center w-12" title="26 同分人数 (一分一段本分人数)">26同分</th>
+            <div class="border rounded bg-white overflow-hidden">
+              <table class="w-full text-xs analysis-score-table">
+                <thead>
+                  <tr class="bg-slate-100 border-b-2 border-slate-300">
+                    <th class="px-2 py-1.5 text-left w-12">25 分</th>
+                    <th class="px-2 py-1.5 text-center w-8">档</th>
+                    <th class="px-2 py-1.5 text-center w-12" title="25 一分一段累计位次">25位次</th>
+                    <th class="px-2 py-1.5 text-center w-14" title="该分 - anchor25 (正=上冲, 负=下保)">Δ分</th>
+                    <th class="px-2 py-1.5 text-center w-14" title="anchor25位次 - 该分位次 (正=上冲, 负=下保)">Δ位次</th>
+                    <th class="px-2 py-1.5 text-center w-8">N</th>
+                    <th class="px-2 py-1.5 text-center w-12">26招生</th>
+                    <th class="px-2 py-1.5 text-center w-12" title="26 同分人数 (一分一段本分人数)">26同分</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <template v-for="r in analysis.byScore" :key="r.score">
-                    <tr :class="[
-                          r.count === 0 ? 'opacity-50' : 'cursor-pointer hover:bg-slate-50',
-                          expandedScores.includes(r.score) ? 'bg-slate-100' : '']"
-                        @click="r.count > 0 && $emit('toggle-score', r.score)">
-                      <td class="px-2 py-0.5">
-                        <span v-if="r.count > 0" class="text-slate-400 mr-1">{{ expandedScores.includes(r.score) ? '▾' : '▸' }}</span>
-                        <b>{{ r.score }}</b>
+                  <template v-for="(item, ii) in byScoreCompact" :key="ii">
+                    <!-- 折叠空档 -->
+                    <tr v-if="item.type === 'gap'" class="border-b border-slate-200 bg-slate-50/60 text-slate-400 italic">
+                      <td colspan="8" class="px-3 py-1 text-center">
+                        <template v-if="item.len === 1">{{ item.from }} 分: 无志愿</template>
+                        <template v-else>{{ item.from }} - {{ item.to }} ({{ item.len }} 分) 无志愿</template>
                       </td>
-                      <td class="px-2 py-0.5 text-center">
-                        <span v-if="r.tier==='chong'" class="text-red-600">冲</span>
-                        <span v-else-if="r.tier==='wen'" class="text-amber-600">稳</span>
-                        <span v-else-if="r.tier==='bao'" class="text-green-600">保</span>
-                        <span v-else class="text-slate-400">外</span>
-                      </td>
-                      <td class="px-2 py-0.5 text-center text-slate-500">{{ r.rank25 ?? '—' }}</td>
-                      <td class="px-2 py-0.5 text-center">
-                        <span v-if="r.deltaScore != null"
-                              :class="r.deltaScore > 0 ? 'text-red-600' : r.deltaScore < 0 ? 'text-green-700' : 'text-amber-700'">
-                          {{ r.deltaScore > 0 ? '↑+' + r.deltaScore : r.deltaScore < 0 ? '↓' + r.deltaScore : '0' }}
-                        </span>
-                        <span v-else class="text-slate-300">—</span>
-                      </td>
-                      <td class="px-2 py-0.5 text-center">
-                        <span v-if="r.deltaRank != null"
-                              :class="r.deltaRank > 0 ? 'text-red-600' : r.deltaRank < 0 ? 'text-green-700' : 'text-amber-700'">
-                          {{ r.deltaRank > 0 ? '↑+' + r.deltaRank : r.deltaRank < 0 ? '↓' + r.deltaRank : '0' }}
-                        </span>
-                        <span v-else class="text-slate-300">—</span>
-                      </td>
-                      <td class="px-2 py-0.5 text-center">{{ r.count || '-' }}</td>
-                      <td class="px-2 py-0.5 text-center">{{ r.enroll || '-' }}</td>
-                      <td class="px-2 py-0.5 text-center">{{ r.cnt26 ?? '—' }}</td>
                     </tr>
-                    <tr v-if="r.count > 0 && expandedScores.includes(r.score)" class="bg-slate-50">
+                    <!-- 数据行 -->
+                    <template v-else>
+                    <tr :class="[
+                          'border-b border-slate-200 cursor-pointer transition-colors',
+                          {chong:'tier-row-chong', wen:'tier-row-wen', bao:'tier-row-bao'}[item.data.tier] || '',
+                          expandedScores.includes(item.data.score) ? 'bg-blue-50' : 'hover:bg-slate-50'
+                        ]"
+                        @click="$emit('toggle-score', item.data.score)">
+                      <td class="px-2 py-1.5 font-bold">
+                        <span class="text-slate-400 mr-1">{{ expandedScores.includes(item.data.score) ? '▾' : '▸' }}</span>
+                        {{ item.data.score }}
+                      </td>
+                      <td class="px-2 py-1.5 text-center">
+                        <span class="inline-block px-1.5 rounded text-white text-[10px] font-bold"
+                              :class="item.data.tier==='chong'?'bg-red-500':item.data.tier==='wen'?'bg-amber-500':item.data.tier==='bao'?'bg-green-500':'bg-slate-400'">
+                          {{ {chong:'冲',wen:'稳',bao:'保',out:'外'}[item.data.tier] }}
+                        </span>
+                      </td>
+                      <td class="px-2 py-1.5 text-center text-slate-600">{{ item.data.rank25 ?? '—' }}</td>
+                      <td class="px-2 py-1.5 text-center font-mono">
+                        <span v-if="item.data.deltaScore != null"
+                              :class="item.data.deltaScore > 0 ? 'text-red-600 font-bold' : item.data.deltaScore < 0 ? 'text-green-700 font-bold' : 'text-amber-700 font-bold'">
+                          {{ item.data.deltaScore > 0 ? '↑+' + item.data.deltaScore : item.data.deltaScore < 0 ? '↓' + item.data.deltaScore : '— 0' }}
+                        </span>
+                        <span v-else class="text-slate-300">—</span>
+                      </td>
+                      <td class="px-2 py-1.5 text-center font-mono">
+                        <span v-if="item.data.deltaRank != null"
+                              :class="item.data.deltaRank > 0 ? 'text-red-600 font-bold' : item.data.deltaRank < 0 ? 'text-green-700 font-bold' : 'text-amber-700 font-bold'">
+                          {{ item.data.deltaRank > 0 ? '↑+' + item.data.deltaRank : item.data.deltaRank < 0 ? '↓' + item.data.deltaRank : '— 0' }}
+                        </span>
+                        <span v-else class="text-slate-300">—</span>
+                      </td>
+                      <td class="px-2 py-1.5 text-center font-bold">{{ item.data.count }}</td>
+                      <td class="px-2 py-1.5 text-center font-bold text-blue-700">{{ item.data.enroll }}</td>
+                      <td class="px-2 py-1.5 text-center text-slate-600">{{ item.data.cnt26 ?? '—' }}</td>
+                    </tr>
+                    <tr v-if="expandedScores.includes(item.data.score)" class="bg-slate-50 border-b border-slate-300">
                       <td colspan="8" class="px-2 py-1">
                         <table class="w-full text-[11px] bg-white border rounded">
                           <thead>
@@ -2995,7 +3031,7 @@ const VoluntaryAnalysis = {
                             </tr>
                           </thead>
                           <tbody>
-                            <tr v-for="it in r.items" :key="it.id" class="border-t"
+                            <tr v-for="it in item.data.items" :key="it.id" class="border-t"
                                 :class="it.plan.isNew==='新增' ? 'bg-yellow-50/50' : ''">
                               <td class="px-2 py-0.5">{{ it.plan.schoolName }}</td>
                               <td class="px-2 py-0.5">{{ it.plan.city || '—' }}</td>
@@ -3013,7 +3049,8 @@ const VoluntaryAnalysis = {
                         </table>
                       </td>
                     </tr>
-                  </template>
+                    </template><!-- /row -->
+                  </template><!-- /v-for byScoreCompact -->
                 </tbody>
               </table>
             </div>

@@ -443,6 +443,29 @@ tr.main-row-expanded td { background: rgba(59, 130, 246, 0.04); }
 .keyword-toolbar > div { padding: 2px 4px !important; }
 .keyword-toolbar input { font-size: 12px; padding: 2px 4px; }
 
+/* === V9: 分析视图 分数聚合表 === */
+.analysis-score-table { border-collapse: separate; border-spacing: 0; }
+.analysis-score-table thead th {
+  position: sticky; top: 0; z-index: 1;
+  font-weight: 600; color: #475569;
+}
+.analysis-score-table tbody tr.tier-row-chong { border-left: 4px solid #ef4444; }
+.analysis-score-table tbody tr.tier-row-wen   { border-left: 4px solid #f59e0b; }
+.analysis-score-table tbody tr.tier-row-bao   { border-left: 4px solid #10b981; }
+.analysis-score-table tbody tr.tier-row-chong td:first-child,
+.analysis-score-table tbody tr.tier-row-wen td:first-child,
+.analysis-score-table tbody tr.tier-row-bao td:first-child {
+  border-left: 4px solid;
+  border-left-color: inherit;
+  padding-left: 6px;
+}
+.analysis-score-table tbody tr.tier-row-chong td:first-child { border-left-color: #ef4444; }
+.analysis-score-table tbody tr.tier-row-wen   td:first-child { border-left-color: #f59e0b; }
+.analysis-score-table tbody tr.tier-row-bao   td:first-child { border-left-color: #10b981; }
+.analysis-score-table tbody tr:not([class*="bg-blue"]):not([class*="bg-yellow"]):not([class*="bg-slate"]):hover {
+  background: #f8fafc;
+}
+
 /* === V8: 推荐视图 === */
 .recommend-table { font-size: 11px; }
 .recommend-table th { background: #eff6ff; }
