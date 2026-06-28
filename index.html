@@ -244,7 +244,7 @@
           <!-- Top sort + count bar -->
           <div class="flex items-center gap-3 mb-3 flex-wrap">
             <!-- voluntary 视图: 列表选择 + 配额 + 清空 -->
-            <div v-if="store.viewMode === 'voluntary'" class="text-sm text-slate-600 flex items-center gap-2 flex-wrap">
+            <div v-if="store.viewMode === 'voluntary' || store.viewMode === 'analysis'" class="text-sm text-slate-600 flex items-center gap-2 flex-wrap">
               <span class="font-bold">📋</span>
               <select :value="store.activeVoluntaryName"
                       @change="switchVoluntaryList($event.target.value)"
@@ -265,7 +265,8 @@
                 <span class="text-amber-600">稳 {{ voluntaryTierCounts.wen }}/{{ paneTargets.wen }}</span>,
                 <span class="text-green-600">保 {{ voluntaryTierCounts.bao }}/{{ paneTargets.bao }}</span>)
               </span>
-              <button @click="ui.showVoluntaryAnalysis = true" v-if="voluntary.length" class="text-xs ml-2 text-indigo-600 hover:underline font-bold" title="冲稳保/分数分布/学校扎堆 等">📊 分析</button>
+              <button v-if="voluntary.length && store.viewMode==='voluntary'" @click="store.viewMode = 'analysis'" class="text-xs ml-2 text-indigo-600 hover:underline font-bold" title="冲稳保/分数分布/学校扎堆 等">📊 分析</button>
+              <button v-if="store.viewMode==='analysis'" @click="store.viewMode = 'voluntary'" class="text-xs ml-2 text-blue-600 hover:underline font-bold">← 返回志愿表</button>
               <button @click="exportVoluntaryHtml" v-if="voluntary.length" class="text-xs ml-1 text-blue-600 hover:underline">📤 HTML</button>
               <button @click="exportVoluntaryByTier" v-if="voluntary.length" class="text-xs ml-1 text-amber-600 hover:underline" title="按当前表顺序导出 CSV (档作为一列)">📤 CSV</button>
               <button @click="exportVoluntaryJson" v-if="voluntary.length" class="text-xs ml-1 text-purple-600 hover:underline" title="导出 JSON (可跨设备/版本导入)">📤 JSON</button>
@@ -375,8 +376,34 @@
             </select>
           </div>
 
-          <!-- Result list -->
+          <!-- 志愿分析视图 (普通页面, 不弹窗) -->
+          <voluntary-analysis
+            v-if="store.viewMode === 'analysis'"
+            embedded
+            :analysis="voluntaryAnalysis"
+            :list-name="store.activeVoluntaryName"
+            :anchor-override="ui.analysisAnchor25"
+            :rank-override="ui.analysisAnchorRank26"
+            :expanded-schools="ui.analysisExpandedSchools"
+            :expanded-scores="ui.analysisExpandedScores"
+            @close="store.viewMode = 'voluntary'"
+            @set-anchor="v => ui.analysisAnchor25 = v"
+            @set-rank="v => ui.analysisAnchorRank26 = v"
+            @toggle-school="n => {
+              const i = ui.analysisExpandedSchools.indexOf(n);
+              if (i >= 0) ui.analysisExpandedSchools.splice(i, 1);
+              else ui.analysisExpandedSchools.push(n);
+            }"
+            @toggle-score="s => {
+              const i = ui.analysisExpandedScores.indexOf(s);
+              if (i >= 0) ui.analysisExpandedScores.splice(i, 1);
+              else ui.analysisExpandedScores.push(s);
+            }"
+          ></voluntary-analysis>
+
+          <!-- Result list (其它视图) -->
           <result-list
+            v-if="store.viewMode !== 'analysis'"
             :plans="paged"
             :total="filtered.length"
             :current-page="currentPage"
@@ -438,30 +465,6 @@
         @save="savePriorityOverrides"
         @reset="resetPriorityOverrides"
       ></priority-settings>
-
-      <!-- 志愿分析 modal -->
-      <voluntary-analysis
-        v-if="ui.showVoluntaryAnalysis"
-        :analysis="voluntaryAnalysis"
-        :list-name="store.activeVoluntaryName"
-        :anchor-override="ui.analysisAnchor25"
-        :rank-override="ui.analysisAnchorRank26"
-        :expanded-schools="ui.analysisExpandedSchools"
-        :expanded-scores="ui.analysisExpandedScores"
-        @close="ui.showVoluntaryAnalysis = false"
-        @set-anchor="v => ui.analysisAnchor25 = v"
-        @set-rank="v => ui.analysisAnchorRank26 = v"
-        @toggle-school="n => {
-          const i = ui.analysisExpandedSchools.indexOf(n);
-          if (i >= 0) ui.analysisExpandedSchools.splice(i, 1);
-          else ui.analysisExpandedSchools.push(n);
-        }"
-        @toggle-score="s => {
-          const i = ui.analysisExpandedScores.indexOf(s);
-          if (i >= 0) ui.analysisExpandedScores.splice(i, 1);
-          else ui.analysisExpandedScores.push(s);
-        }"
-      ></voluntary-analysis>
 
       <!-- Detail drawer -->
       <detail-drawer

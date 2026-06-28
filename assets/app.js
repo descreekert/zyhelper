@@ -2739,9 +2739,9 @@ const PrioritySettings = {
   `,
 };
 
-// V9: 志愿分析 modal
+// V9: 志愿分析 (普通视图 + 兼容 modal). prop.embedded=true 时去掉 modal 外壳
 const VoluntaryAnalysis = {
-  props: ["analysis", "listName", "anchorOverride", "rankOverride", "expandedSchools", "expandedScores"],
+  props: ["analysis", "listName", "anchorOverride", "rankOverride", "expandedSchools", "expandedScores", "embedded"],
   emits: ["close", "set-anchor", "set-rank", "toggle-school", "toggle-score"],
   setup(props, { emit }) {
     const maxScoreCount = computed(() => {
@@ -2781,17 +2781,18 @@ const VoluntaryAnalysis = {
              rankInput, commitRank, resetRank };
   },
   template: `
-    <div class="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
-         @click.self="$emit('close')">
-      <div class="bg-white rounded-lg shadow-2xl w-full max-w-5xl max-h-[92vh] flex flex-col text-sm">
+    <div :class="embedded ? 'bg-white rounded shadow border text-sm' : 'fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4'"
+         @click.self="!embedded && $emit('close')">
+      <div :class="embedded ? '' : 'bg-white rounded-lg shadow-2xl w-full max-w-5xl max-h-[92vh] flex flex-col text-sm'">
         <div class="flex items-center justify-between p-3 border-b">
           <h3 class="font-bold text-lg">📊 志愿分析 — {{ listName }}</h3>
-          <button @click="$emit('close')" class="text-2xl leading-none text-slate-400 hover:text-red-500">×</button>
+          <button v-if="!embedded" @click="$emit('close')" class="text-2xl leading-none text-slate-400 hover:text-red-500">×</button>
+          <button v-else @click="$emit('close')" class="text-sm px-2 py-1 border rounded hover:bg-slate-100" title="返回志愿表">← 返回志愿</button>
         </div>
-        <div v-if="!analysis" class="flex-1 flex items-center justify-center text-slate-400 py-12">
+        <div v-if="!analysis" :class="embedded ? 'p-8 text-center' : 'flex-1 flex items-center justify-center'" class="text-slate-400 py-12">
           请先在顶部输入 26 分数, 且志愿单不为空
         </div>
-        <div v-else class="flex-1 overflow-y-auto p-4 space-y-4">
+        <div v-else :class="embedded ? 'p-4 space-y-4' : 'flex-1 overflow-y-auto p-4 space-y-4'">
           <!-- 总览 + anchor 调整 -->
           <section>
             <div class="text-xs text-slate-500 mb-1">总览 (统计基于 plan.25 参考分)</div>
