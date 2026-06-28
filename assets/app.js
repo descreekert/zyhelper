@@ -2793,22 +2793,28 @@ const VoluntaryAnalysis = {
             <div class="grid grid-cols-4 gap-2 mt-2 text-xs">
               <div class="bg-red-50 border border-red-200 rounded p-2">
                 <div class="text-red-700 font-bold">冲 [{{ analysis.ranges.chong.lo }}-{{ analysis.ranges.chong.hi }}]</div>
-                <div>{{ analysis.tiers.chong.items.length }} 项 · {{ analysis.tiers.chong.enroll }} 人</div>
+                <div>{{ analysis.tiers.chong.items.length }} 项 · 招{{ analysis.tiers.chong.enroll }} / 同{{ analysis.tiers.chong.cnt26 || '?' }} 人</div>
+                <div v-if="analysis.tiers.chong.ratio != null" class="font-bold mt-0.5">比率 {{ (analysis.tiers.chong.ratio * 100).toFixed(1) }}%</div>
               </div>
               <div class="bg-amber-50 border border-amber-200 rounded p-2">
                 <div class="text-amber-700 font-bold">稳 [{{ analysis.ranges.wen.lo }}-{{ analysis.ranges.wen.hi }}]</div>
-                <div>{{ analysis.tiers.wen.items.length }} 项 · {{ analysis.tiers.wen.enroll }} 人</div>
+                <div>{{ analysis.tiers.wen.items.length }} 项 · 招{{ analysis.tiers.wen.enroll }} / 同{{ analysis.tiers.wen.cnt26 || '?' }} 人</div>
+                <div v-if="analysis.tiers.wen.ratio != null" class="font-bold mt-0.5">比率 {{ (analysis.tiers.wen.ratio * 100).toFixed(1) }}%</div>
               </div>
               <div class="bg-green-50 border border-green-200 rounded p-2">
                 <div class="text-green-700 font-bold">保 [{{ analysis.ranges.bao.lo }}-{{ analysis.ranges.bao.hi }}]</div>
-                <div>{{ analysis.tiers.bao.items.length }} 项 · {{ analysis.tiers.bao.enroll }} 人</div>
+                <div>{{ analysis.tiers.bao.items.length }} 项 · 招{{ analysis.tiers.bao.enroll }} / 同{{ analysis.tiers.bao.cnt26 || '?' }} 人</div>
+                <div v-if="analysis.tiers.bao.ratio != null" class="font-bold mt-0.5">比率 {{ (analysis.tiers.bao.ratio * 100).toFixed(1) }}%</div>
               </div>
               <div class="bg-slate-100 border border-slate-200 rounded p-2">
                 <div class="text-slate-600 font-bold">范围外</div>
                 <div>{{ analysis.tiers.out.items.length }} 项 · {{ analysis.tiers.out.enroll }} 人</div>
               </div>
             </div>
-            <div class="text-[10px] text-slate-400 mt-1">本分析规则: 冲 +6~+15 / 稳 -5~+5 / 保 -20~-6 (相对 25 等位分)</div>
+            <div class="text-[10px] text-slate-400 mt-1">
+              本分析规则: 冲 +6~+15 / 稳 -5~+5 / 保 -20~-6 (相对 25 等位分).
+              录取比率 = 招生人数 (志愿单内 26 计划) / 同分人数 (26 一分一段, 按 25→26 等位映射)
+            </div>
           </section>
 
           <!-- 占比柱 -->
@@ -2826,32 +2832,46 @@ const VoluntaryAnalysis = {
             </div>
           </section>
 
-          <!-- 按分数 (含 gap) -->
+          <!-- 按分数 (含 gap, 含录取比率) -->
           <section>
-            <div class="text-xs text-slate-500 mb-1">每个 25 参考分 (含空档, 共 {{ analysis.byScore.length }} 分)</div>
-            <div class="border rounded max-h-72 overflow-y-auto bg-white">
+            <div class="text-xs text-slate-500 mb-1">
+              每个 25 参考分 (含空档, 共 {{ analysis.byScore.length }} 分) — <b>同分人数</b>(26)按 25→26 等位映射查 2026 一分一段
+            </div>
+            <div class="border rounded max-h-80 overflow-y-auto bg-white">
               <table class="w-full text-xs">
                 <thead class="sticky top-0 bg-slate-100">
                   <tr>
-                    <th class="px-2 py-1 text-left w-14">分数</th>
-                    <th class="px-2 py-1 text-left w-10">档</th>
-                    <th class="px-2 py-1 text-center w-10">N</th>
-                    <th class="px-2 py-1 text-center w-14">26 计划</th>
+                    <th class="px-2 py-1 text-left w-12">25 分</th>
+                    <th class="px-2 py-1 text-center w-8">档</th>
+                    <th class="px-2 py-1 text-center w-12">→26等</th>
+                    <th class="px-2 py-1 text-center w-8">N</th>
+                    <th class="px-2 py-1 text-center w-12">26招生</th>
+                    <th class="px-2 py-1 text-center w-12">26同分</th>
+                    <th class="px-2 py-1 text-center w-14">录取比率</th>
                     <th class="px-2 py-1 text-left">分布</th>
                   </tr>
                 </thead>
                 <tbody>
                   <tr v-for="r in analysis.byScore" :key="r.score"
                       :class="r.count === 0 ? 'opacity-50' : ''">
-                    <td class="px-2 py-0.5">{{ r.score }}</td>
-                    <td class="px-2 py-0.5">
+                    <td class="px-2 py-0.5"><b>{{ r.score }}</b></td>
+                    <td class="px-2 py-0.5 text-center">
                       <span v-if="r.tier==='chong'" class="text-red-600">冲</span>
                       <span v-else-if="r.tier==='wen'" class="text-amber-600">稳</span>
                       <span v-else-if="r.tier==='bao'" class="text-green-600">保</span>
                       <span v-else class="text-slate-400">外</span>
                     </td>
+                    <td class="px-2 py-0.5 text-center text-slate-500">{{ r.equiv26 ?? '—' }}</td>
                     <td class="px-2 py-0.5 text-center">{{ r.count || '-' }}</td>
                     <td class="px-2 py-0.5 text-center">{{ r.enroll || '-' }}</td>
+                    <td class="px-2 py-0.5 text-center">{{ r.cnt26 ?? '—' }}</td>
+                    <td class="px-2 py-0.5 text-center">
+                      <span v-if="r.ratio != null"
+                            :class="r.ratio >= 1 ? 'text-green-700 font-bold' : r.ratio >= 0.5 ? 'text-amber-700' : 'text-red-600'">
+                        {{ (r.ratio * 100).toFixed(0) }}%
+                      </span>
+                      <span v-else class="text-slate-300">—</span>
+                    </td>
                     <td class="px-2 py-0.5">
                       <div v-if="r.count" class="h-3 rounded"
                            :class="r.tier==='chong'?'bg-red-400':r.tier==='wen'?'bg-amber-400':r.tier==='bao'?'bg-green-400':'bg-slate-400'"
@@ -3277,10 +3297,10 @@ createApp({
         return "out";
       };
       const tiers = {
-        chong: { items: [], enroll: 0 },
-        wen:   { items: [], enroll: 0 },
-        bao:   { items: [], enroll: 0 },
-        out:   { items: [], enroll: 0 },
+        chong: { items: [], enroll: 0, cnt26: 0 },
+        wen:   { items: [], enroll: 0, cnt26: 0 },
+        bao:   { items: [], enroll: 0, cnt26: 0 },
+        out:   { items: [], enroll: 0, cnt26: 0 },
       };
       let totalEnroll = 0;
       for (const it of items) {
@@ -3299,10 +3319,31 @@ createApp({
       }
       const lo = Math.min(ranges.bao.lo, ...[...scoreMap.keys(), Infinity]);
       const hi = Math.max(ranges.chong.hi, ...[...scoreMap.keys(), -Infinity]);
+      // 用于查 2026 一分一段 本分人数 (按 26 score)
+      const osr26 = scoreRank.value?.oneScoreOneRank?.["2026"];
+      const cnt26Map = new Map();
+      if (osr26) for (const [sc, cnt] of osr26) cnt26Map.set(sc, cnt);
       const byScore = [];
       for (let s = hi; s >= lo; s--) {
         const r = scoreMap.get(s) || { count: 0, enroll: 0 };
-        byScore.push({ score: s, count: r.count, enroll: r.enroll, tier: tierOf(s) });
+        const eq = equivFromScore25(s, scoreRank.value);
+        const cnt26 = (eq.score26 != null) ? (cnt26Map.get(eq.score26) ?? null) : null;
+        const ratio = (r.enroll > 0 && cnt26 > 0) ? r.enroll / cnt26 : null;
+        const tier = tierOf(s);
+        byScore.push({
+          score: s, count: r.count, enroll: r.enroll, tier,
+          equiv26: eq.score26, equiv26Rank: eq.rank26, cnt26, ratio,
+        });
+        // 累计到 tier 的 26 同分人数 (整个 tier 分数范围内, 每分 cnt26 都计入,
+        // 不论该分数是否有志愿 — 反映"该档分数段内总考生数")
+        if (tier !== "out" && cnt26 != null) {
+          tiers[tier].cnt26 += cnt26;
+        }
+      }
+      // tier 录取比率
+      for (const k of ["chong", "wen", "bao", "out"]) {
+        const t = tiers[k];
+        t.ratio = (t.enroll > 0 && t.cnt26 > 0) ? t.enroll / t.cnt26 : null;
       }
       // 按学校
       const schoolMap = new Map();
