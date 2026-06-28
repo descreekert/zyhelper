@@ -113,6 +113,44 @@ function score26FromRank26(rank, scoreRank) {
   return table[table.length - 1]?.[0] ?? null;
 }
 
+// V9: 录取率算法 — 用户位次 vs plan 历史位次 + 专业热度调整
+// 返回 { prob, isUncertain, heat, reason? }
+//   prob: 0-1 (null 表示无法估算)
+//   isUncertain: true 时是 "新增" 或 "数据缺失"
+//   heat: 热度档 (0-7, 高=热)
+function majorHeat(plan) {
+  if (!plan) return { idx: 0, pct: 0, name: "其他" };
+  const text = [
+    plan.majorName26 || "", plan.majorName25 || "",
+    ...(plan.containedMajors || []), plan.majorClass || "",
+  ].join(" ");
+  if (/电子信息|集成电路|通信工程|微电子|物联网|电子科学/.test(text)) return { idx: 7, pct: -0.04, name: "电子信息" };
+  if (/计算机|软件工程|数据科学与大数据|网络空间|人工智能|数字媒体|信息安全|信息工程/.test(text)) return { idx: 6, pct: -0.03, name: "计算机" };
+  if (/自动化|智能科学|控制科学/.test(text)) return { idx: 5, pct: -0.015, name: "自动化" };
+  if (/机械|智能制造|工业工程/.test(text)) return { idx: 4, pct: -0.005, name: "机械" };
+  if (/统计|大数据/.test(text)) return { idx: 3, pct: 0, name: "统计/大数据" };
+  if (/车辆/.test(text)) return { idx: 2, pct: 0.005, name: "车辆" };
+  if (/能源|动力工程|新能源/.test(text)) return { idx: 1, pct: 0.01, name: "能动" };
+  return { idx: 0, pct: 0, name: "其他" };
+}
+function computeAdmitProb(plan, userRank25) {
+  if (!plan) return { prob: null, isUncertain: true };
+  // 新增专业: 无 25 参考, 标记不确定
+  if (plan.isNew === "新增") {
+    return { prob: null, isUncertain: true, reason: "新增", heat: majorHeat(plan) };
+  }
+  const planRank25 = plan.ref25Rank || plan.rank25 || null;
+  if (!planRank25 || !userRank25) {
+    return { prob: null, isUncertain: true, reason: "位次缺失", heat: majorHeat(plan) };
+  }
+  const heat = majorHeat(plan);
+  const effPlanRank = planRank25 * (1 + heat.pct);
+  const k = 20;
+  const x = (effPlanRank - userRank25) / effPlanRank;
+  const prob = 1 / (1 + Math.exp(-k * x));
+  return { prob: Math.max(0.01, Math.min(0.98, prob)), isUncertain: false, heat, effPlanRank };
+}
+
 // V9: 26 分数 → 25 等位分 (志愿分析用. equivFromScore25 的反函数)
 function equiv25FromScore26(score26, scoreRank) {
   if (!score26 || !scoreRank) return null;
@@ -2888,13 +2926,14 @@ const VoluntaryAnalysis = {
               <table class="w-full text-[11px]">
                 <thead class="bg-slate-100">
                   <tr>
-                    <th class="px-2 py-1 text-left">标识</th>
+                    <th class="px-2 py-1 text-left w-8">标识</th>
                     <th class="px-2 py-1 text-left">学校</th>
-                    <th class="px-2 py-1 text-left">城市</th>
-                    <th class="px-2 py-1 text-left">26 招生专业</th>
+                    <th class="px-2 py-1 text-left w-16">城市</th>
+                    <th class="px-2 py-1 text-left">26 招生专业 (含热度)</th>
                     <th class="px-2 py-1 text-center w-14">25 分/位</th>
                     <th class="px-2 py-1 text-center w-12">26 计划</th>
                     <th class="px-2 py-1 text-center w-12">学费</th>
+                    <th class="px-2 py-1 text-center w-12" title="算法: 位次 sigmoid × 热度调整">录取率</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2905,14 +2944,27 @@ const VoluntaryAnalysis = {
                     </td>
                     <td class="px-2 py-0.5">{{ it.plan.schoolName }}</td>
                     <td class="px-2 py-0.5">{{ it.plan.city || '—' }}</td>
-                    <td class="px-2 py-0.5">{{ it.plan.majorName26 || it.plan.majorName25 || '—' }}</td>
+                    <td class="px-2 py-0.5">
+                      {{ it.plan.majorName26 || it.plan.majorName25 || '—' }}
+                      <span v-if="it.admit && it.admit.heat && it.admit.heat.idx >= 4"
+                            class="ml-1 text-[10px] px-1 rounded"
+                            :class="it.admit.heat.idx >= 6 ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'"
+                            :title="'热度: ' + it.admit.heat.name">🔥{{ it.admit.heat.name }}</span>
+                    </td>
                     <td class="px-2 py-0.5 text-center"><b>{{ it.score25 || '—' }}</b>/{{ it.rank25 || '—' }}</td>
                     <td class="px-2 py-0.5 text-center">{{ it.enroll || '—' }}</td>
                     <td class="px-2 py-0.5 text-center">{{ it.plan.tuition || '—' }}</td>
+                    <td class="px-2 py-0.5 text-center">
+                      <span v-if="it.admit && it.admit.prob != null"
+                            :class="it.admit.prob >= 0.7 ? 'text-green-700 font-bold' : it.admit.prob >= 0.4 ? 'text-amber-700 font-bold' : 'text-red-600'">
+                        {{ (it.admit.prob * 100).toFixed(0) }}%
+                      </span>
+                      <span v-else class="text-slate-300">—</span>
+                    </td>
                   </tr>
                   <!-- 不确定 (新增) -->
                   <tr v-if="analysis.tiers[k].newItems.length" class="bg-yellow-50 border-t border-yellow-200">
-                    <td colspan="7" class="px-2 py-1 text-yellow-800 text-xs font-bold">
+                    <td colspan="8" class="px-2 py-1 text-yellow-800 text-xs font-bold">
                       ⚠ 不确定 — {{ analysis.tiers[k].newItems.length }} 个新增专业 (无 25 年参考, 录取概率不可靠)
                     </td>
                   </tr>
@@ -2924,6 +2976,7 @@ const VoluntaryAnalysis = {
                     <td class="px-2 py-0.5 text-center"><b>{{ it.score25 || '—' }}</b>/{{ it.rank25 || '—' }}</td>
                     <td class="px-2 py-0.5 text-center">{{ it.enroll || '—' }}</td>
                     <td class="px-2 py-0.5 text-center">{{ it.plan.tuition || '—' }}</td>
+                    <td class="px-2 py-0.5 text-center text-slate-400">新?</td>
                   </tr>
                 </tbody>
               </table>
@@ -3027,7 +3080,7 @@ const VoluntaryAnalysis = {
                               <th class="px-2 py-1 text-center w-14">25 分/位</th>
                               <th class="px-2 py-1 text-center w-12">26 计划</th>
                               <th class="px-2 py-1 text-center w-12">学费</th>
-                              <th class="px-2 py-1 text-left">备注</th>
+                              <th class="px-2 py-1 text-center w-12">录取率</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -3039,11 +3092,20 @@ const VoluntaryAnalysis = {
                                 <span v-if="it.plan.isNew==='新增'" class="badge-new">新</span>
                                 <span v-else-if="it.plan.diff" class="badge-diff" :title="it.plan.diff">变</span>
                                 {{ it.plan.majorName26 || it.plan.majorName25 || '—' }}
+                                <span v-if="it.admit && it.admit.heat && it.admit.heat.idx >= 4"
+                                      class="ml-1 text-[10px] px-1 rounded"
+                                      :class="it.admit.heat.idx >= 6 ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'">🔥{{ it.admit.heat.name }}</span>
                               </td>
                               <td class="px-2 py-0.5 text-center"><b>{{ it.score25 || '—' }}</b>/{{ it.rank25 || '—' }}</td>
                               <td class="px-2 py-0.5 text-center">{{ it.enroll || '—' }}</td>
                               <td class="px-2 py-0.5 text-center">{{ it.plan.tuition || '—' }}</td>
-                              <td class="px-2 py-0.5">{{ (it.plan.remarks || '').slice(0, 50) }}</td>
+                              <td class="px-2 py-0.5 text-center">
+                                <span v-if="it.admit && it.admit.prob != null"
+                                      :class="it.admit.prob >= 0.7 ? 'text-green-700 font-bold' : it.admit.prob >= 0.4 ? 'text-amber-700 font-bold' : 'text-red-600'">
+                                  {{ (it.admit.prob * 100).toFixed(0) }}%
+                                </span>
+                                <span v-else class="text-slate-400">新?</span>
+                              </td>
                             </tr>
                           </tbody>
                         </table>
@@ -3105,7 +3167,7 @@ const VoluntaryAnalysis = {
                               <th class="px-2 py-1 text-center w-16">25 分/位</th>
                               <th class="px-2 py-1 text-center w-12">26 计划</th>
                               <th class="px-2 py-1 text-center w-12">学费</th>
-                              <th class="px-2 py-1 text-left">备注</th>
+                              <th class="px-2 py-1 text-center w-12">录取率</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -3116,6 +3178,9 @@ const VoluntaryAnalysis = {
                                 <span v-if="it.plan.isNew==='新增'" class="badge-new">新</span>
                                 <span v-else-if="it.plan.diff" class="badge-diff" :title="it.plan.diff">变</span>
                                 {{ it.plan.majorName26 || it.plan.majorName25 || '—' }}
+                                <span v-if="it.admit && it.admit.heat && it.admit.heat.idx >= 4"
+                                      class="ml-1 text-[10px] px-1 rounded"
+                                      :class="it.admit.heat.idx >= 6 ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'">🔥{{ it.admit.heat.name }}</span>
                               </td>
                               <td class="px-2 py-0.5 text-center">
                                 <span v-if="analysis.ranges.chong.lo <= it.score25 && it.score25 <= analysis.ranges.chong.hi" class="text-red-600">冲</span>
@@ -3126,7 +3191,13 @@ const VoluntaryAnalysis = {
                               <td class="px-2 py-0.5 text-center"><b>{{ it.score25 || '—' }}</b>/{{ it.rank25 || '—' }}</td>
                               <td class="px-2 py-0.5 text-center">{{ it.enroll || '—' }}</td>
                               <td class="px-2 py-0.5 text-center">{{ it.plan.tuition || '—' }}</td>
-                              <td class="px-2 py-0.5">{{ (it.plan.remarks || '').slice(0, 50) }}</td>
+                              <td class="px-2 py-0.5 text-center">
+                                <span v-if="it.admit && it.admit.prob != null"
+                                      :class="it.admit.prob >= 0.7 ? 'text-green-700 font-bold' : it.admit.prob >= 0.4 ? 'text-amber-700 font-bold' : 'text-red-600'">
+                                  {{ (it.admit.prob * 100).toFixed(0) }}%
+                                </span>
+                                <span v-else class="text-slate-400">新?</span>
+                              </td>
                             </tr>
                           </tbody>
                         </table>
@@ -3632,10 +3703,14 @@ createApp({
       if (totalEnroll && tiers.bao.enroll < totalEnroll * 0.15) {
         insights.push({ level: "warn", text: `保档 26 计划人数仅 ${tiers.bao.enroll} (占 ${(tiers.bao.enroll/totalEnroll*100).toFixed(0)}%), 保底名额偏少` });
       }
+      // 给每个 item 算 录取率 (用 anchorRank25)
+      for (const it of items) {
+        it.admit = computeAdmitProb(it.plan, anchorRank25);
+      }
       return {
         items, tiers, byScore, bySchool, ranges,
-        my26: ui.myScore, autoAnchor25: autoAnchor, anchor25,
-        myRank26: ui.myRank, userRank26,        // 实际用的 26 位次 anchor
+        my26: ui.myScore, autoAnchor25: autoAnchor, anchor25, anchorRank25,
+        myRank26: ui.myRank, userRank26,
         total, totalEnroll, insights,
       };
     });
