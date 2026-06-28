@@ -133,14 +133,34 @@ function majorHeat(plan) {
   if (/能源|动力工程|新能源/.test(text)) return { idx: 1, pct: 0.01, name: "能动" };
   return { idx: 0, pct: 0, name: "其他" };
 }
-function computeAdmitProb(plan, userRank25) {
+// ctx: { userRank25, proxyNewRank? }
+//   userRank25: 用户 25 等位位次 (主要计算依据)
+//   proxyNewRank: anchor25+5 分对应的 25 位次, 用于新增专业的粗估
+function computeAdmitProb(plan, ctx) {
   if (!plan) return { prob: null, isUncertain: true };
+  // 兼容: 旧调用传 number, 新调用传 object
+  if (typeof ctx === "number") ctx = { userRank25: ctx };
+  ctx = ctx || {};
+  const userRank25 = ctx.userRank25;
+  const proxyNewRank = ctx.proxyNewRank;
+  const SCALE = 1500, BIAS = 0.4;
+  // 新增专业: 用 proxyNewRank (anchor+5 分位次) 粗估
   if (plan.isNew === "新增") {
-    return { prob: null, isUncertain: true, reason: "新增", heat: majorHeat(plan) };
+    if (!proxyNewRank || !userRank25) {
+      return { prob: null, isUncertain: true, reason: "新增", heat: majorHeat(plan) };
+    }
+    const heat = majorHeat(plan);
+    const effPlanRank = proxyNewRank * (1 + heat.pct);
+    const diff = effPlanRank - userRank25;
+    const prob = 1 / (1 + Math.exp(-diff / SCALE - BIAS));
+    return {
+      prob: Math.max(0.02, Math.min(0.98, prob)),
+      isUncertain: false, isEstimated: true,    // (估) 标
+      heat, refRank: proxyNewRank, effPlanRank, diff,
+    };
   }
-  const r25  = plan.ref25Rank || plan.rank25 || null;   // 25 当年门槛
-  const ravg = plan.avgRank || null;                     // 多年平均门槛 (22-25)
-  // 参考位次 = ref25 与 avgRank 的 50/50 平均 (平滑大小年波动); 缺一者 → 用另一者
+  const r25  = plan.ref25Rank || plan.rank25 || null;
+  const ravg = plan.avgRank || null;
   let refRank = null;
   if (r25 && ravg) refRank = Math.round((r25 + ravg) / 2);
   else refRank = r25 || ravg;
@@ -149,8 +169,6 @@ function computeAdmitProb(plan, userRank25) {
   }
   const heat = majorHeat(plan);
   const effPlanRank = refRank * (1 + heat.pct);
-  const SCALE = 1500;     // ≈ 5 分高考波动 (位次跨度)
-  const BIAS = 0.4;       // diff=0 时 P ≈ 60% (用户反馈: 同位次基线应略高于 50%)
   const diff = effPlanRank - userRank25;
   const prob = 1 / (1 + Math.exp(-diff / SCALE - BIAS));
   return {
@@ -1945,12 +1963,13 @@ const ResultList = {
                     <template v-if="getAdmit(p)">
                       <template v-if="getAdmit(p).prob != null">
                         <span :class="getAdmit(p).prob >= 0.7 ? 'text-green-700 font-bold' : getAdmit(p).prob >= 0.4 ? 'text-amber-700 font-bold' : 'text-red-600 font-bold'"
-                              :title="'热度: ' + (getAdmit(p).heat ? getAdmit(p).heat.name : '—') +
+                              :title="(getAdmit(p).isEstimated ? '[新增, 按 anchor+5 分位次估] ' : '') +
+                                       '热度: ' + (getAdmit(p).heat ? getAdmit(p).heat.name : '—') +
                                        ' | 参考位次 ' + (getAdmit(p).refRank ?? '?') +
-                                       ' (25=' + (getAdmit(p).ref25 ?? '?') + ' 平均=' + (getAdmit(p).avgRank ?? '?') + ')' +
+                                       (getAdmit(p).isEstimated ? ' (估)' : ' (25=' + (getAdmit(p).ref25 ?? '?') + ' 平均=' + (getAdmit(p).avgRank ?? '?') + ')') +
                                        ' | 有效位次 ' + (getAdmit(p).effPlanRank ? Math.round(getAdmit(p).effPlanRank) : '?') +
                                        ' | diff ' + (getAdmit(p).diff != null ? (getAdmit(p).diff > 0 ? '+' + getAdmit(p).diff.toFixed(0) : getAdmit(p).diff.toFixed(0)) : '?')">
-                          {{ (getAdmit(p).prob * 100).toFixed(0) }}%
+                          {{ (getAdmit(p).prob * 100).toFixed(0) }}%<span v-if="getAdmit(p).isEstimated" class="text-[9px] text-amber-600 ml-0.5">(估)</span>
                         </span>
                         <span v-if="getAdmit(p).heat && getAdmit(p).heat.idx >= 4" class="ml-0.5 text-[9px]"
                               :class="getAdmit(p).heat.idx >= 6 ? 'text-red-500' : 'text-amber-500'"
@@ -2998,7 +3017,14 @@ const VoluntaryAnalysis = {
                     <td class="px-2 py-0.5 text-center"><b>{{ it.score25 || '—' }}</b>/{{ it.rank25 || '—' }}</td>
                     <td class="px-2 py-0.5 text-center">{{ it.enroll || '—' }}</td>
                     <td class="px-2 py-0.5 text-center">{{ it.plan.tuition || '—' }}</td>
-                    <td class="px-2 py-0.5 text-center text-slate-400">新?</td>
+                    <td class="px-2 py-0.5 text-center">
+                      <span v-if="it.admit && it.admit.prob != null"
+                            :class="it.admit.prob >= 0.7 ? 'text-green-700 font-bold' : it.admit.prob >= 0.4 ? 'text-amber-700 font-bold' : 'text-red-600'"
+                            title="按 anchor25+5 分位次粗估">
+                        {{ (it.admit.prob * 100).toFixed(0) }}%<span class="text-[9px] text-amber-600 ml-0.5">(估)</span>
+                      </span>
+                      <span v-else class="text-slate-400">新?</span>
+                    </td>
                   </tr>
                 </tbody>
               </table>
@@ -3124,7 +3150,7 @@ const VoluntaryAnalysis = {
                               <td class="px-2 py-0.5 text-center">
                                 <span v-if="it.admit && it.admit.prob != null"
                                       :class="it.admit.prob >= 0.7 ? 'text-green-700 font-bold' : it.admit.prob >= 0.4 ? 'text-amber-700 font-bold' : 'text-red-600'">
-                                  {{ (it.admit.prob * 100).toFixed(0) }}%
+                                  {{ (it.admit.prob * 100).toFixed(0) }}%<span v-if="it.admit.isEstimated" class="text-[9px] text-amber-600 ml-0.5">(估)</span>
                                 </span>
                                 <span v-else class="text-slate-400">新?</span>
                               </td>
@@ -3216,7 +3242,7 @@ const VoluntaryAnalysis = {
                               <td class="px-2 py-0.5 text-center">
                                 <span v-if="it.admit && it.admit.prob != null"
                                       :class="it.admit.prob >= 0.7 ? 'text-green-700 font-bold' : it.admit.prob >= 0.4 ? 'text-amber-700 font-bold' : 'text-red-600'">
-                                  {{ (it.admit.prob * 100).toFixed(0) }}%
+                                  {{ (it.admit.prob * 100).toFixed(0) }}%<span v-if="it.admit.isEstimated" class="text-[9px] text-amber-600 ml-0.5">(估)</span>
                                 </span>
                                 <span v-else class="text-slate-400">新?</span>
                               </td>
@@ -4161,9 +4187,10 @@ createApp({
       if (totalEnroll && tiers.bao.enroll < totalEnroll * 0.15) {
         insights.push({ level: "warn", text: `保档 26 计划人数仅 ${tiers.bao.enroll} (占 ${(tiers.bao.enroll/totalEnroll*100).toFixed(0)}%), 保底名额偏少` });
       }
-      // 给每个 item 算 录取率 (用 anchorRank25)
+      // 给每个 item 算 录取率 (用 anchorRank25 + proxyNewRank)
+      const proxyNewR = rank25FromScore25(anchor25 + 5, scoreRank.value);
       for (const it of items) {
-        it.admit = computeAdmitProb(it.plan, anchorRank25);
+        it.admit = computeAdmitProb(it.plan, { userRank25: anchorRank25, proxyNewRank: proxyNewR });
       }
       return {
         items, tiers, byScore, bySchool, ranges,
@@ -4528,8 +4555,20 @@ createApp({
       if (!s25) return null;
       return rank25FromScore25(s25, sr);
     });
+    // 新增专业 proxy: anchor25 + 5 分 的位次 (录取率粗估锚)
+    const proxyNewRank = computed(() => {
+      const sr = scoreRank.value;
+      if (!sr) return null;
+      let s25 = (ui.analysisAnchor25 > 0) ? ui.analysisAnchor25
+              : (ui.myScore > 0 ? equiv25FromScore26(ui.myScore, sr) : null);
+      if (!s25) return null;
+      return rank25FromScore25(s25 + 5, sr);
+    });
     function admitProbFor(plan) {
-      return computeAdmitProb(plan, userRank25Anchor.value);
+      return computeAdmitProb(plan, {
+        userRank25: userRank25Anchor.value,
+        proxyNewRank: proxyNewRank.value,
+      });
     }
 
     // tier 映射 (id -> 'chong'|'wen'|'bao'|null)
