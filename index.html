@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>2026 物理类志愿填报助手</title>
-  <link rel="stylesheet" href="assets/style.css?v=v11-trend-slider">
+  <link rel="stylesheet" href="assets/style.css?v=v12-transfer">
   <script src="https://unpkg.com/vue@3.4.21/dist/vue.global.prod.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/chart.js@4.4.2/dist/chart.umd.js"></script>
@@ -389,6 +389,8 @@
             :admit-prob-fn="admitProbFor"
             :score-rank="scoreRank"
             :supply-map="supplyMap"
+            :targets="store.transferTargets"
+            :accepts="store.transferAccepts"
             @close="store.viewMode = 'voluntary'"
           ></voluntary-report>
 
@@ -404,7 +406,12 @@
             :expanded-scores="ui.analysisExpandedScores"
             :expanded-tiers="ui.analysisExpandedTiers"
             :expanded-enroll-scores="ui.analysisExpandedEnrollScores"
+            :targets="store.transferTargets"
+            :accepts="store.transferAccepts"
             @close="store.viewMode = 'voluntary'"
+            @update-targets="store.transferTargets = $event"
+            @update-accepts="store.transferAccepts = $event"
+            @reset-transfer-lists="resetTransferLists()"
             @set-anchor="v => ui.analysisAnchor25 = v"
             @set-rank="v => ui.analysisAnchorRank26 = v"
             @toggle-school="n => {
@@ -451,6 +458,7 @@
             :recommend-data="recommendData"
             :score-rank="scoreRank"
             :admit-prob-fn="admitProbFor"
+            :transfer-fn="transferOf"
             :pinned-set="pinnedSet"
             :pending-set="pendingSet"
             :backup-pinned-set="backupPinnedSet"
@@ -509,6 +517,6 @@
     </template>
   </div>
 
-  <script src="assets/app.js?v=v11-trend-slider"></script>
+  <script src="assets/app.js?v=v12-transfer"></script>
 </body>
 </html>

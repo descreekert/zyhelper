@@ -16,6 +16,42 @@ const LS_KEY_PRIORITY_OVR = "zyhelper_priority_overrides_v1";
 const LS_KEY_PLAN_OVR = "zyhelper_plan_overrides_v1";
 const LS_KEY_PRESET= "zyhelper_presets_v2";   // v2: 含 subjects + allowed 关键词维度
 const LS_KEY_UI    = "zyhelper_ui_v1";
+const LS_KEY_TRANSFER_TARGETS = "zyhelper_transfer_targets_v1";  // 目标专业列表 (无需转)
+const LS_KEY_TRANSFER_ACCEPTS = "zyhelper_transfer_accepts_v1";  // 可接受转专业列表
+
+// 默认: 用户最初输入的两份清单 (可在 UI 编辑覆盖)
+const DEFAULT_TRANSFER_TARGETS = [
+  "电子信息工程","电子科学与技术","微电子科学与技术","数据科学与大数据技术",
+  "集成电路设计与集成系统","人工智能","软件工程","计算机科学与技术",
+  "自动化","通信工程","机械工程","光电信息科学与工程","测控技术与仪器",
+  "智能科学与技术","智能制造工程","机器人工程","车辆工程","交通运输",
+  "智能车辆工程","智慧交通","未来机器人","交叉工程",
+];
+const DEFAULT_TRANSFER_ACCEPTS = [
+  "数学与应用数学","大气科学","能源与动力工程","新能源科学与工程",
+];
+
+// 给一个 plan 计算 "转专业风险" 标签:
+//   - ok    单专业在目标内 / 大类含任一目标
+//   - warn  单专业仅在可接受内 / 大类无目标但含任一可接受
+//   - error 全部都不在目标 + 可接受 范围
+function classifyTransfer(plan, targetSet, acceptSet) {
+  if (!plan) return { level: "error", matchedTargets: [], matchedAccepts: [], majors: [] };
+  const contained = plan.containedMajors || [];
+  let majors = contained.length > 0 ? contained.slice() : [];
+  if (!majors.length) {
+    const fallback = plan.majorName26 || plan.majorName25 || "";
+    if (fallback) majors = [fallback];
+  }
+  const normed = majors.map(m => (m || "").replace(/\s+/g, "").trim()).filter(Boolean);
+  const matchedTargets = normed.filter(m => targetSet.has(m));
+  const matchedAccepts = normed.filter(m => acceptSet.has(m));
+  let level;
+  if (matchedTargets.length > 0) level = "ok";
+  else if (matchedAccepts.length > 0) level = "warn";
+  else level = "error";
+  return { level, matchedTargets, matchedAccepts, majors };
+}
 
 const loadLS = (k, defVal) => {
   try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : defVal; }
@@ -396,6 +432,7 @@ const COLUMNS = [
   { key: "score",   label: "分数 25/26",   width: 100, sortable: true,  sortField: "ref25Score" },
   { key: "rank",    label: "位次 25/26",   width: 120, sortable: true,  sortField: "ref25Rank" },
   { key: "admitProb", label: "录取率", width: 70, sortable: false },
+  { key: "transfer", label: "转专业", width: 60, sortable: false },
   { key: "conf",    label: "可信度",   width: 60,  sortable: true,  sortField: "refConfidence" },
   { key: "eval",    label: "学科评估", width: 130, sortable: false },
   { key: "soft",    label: "软科评级", width: 90,  sortable: false },
@@ -618,6 +655,8 @@ const store = reactive({
   voluntaryBackup:  loadLS(LS_KEY_VOL_BACKUP, {}),
   // 用户自定义排序覆盖 (null = 用 priority.json 默认; Array<name> = 自定义顺序)
   priorityOverrides: loadLS(LS_KEY_PRIORITY_OVR, { schools: null, cities: null, majorClasses: null, majors: null }),
+  transferTargets: loadLS(LS_KEY_TRANSFER_TARGETS, DEFAULT_TRANSFER_TARGETS.slice()),
+  transferAccepts: loadLS(LS_KEY_TRANSFER_ACCEPTS, DEFAULT_TRANSFER_ACCEPTS.slice()),
   // 用户手动修改的 plan 字段 (e.g. ref25Score) — { [planId]: { ref25Score, ref25Rank } }
   planOverrides: loadLS(LS_KEY_PLAN_OVR, {}),
   compareList: [],
@@ -688,6 +727,8 @@ if (!store.voluntaryLists[store.activeVoluntaryName]) {
 }
 watch(() => store.priorityOverrides, v => saveLS(LS_KEY_PRIORITY_OVR, v), { deep: true });
 watch(() => store.planOverrides, v => saveLS(LS_KEY_PLAN_OVR, v), { deep: true });
+watch(() => store.transferTargets, v => saveLS(LS_KEY_TRANSFER_TARGETS, v), { deep: true });
+watch(() => store.transferAccepts, v => saveLS(LS_KEY_TRANSFER_ACCEPTS, v), { deep: true });
 watch(ui, v => saveLS(LS_KEY_UI, { ...v, detailPlan: null }), { deep: true });
 
 // ========== 组件 ==========
@@ -1511,7 +1552,7 @@ const ResultList = {
           "columns", "sortKeys", "cwb", "paneTargets",
           "voluntary", "voluntarySet", "columnWidths", "planOverrides",
           "recommendData", "scoreRank",
-          "pinnedSet", "pendingSet", "backupPinnedSet", "selectedVolIds", "admitProbFn"],
+          "pinnedSet", "pendingSet", "backupPinnedSet", "selectedVolIds", "admitProbFn", "transferFn"],
   emits: ["page-change", "open-detail", "toggle-compare", "toggle-favorite", "toggle-expand",
           "sort-col", "col-drop", "col-resize",
           "toggle-voluntary", "vol-up", "vol-down", "vol-top", "vol-bottom",
@@ -1584,6 +1625,7 @@ const ResultList = {
     function rank26Of(p) { return getEquiv(score25Of(p)).rank26; }
     // V9: 锁定 / 待确认 状态查询
     function getAdmit(p) { return props.admitProbFn ? props.admitProbFn(p) : null; }
+    function getTransfer(p) { return props.transferFn ? props.transferFn(p) : null; }
     function isPinned(id) { return props.pinnedSet && props.pinnedSet.has(id); }
     function isPending(id) { return props.pendingSet && props.pendingSet.has(id); }
     function wasPinned(id) { return props.backupPinnedSet && props.backupPinnedSet.has(id); }
@@ -1667,7 +1709,7 @@ const ResultList = {
              onColDragStart, onColDrop, startResize, colWidth,
              paneLists, paneCounts, volIdx,
              score25Of, rank25Of, score26Of, rank26Of,
-             isPinned, isPending, wasPinned, isSelected, selectedCount, getAdmit,
+             isPinned, isPending, wasPinned, isSelected, selectedCount, getAdmit, getTransfer,
              editingScore, editingValue, startEditScore, commitEditScore, cancelEditScore, isEdited };
   },
   computed: {
@@ -2010,6 +2052,20 @@ const ResultList = {
                               :title="getAdmit(p).heat.name">🔥</span>
                       </template>
                       <span v-else class="text-slate-400" title="新增专业, 无 25 参考">新?</span>
+                    </template>
+                    <span v-else class="text-slate-300">—</span>
+                  </td>
+                  <td v-else-if="c.key==='transfer'" :class="['col-'+c.key, 'text-center']">
+                    <template v-if="getTransfer(p)">
+                      <span v-if="getTransfer(p).level === 'ok'"
+                            class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700"
+                            :title="'目标命中: ' + getTransfer(p).matchedTargets.join('、')">✓ OK</span>
+                      <span v-else-if="getTransfer(p).level === 'warn'"
+                            class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-700"
+                            :title="'需转专业 (大类含): ' + getTransfer(p).matchedAccepts.join('、')">⚠ 需转</span>
+                      <span v-else
+                            class="inline-block px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-700"
+                            :title="'所含专业全部不在 目标 / 可接受 范围: ' + (getTransfer(p).majors || []).join('、')">✗ 错</span>
                     </template>
                     <span v-else class="text-slate-300">—</span>
                   </td>
@@ -2862,8 +2918,10 @@ const PrioritySettings = {
 
 // V9: 志愿分析 (普通视图 + 兼容 modal). prop.embedded=true 时去掉 modal 外壳
 const VoluntaryAnalysis = {
-  props: ["analysis", "listName", "anchorOverride", "rankOverride", "expandedSchools", "expandedScores", "expandedTiers", "expandedEnrollScores", "embedded"],
-  emits: ["close", "set-anchor", "set-rank", "toggle-school", "toggle-score", "toggle-tier", "toggle-enroll-score"],
+  props: ["analysis", "listName", "anchorOverride", "rankOverride", "expandedSchools", "expandedScores", "expandedTiers", "expandedEnrollScores", "embedded",
+          "targets", "accepts"],
+  emits: ["close", "set-anchor", "set-rank", "toggle-school", "toggle-score", "toggle-tier", "toggle-enroll-score",
+          "update-targets", "update-accepts", "reset-transfer-lists"],
   setup(props, { emit }) {
     const maxScoreCount = computed(() => {
       if (!props.analysis) return 1;
@@ -3079,6 +3137,14 @@ const VoluntaryAnalysis = {
             </div>
           </section>
 
+          <!-- 转专业风险分析 -->
+          <section>
+            <transfer-risk-section :analysis="analysis" :targets="targets" :accepts="accepts"
+                                   @update-targets="$emit('update-targets', $event)"
+                                   @update-accepts="$emit('update-accepts', $event)"
+                                   @reset-lists="$emit('reset-transfer-lists')"></transfer-risk-section>
+          </section>
+
           <!-- 录取趋势图 (按志愿顺序 + 阈值首达点) -->
           <section>
             <admit-trend-chart :items="analysis.items"></admit-trend-chart>
@@ -3228,6 +3294,7 @@ const VoluntaryAnalysis = {
                     <th class="px-2 py-1 text-center w-8 text-red-600">冲</th>
                     <th class="px-2 py-1 text-center w-8 text-amber-600">稳</th>
                     <th class="px-2 py-1 text-center w-8 text-green-600">保</th>
+                    <th class="px-2 py-1 text-center w-16" title="该校所有志愿录取率的最大值, 近似为'被该校录取的概率'">校录取率</th>
                     <th class="px-2 py-1 text-left">分布</th>
                   </tr>
                 </thead>
@@ -3244,6 +3311,12 @@ const VoluntaryAnalysis = {
                       <td class="px-2 py-0.5 text-center text-red-600">{{ s.tiers.chong || '-' }}</td>
                       <td class="px-2 py-0.5 text-center text-amber-600">{{ s.tiers.wen || '-' }}</td>
                       <td class="px-2 py-0.5 text-center text-green-600">{{ s.tiers.bao || '-' }}</td>
+                      <td class="px-2 py-0.5 text-center font-bold"
+                          :class="probColorClass(s.maxAdmitProb)"
+                          :title="s.maxAdmitItem ? ('最高: ' + (s.maxAdmitItem.plan.majorName26 || s.maxAdmitItem.plan.majorName25)) : ''">
+                        <span v-if="s.maxAdmitProb != null">{{ (s.maxAdmitProb*100).toFixed(0) }}%</span>
+                        <span v-else class="text-slate-300">—</span>
+                      </td>
                       <td class="px-2 py-0.5">
                         <div class="flex h-3 rounded overflow-hidden" :style="{ width: (s.count / maxSchoolCount * 100) + '%', minWidth: '8px' }">
                           <div v-if="s.tiers.chong" class="bg-red-400" :style="{ flex: s.tiers.chong }"></div>
@@ -3254,7 +3327,7 @@ const VoluntaryAnalysis = {
                       </td>
                     </tr>
                     <tr v-if="expandedSchools.includes(s.name)" class="bg-slate-50">
-                      <td colspan="7" class="px-2 py-1">
+                      <td colspan="8" class="px-2 py-1">
                         <table class="w-full text-[11px] bg-white border rounded">
                           <thead>
                             <tr class="bg-slate-100">
@@ -3411,7 +3484,7 @@ const VoluntaryAnalysis = {
 
 // V9: 志愿 + 分析 PDF 报告 (window.print + @media print css)
 const VoluntaryReport = {
-  props: ["analysis", "listName", "voluntary", "planById", "admitProbFn", "scoreRank", "supplyMap"],
+  props: ["analysis", "listName", "voluntary", "planById", "admitProbFn", "scoreRank", "supplyMap", "targets", "accepts"],
   emits: ["close"],
   setup(props) {
     const todayStr = computed(() => new Date().toISOString().slice(0, 10));
@@ -3555,8 +3628,18 @@ const VoluntaryReport = {
       const r = props.supplyMap?.get(s);
       return r ? r.ratio : null;
     }
+    // 校录取率 = 该校所有志愿中 录取率最大值
+    function schoolMaxProb(g) {
+      let m = null;
+      for (const it of (g.items || [])) {
+        const p = it.admit?.prob;
+        if (p == null) continue;
+        if (m == null || p > m) m = p;
+      }
+      return m;
+    }
     return { todayStr, items, summary, itemsByScore, itemsBySchool,
-             enrollAtScore, schoolsAtScore, itemsAtScore, supplyRatioAt,
+             enrollAtScore, schoolsAtScore, itemsAtScore, supplyRatioAt, schoolMaxProb,
              printReport, tierLabel, fmtProb };
   },
   template: `
@@ -3909,6 +3992,7 @@ const VoluntaryReport = {
               <th class="border px-1 py-1">冲</th>
               <th class="border px-1 py-1">稳</th>
               <th class="border px-1 py-1">保</th>
+              <th class="border px-1 py-1">校录取率</th>
             </tr></thead>
             <tbody>
               <tr v-for="g in itemsBySchool" :key="g.school">
@@ -3918,6 +4002,10 @@ const VoluntaryReport = {
                 <td class="border px-1 py-0.5 text-center text-red-600">{{ g.items.filter(i => tierLabel(i.score25)==='冲').length || '-' }}</td>
                 <td class="border px-1 py-0.5 text-center text-amber-700">{{ g.items.filter(i => tierLabel(i.score25)==='稳').length || '-' }}</td>
                 <td class="border px-1 py-0.5 text-center text-green-700">{{ g.items.filter(i => tierLabel(i.score25)==='保').length || '-' }}</td>
+                <td class="border px-1 py-0.5 text-center font-bold" :class="probColorClass(schoolMaxProb(g))">
+                  <span v-if="schoolMaxProb(g) != null">{{ (schoolMaxProb(g)*100).toFixed(0) }}%</span>
+                  <span v-else class="text-slate-300">—</span>
+                </td>
               </tr>
             </tbody>
           </table>
@@ -3947,7 +4035,144 @@ const VoluntaryReport = {
             </table>
           </div>
         </section>
+
+        <!-- 11. 转专业风险扫描 -->
+        <section class="mb-6 page-break-before">
+          <h2 class="text-lg font-bold mb-2 bg-blue-50 px-2 py-1 border-l-4 border-blue-600">11. 转专业风险扫描</h2>
+          <transfer-risk-section :analysis="analysis" :targets="targets" :accepts="accepts" :compact="true"></transfer-risk-section>
+        </section>
       </div>
+    </div>
+  `,
+};
+
+// ========== 转专业风险分析 ==========
+// 把志愿单按"目标专业 / 可接受转专业 / 不在范围"三档分类.
+// 同时提供可编辑的两份清单 (文本框 paste, 每行一个专业名), 自动持久化.
+const TransferRiskSection = {
+  props: ["analysis", "targets", "accepts", "compact"],
+  emits: ["update-targets", "update-accepts", "reset-lists"],
+  setup(props, { emit }) {
+    const expanded = ref({ ok: false, warn: true, error: true });
+    const showEditor = ref(false);
+    const targetText = ref((props.targets || []).join("\n"));
+    const acceptText = ref((props.accepts || []).join("\n"));
+    watch(() => props.targets, v => { targetText.value = (v || []).join("\n"); });
+    watch(() => props.accepts, v => { acceptText.value = (v || []).join("\n"); });
+    function saveTargets() {
+      const lst = targetText.value.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+      emit("update-targets", lst);
+    }
+    function saveAccepts() {
+      const lst = acceptText.value.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+      emit("update-accepts", lst);
+    }
+    const summary = computed(() => {
+      const s = props.analysis?.transferSummary || { ok: [], warn: [], error: [] };
+      return {
+        ok: s.ok || [], warn: s.warn || [], error: s.error || [],
+        total: (s.ok?.length || 0) + (s.warn?.length || 0) + (s.error?.length || 0),
+      };
+    });
+    return { expanded, showEditor, targetText, acceptText, saveTargets, saveAccepts, summary };
+  },
+  template: `
+    <div class="transfer-risk">
+      <div class="flex items-center justify-between mb-1">
+        <div class="text-sm font-bold">
+          🎓 转专业风险扫描
+          <span class="text-xs text-slate-500 font-normal ml-1">
+            (目标 {{ (targets || []).length }} 个 / 可接受 {{ (accepts || []).length }} 个)
+          </span>
+        </div>
+        <div v-if="!compact" class="flex gap-2 text-xs">
+          <button @click="showEditor = !showEditor" class="text-blue-600 hover:underline">
+            {{ showEditor ? '收起编辑' : '✎ 编辑清单' }}
+          </button>
+          <button @click="$emit('reset-lists')" class="text-slate-400 hover:text-red-500" title="重置为默认清单">⟲ 默认</button>
+        </div>
+      </div>
+
+      <!-- 清单编辑 -->
+      <div v-if="!compact && showEditor" class="mb-3 grid grid-cols-1 md:grid-cols-2 gap-3 border rounded p-3 bg-slate-50">
+        <div>
+          <div class="text-xs font-bold text-green-700 mb-1">目标专业 (无需转专业)</div>
+          <textarea v-model="targetText" @blur="saveTargets" rows="10"
+                    class="w-full border rounded text-xs p-1.5 font-mono"
+                    placeholder="每行一个专业名"></textarea>
+          <div class="text-[10px] text-slate-400 mt-1">每行一个专业名, 失焦自动保存. 名字需与 csv 中"招生专业 / 所含专业"列完全一致.</div>
+        </div>
+        <div>
+          <div class="text-xs font-bold text-amber-700 mb-1">可接受转入 (录取后可转过去)</div>
+          <textarea v-model="acceptText" @blur="saveAccepts" rows="10"
+                    class="w-full border rounded text-xs p-1.5 font-mono"
+                    placeholder="每行一个专业名"></textarea>
+          <div class="text-[10px] text-slate-400 mt-1">大类志愿中若有此列专业, 标为"需转".</div>
+        </div>
+      </div>
+
+      <!-- 3 张汇总卡 -->
+      <div class="grid grid-cols-3 gap-2 text-xs mb-2">
+        <div class="border rounded p-2 cursor-pointer transition"
+             :class="expanded.ok ? 'bg-green-100 border-green-400' : 'bg-green-50 border-green-200'"
+             @click="expanded.ok = !expanded.ok">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-green-700">✓ 无需转 {{ summary.ok.length }}</span>
+            <span class="text-slate-400">{{ expanded.ok ? '▾' : '▸' }}</span>
+          </div>
+          <div class="text-[10px] text-green-700 mt-0.5">含至少 1 个目标专业</div>
+        </div>
+        <div class="border rounded p-2 cursor-pointer transition"
+             :class="expanded.warn ? 'bg-amber-100 border-amber-400' : 'bg-amber-50 border-amber-200'"
+             @click="expanded.warn = !expanded.warn">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-amber-700">⚠ 需转 {{ summary.warn.length }}</span>
+            <span class="text-slate-400">{{ expanded.warn ? '▾' : '▸' }}</span>
+          </div>
+          <div class="text-[10px] text-amber-700 mt-0.5">无目标, 但可转入</div>
+        </div>
+        <div class="border rounded p-2 cursor-pointer transition"
+             :class="expanded.error ? 'bg-red-100 border-red-400' : 'bg-red-50 border-red-200'"
+             @click="expanded.error = !expanded.error">
+          <div class="flex items-center justify-between">
+            <span class="font-bold text-red-700">✗ 不在范围 {{ summary.error.length }}</span>
+            <span class="text-slate-400">{{ expanded.error ? '▾' : '▸' }}</span>
+          </div>
+          <div class="text-[10px] text-red-700 mt-0.5">无目标也无可接受</div>
+        </div>
+      </div>
+
+      <!-- 详情 (展开后 表格) -->
+      <template v-for="level in ['error','warn','ok']" :key="'tr-'+level">
+        <div v-if="expanded[level] && summary[level].length" class="mb-2">
+          <div class="text-xs font-bold mb-1"
+               :class="level==='ok' ? 'text-green-700' : level==='warn' ? 'text-amber-700' : 'text-red-700'">
+            {{ level==='ok' ? '✓ 无需转专业' : level==='warn' ? '⚠ 需转专业' : '✗ 不在范围 (高风险)' }} ({{summary[level].length}} 项)
+          </div>
+          <table class="w-full text-[11px] border-collapse">
+            <thead><tr class="bg-slate-100">
+              <th class="border px-2 py-1 text-center w-10">序号</th>
+              <th class="border px-2 py-1 text-left">学校</th>
+              <th class="border px-2 py-1 text-left">26 专业</th>
+              <th class="border px-2 py-1 text-left">所含专业</th>
+              <th class="border px-2 py-1 text-left w-32">命中</th>
+            </tr></thead>
+            <tbody>
+              <tr v-for="it in summary[level]" :key="'tr'+level+it.id" class="border-t">
+                <td class="border px-2 py-1 text-center">#{{ analysis.items.indexOf(it) + 1 }}</td>
+                <td class="border px-2 py-1">{{ it.plan.schoolName }}</td>
+                <td class="border px-2 py-1">{{ it.plan.majorName26 || it.plan.majorName25 }}</td>
+                <td class="border px-2 py-1 text-slate-600">{{ (it.transfer?.majors || []).join('、') || '—' }}</td>
+                <td class="border px-2 py-1">
+                  <span v-if="level==='ok'" class="text-green-700">{{ it.transfer.matchedTargets.join('、') }}</span>
+                  <span v-else-if="level==='warn'" class="text-amber-700">{{ it.transfer.matchedAccepts.join('、') }}</span>
+                  <span v-else class="text-slate-400 text-[10px]">无</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </template>
     </div>
   `,
 };
@@ -4840,9 +5065,31 @@ const __app = createApp({
       if (totalEnroll && tiers.bao.enroll < totalEnroll * 0.15) {
         insights.push({ level: "warn", text: `保档 26 计划人数仅 ${tiers.bao.enroll} (占 ${(tiers.bao.enroll/totalEnroll*100).toFixed(0)}%), 保底名额偏少` });
       }
-      // 给每个 item 算 录取率
+      // 给每个 item 算 录取率 + 转专业风险
+      const _tSet = transferTargetSet.value;
+      const _aSet = transferAcceptSet.value;
       for (const it of items) {
         it.admit = computeAdmitProb(it.plan, { userRank25: anchorRank25, scoreRank: scoreRank.value, supplyMap: supplyMap.value });
+        it.transfer = classifyTransfer(it.plan, _tSet, _aSet);
+      }
+      // 转专业 汇总
+      const transferSummary = { ok: [], warn: [], error: [] };
+      for (const it of items) {
+        if (it.transfer && transferSummary[it.transfer.level]) {
+          transferSummary[it.transfer.level].push(it);
+        }
+      }
+      // bySchool 加 maxAdmitProb (该校所有志愿中预测录取率的最大值)
+      // 含 (估) 也算; 没有 admit.prob 的项跳过. 用于"被该校录取的概率"近似.
+      for (const s of bySchool) {
+        let maxP = null, maxIt = null;
+        for (const it of s.items) {
+          const p = it.admit?.prob;
+          if (p == null) continue;
+          if (maxP == null || p > maxP) { maxP = p; maxIt = it; }
+        }
+        s.maxAdmitProb = maxP;
+        s.maxAdmitItem = maxIt;  // 引用该校最强项 (用于 tooltip)
       }
       // V9: 招生维度分数聚合 (全 2026 plans, 在冲稳保整体范围内 [bao.lo, chong.hi])
       // 例: 25 分 618, 今年所有学校在 618 上招的总计划 + 来源 plans
@@ -4876,7 +5123,7 @@ const __app = createApp({
         items, tiers, byScore, bySchool, ranges, enrollByScore25,
         my26: ui.myScore, autoAnchor25: autoAnchor, anchor25, anchorRank25,
         myRank26: ui.myRank, userRank26,
-        total, totalEnroll, insights,
+        total, totalEnroll, insights, transferSummary,
       };
     });
     // 志愿单 HTML 导出 (志愿填报标准 6 列格式)
@@ -5271,6 +5518,17 @@ const __app = createApp({
         scoreRank: scoreRank.value,
         supplyMap: supplyMap.value,
       });
+    }
+
+    // 转专业分类
+    const transferTargetSet = computed(() => new Set((store.transferTargets || []).map(s => (s || "").replace(/\s+/g, "").trim()).filter(Boolean)));
+    const transferAcceptSet = computed(() => new Set((store.transferAccepts || []).map(s => (s || "").replace(/\s+/g, "").trim()).filter(Boolean)));
+    function transferOf(plan) {
+      return classifyTransfer(plan, transferTargetSet.value, transferAcceptSet.value);
+    }
+    function resetTransferLists() {
+      store.transferTargets = DEFAULT_TRANSFER_TARGETS.slice();
+      store.transferAccepts = DEFAULT_TRANSFER_ACCEPTS.slice();
     }
 
     // tier 映射 (id -> 'chong'|'wen'|'bao'|null)
@@ -6096,7 +6354,8 @@ const __app = createApp({
     return {
       store, ui, loading, loadingMsg, loadingPct,
       scoreRank, meta, priority, currentPage, cwb, tierMap, paneTargets, activeTier, filteredTierCounts, recommendData,
-      admitProbFor, userRank25Anchor,
+      admitProbFor, userRank25Anchor, transferOf, resetTransferLists,
+      transferTargetSet, transferAcceptSet,
       ratioSumOk, resetRatios,
       filtered, sorted, paged, planByIdMap, compareIdSet, keywordCandidatePool,
       openDetail, toggleCompare, toggleFavorite, toggleExpand, saveFavorites, currentExpandedRows,
@@ -6129,4 +6388,5 @@ const __app = createApp({
 });
 __app.config.globalProperties.probColorClass = probColorClass;
 __app.component("AdmitTrendChart", AdmitTrendChart);
+__app.component("TransferRiskSection", TransferRiskSection);
 __app.mount("#app");
