@@ -3733,11 +3733,25 @@ const VoluntaryReport = {
         const ps = byTier[k].map(it => it.admit?.prob).filter(p => p != null);
         avgProb[k] = ps.length ? ps.reduce((a, b) => a + b, 0) / ps.length : null;
       }
+      // 多档阈值的 Top 5 录取候选 (按 平行志愿 顺序, 首 5 个 prob >= T)
+      const THRESHOLDS = [0.45, 0.50, 0.60, 0.70];
+      const topByThreshold = [];
+      for (const T of THRESHOLDS) {
+        const hits = its.filter(it => it.admit?.prob != null && it.admit.prob >= T).slice(0, 5);
+        topByThreshold.push({
+          threshold: T,
+          items: hits.map((it, i) => ({
+            ...it,
+            idx: its.indexOf(it) + 1,  // 该项在志愿单中的原始序号
+          })),
+        });
+      }
       return {
         byTier, topByTier, schoolTopN, heatCount, newCount,
         scoreMax: scores[0], scoreMin: scores[scores.length-1],
         ratios: { chong: cR, wen: wR, bao: bR },
         avgProb,
+        topByThreshold,
         risks, N: items.value.length,
       };
     });
@@ -3917,6 +3931,23 @@ const VoluntaryReport = {
                     {{ it.plan.schoolName }} · {{ (it.plan.majorName26 || it.plan.majorName25 || '').slice(0, 20) }}
                     <b class="text-green-700">{{ fmtProb(it.admit) }}</b> ;
                   </span>
+                </div>
+              </template>
+            </div>
+            <div class="mt-3">
+              <b>按阈值最有可能被录取的次序 Top 5</b>
+              <span class="text-[10px] text-slate-500 ml-1">(平行志愿首 5 个 概率 ≥ 阈值 的志愿, 按填报顺序)</span>:
+              <template v-for="b in summary.topByThreshold" :key="'th'+b.threshold">
+                <div class="mt-1 pl-3 border-l-2 border-blue-400">
+                  <span class="font-bold text-blue-700">≥ {{ (b.threshold*100).toFixed(0) }}%</span>:
+                  <template v-if="b.items.length">
+                    <span v-for="it in b.items" :key="'th'+b.threshold+'-'+it.id" class="ml-2 inline-block">
+                      <b class="text-orange-700">#{{ it.idx }}</b>
+                      {{ it.plan.schoolName }} · {{ (it.plan.majorName26 || it.plan.majorName25 || '').slice(0, 20) }}
+                      <b :class="probColorClass(it.admit?.prob)">{{ fmtProb(it.admit) }}</b><span v-if="it.admit?.isEstimated" class="text-[9px] text-amber-600">(估)</span> ;
+                    </span>
+                  </template>
+                  <span v-else class="ml-2 text-slate-400 text-[11px]">无志愿达到此阈值</span>
                 </div>
               </template>
             </div>
