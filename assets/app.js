@@ -197,11 +197,12 @@ function computeAdmitProb(plan, ctx) {
   };
 }
 
-// 4 档颜色 (替代原 70/40 二分): 80+ 绿 / 60-79 蓝绿 / 35-59 橙 / <35 红
+// 5 档颜色: 80+ 深绿 / 60-79 蓝绿 / 50-59 浅黄 / 35-49 橙 / <35 红
 function probColorClass(prob) {
   if (prob == null) return "text-slate-400";
   if (prob >= 0.80) return "text-green-700 font-bold";
   if (prob >= 0.60) return "text-emerald-600 font-bold";
+  if (prob >= 0.50) return "text-yellow-600 font-bold";
   if (prob >= 0.35) return "text-orange-600 font-bold";
   return "text-red-600 font-bold";
 }
