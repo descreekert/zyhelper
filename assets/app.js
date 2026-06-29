@@ -133,9 +133,22 @@ function majorHeat(plan) {
   if (/能源|动力工程|新能源/.test(text)) return { idx: 1, pct: 0.01, name: "能动" };
   return { idx: 0, pct: 0, name: "其他" };
 }
-// ctx: { userRank25, scoreRank }
+// ctx: { userRank25, scoreRank, supplyMap }
 //   userRank25: 用户 25 等位位次
-//   scoreRank: 完整 scoreRank 对象 (新增专业 proxy 用)
+//   scoreRank: 完整 scoreRank 对象
+//   supplyMap: Map<score25, { enroll26, cnt26, ratio }>
+//     ratio = enroll26 / cnt26 — 该 25 等位分对应的 26 总招生 / 26 同分人数
+//     ratio > 0.85 → 供给充足, 录取率 +10pp
+//     ratio ∈ [0.5, 0.85] → 中等, +5pp
+//     ratio < 0.5 → 紧张, 不变
+function applySupplyAdj(prob, supply) {
+  if (!supply) return { prob, adj: 0 };
+  let adj = 0;
+  if (supply.ratio > 0.85) adj = 0.10;
+  else if (supply.ratio > 0.5) adj = 0.05;
+  const p = Math.max(0.02, Math.min(0.98, prob + adj));
+  return { prob: p, adj };
+}
 function computeAdmitProb(plan, ctx) {
   if (!plan) return { prob: null, isUncertain: true };
   if (typeof ctx === "number") ctx = { userRank25: ctx };
@@ -147,16 +160,18 @@ function computeAdmitProb(plan, ctx) {
   if (plan.isNew === "新增") {
     const planScore25 = plan.ref25Score || plan.score25 || null;
     if (!planScore25 || !userRank25 || !sr) {
-      return { prob: null, isUncertain: true, reason: "新增", heat: majorHeat(plan) };
+      return { prob: null, isUncertain: true, reason: "新增", heat: majorHeat(plan), isEstimated: true };
     }
     const proxyRank = rank25FromScore25(planScore25 + 5, sr);
-    if (!proxyRank) return { prob: null, isUncertain: true, reason: "新增-位次查不到", heat: majorHeat(plan) };
+    if (!proxyRank) return { prob: null, isUncertain: true, reason: "新增-位次查不到", heat: majorHeat(plan), isEstimated: true };
     const heat = majorHeat(plan);
     const effPlanRank = proxyRank * (1 + heat.pct);
     const diff = effPlanRank - userRank25;
-    const prob = 1 / (1 + Math.exp(-diff / SCALE - BIAS));
+    const probBase = 1 / (1 + Math.exp(-diff / SCALE - BIAS));
+    const supply = ctx.supplyMap?.get(planScore25);
+    const { prob, adj } = applySupplyAdj(probBase, supply);
     return {
-      prob: Math.max(0.02, Math.min(0.98, prob)),
+      prob, probBase, supplyAdj: adj, supply,
       isUncertain: false, isEstimated: true,
       heat, refRank: proxyRank, ref25: planScore25, effPlanRank, diff,
     };
@@ -172,12 +187,25 @@ function computeAdmitProb(plan, ctx) {
   const heat = majorHeat(plan);
   const effPlanRank = refRank * (1 + heat.pct);
   const diff = effPlanRank - userRank25;
-  const prob = 1 / (1 + Math.exp(-diff / SCALE - BIAS));
+  const probBase = 1 / (1 + Math.exp(-diff / SCALE - BIAS));
+  const planScore25 = plan.ref25Score || plan.score25 || null;
+  const supply = planScore25 ? ctx.supplyMap?.get(planScore25) : null;
+  const { prob, adj } = applySupplyAdj(probBase, supply);
   return {
-    prob: Math.max(0.02, Math.min(0.98, prob)),
+    prob, probBase, supplyAdj: adj, supply,
     isUncertain: false, heat, refRank, ref25: r25, avgRank: ravg, effPlanRank, diff,
   };
 }
+
+// 4 档颜色 (替代原 70/40 二分): 80+ 绿 / 60-79 蓝绿 / 35-59 橙 / <35 红
+function probColorClass(prob) {
+  if (prob == null) return "text-slate-400";
+  if (prob >= 0.80) return "text-green-700 font-bold";
+  if (prob >= 0.60) return "text-emerald-600 font-bold";
+  if (prob >= 0.35) return "text-orange-600 font-bold";
+  return "text-red-600 font-bold";
+}
+if (typeof window !== "undefined") window.probColorClass = probColorClass;
 
 // V9: 26 分数 → 25 等位分 (志愿分析用. equivFromScore25 的反函数)
 function equiv25FromScore26(score26, scoreRank) {
@@ -2984,13 +3012,17 @@ const VoluntaryAnalysis = {
                 </thead>
                 <tbody>
                   <!-- 确定 -->
-                  <tr v-for="it in analysis.tiers[k].confirmedItems" :key="it.id" class="border-t">
+                  <tr v-for="it in analysis.tiers[k].confirmedItems" :key="it.id" class="border-t"
+                      :class="it.plan.isNew==='新增' ? 'bg-yellow-50/50' : ''">
                     <td class="px-2 py-0.5">
-                      <span v-if="it.plan.diff" class="badge-diff" title="25 vs 26 有变化">变</span>
+                      <span v-if="it.plan.isNew==='新增'" class="badge-new">新</span>
+                      <span v-else-if="it.plan.diff" class="badge-diff" title="25 vs 26 有变化">变</span>
                     </td>
                     <td class="px-2 py-0.5">{{ it.plan.schoolName }}</td>
                     <td class="px-2 py-0.5">{{ it.plan.city || '—' }}</td>
                     <td class="px-2 py-0.5">
+                      <span v-if="it.plan.isNew==='新增'" class="badge-new">新</span>
+                      <span v-else-if="it.plan.diff" class="badge-diff" :title="it.plan.diff">变</span>
                       {{ it.plan.majorName26 || it.plan.majorName25 || '—' }}
                       <span v-if="it.admit && it.admit.heat && it.admit.heat.idx >= 4"
                             class="ml-1 text-[10px] px-1 rounded"
@@ -3002,7 +3034,7 @@ const VoluntaryAnalysis = {
                     <td class="px-2 py-0.5 text-center">{{ it.plan.tuition || '—' }}</td>
                     <td class="px-2 py-0.5 text-center">
                       <span v-if="it.admit && it.admit.prob != null"
-                            :class="it.admit.prob >= 0.7 ? 'text-green-700 font-bold' : it.admit.prob >= 0.4 ? 'text-amber-700 font-bold' : 'text-red-600'">
+                            :class="probColorClass(it.admit.prob)">
                         {{ (it.admit.prob * 100).toFixed(0) }}%
                       </span>
                       <span v-else class="text-slate-300">—</span>
@@ -3018,13 +3050,19 @@ const VoluntaryAnalysis = {
                     <td class="px-2 py-0.5"><span class="badge-new">新</span></td>
                     <td class="px-2 py-0.5">{{ it.plan.schoolName }}</td>
                     <td class="px-2 py-0.5">{{ it.plan.city || '—' }}</td>
-                    <td class="px-2 py-0.5">{{ it.plan.majorName26 || it.plan.majorName25 || '—' }}</td>
+                    <td class="px-2 py-0.5">
+                      <span class="badge-new">新</span>
+                      {{ it.plan.majorName26 || it.plan.majorName25 || '—' }}
+                      <span v-if="it.admit && it.admit.heat && it.admit.heat.idx >= 4"
+                            class="ml-1 text-[10px] px-1 rounded"
+                            :class="it.admit.heat.idx >= 6 ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'">🔥{{ it.admit.heat.name }}</span>
+                    </td>
                     <td class="px-2 py-0.5 text-center"><b>{{ it.score25 || '—' }}</b>/{{ it.rank25 || '—' }}</td>
                     <td class="px-2 py-0.5 text-center">{{ it.enroll || '—' }}</td>
                     <td class="px-2 py-0.5 text-center">{{ it.plan.tuition || '—' }}</td>
                     <td class="px-2 py-0.5 text-center">
                       <span v-if="it.admit && it.admit.prob != null"
-                            :class="it.admit.prob >= 0.7 ? 'text-green-700 font-bold' : it.admit.prob >= 0.4 ? 'text-amber-700 font-bold' : 'text-red-600'"
+                            :class="probColorClass(it.admit.prob)"
                             title="按 anchor25+5 分位次粗估">
                         {{ (it.admit.prob * 100).toFixed(0) }}%<span class="text-[9px] text-amber-600 ml-0.5">(估)</span>
                       </span>
@@ -3154,7 +3192,7 @@ const VoluntaryAnalysis = {
                               <td class="px-2 py-0.5 text-center">{{ it.plan.tuition || '—' }}</td>
                               <td class="px-2 py-0.5 text-center">
                                 <span v-if="it.admit && it.admit.prob != null"
-                                      :class="it.admit.prob >= 0.7 ? 'text-green-700 font-bold' : it.admit.prob >= 0.4 ? 'text-amber-700 font-bold' : 'text-red-600'">
+                                      :class="probColorClass(it.admit.prob)">
                                   {{ (it.admit.prob * 100).toFixed(0) }}%<span v-if="it.admit.isEstimated" class="text-[9px] text-amber-600 ml-0.5">(估)</span>
                                 </span>
                                 <span v-else class="text-slate-400">新?</span>
@@ -3246,7 +3284,7 @@ const VoluntaryAnalysis = {
                               <td class="px-2 py-0.5 text-center">{{ it.plan.tuition || '—' }}</td>
                               <td class="px-2 py-0.5 text-center">
                                 <span v-if="it.admit && it.admit.prob != null"
-                                      :class="it.admit.prob >= 0.7 ? 'text-green-700 font-bold' : it.admit.prob >= 0.4 ? 'text-amber-700 font-bold' : 'text-red-600'">
+                                      :class="probColorClass(it.admit.prob)">
                                   {{ (it.admit.prob * 100).toFixed(0) }}%<span v-if="it.admit.isEstimated" class="text-[9px] text-amber-600 ml-0.5">(估)</span>
                                 </span>
                                 <span v-else class="text-slate-400">新?</span>
@@ -3367,7 +3405,7 @@ const VoluntaryAnalysis = {
 
 // V9: 志愿 + 分析 PDF 报告 (window.print + @media print css)
 const VoluntaryReport = {
-  props: ["analysis", "listName", "voluntary", "planById", "admitProbFn", "scoreRank"],
+  props: ["analysis", "listName", "voluntary", "planById", "admitProbFn", "scoreRank", "supplyMap"],
   emits: ["close"],
   setup(props) {
     const todayStr = computed(() => new Date().toISOString().slice(0, 10));
@@ -3507,8 +3545,12 @@ const VoluntaryReport = {
     function itemsAtScore(s) {
       return items.value.filter(it => it.score25 === s);
     }
+    function supplyRatioAt(s) {
+      const r = props.supplyMap?.get(s);
+      return r ? r.ratio : null;
+    }
     return { todayStr, items, summary, itemsByScore, itemsBySchool,
-             enrollAtScore, schoolsAtScore, itemsAtScore,
+             enrollAtScore, schoolsAtScore, itemsAtScore, supplyRatioAt,
              printReport, tierLabel, fmtProb };
   },
   template: `
@@ -3628,7 +3670,7 @@ const VoluntaryReport = {
                 <td class="border px-1 py-0.5 text-center">{{ it.enroll }}</td>
                 <td class="border px-1 py-0.5 text-center">{{ it.plan.tuition }}</td>
                 <td class="border px-1 py-0.5 text-center font-bold"
-                    :class="it.admit?.prob >= 0.7 ? 'text-green-700' : it.admit?.prob >= 0.4 ? 'text-amber-700' : it.admit?.prob != null ? 'text-red-600' : 'text-slate-400'">
+                    :class="probColorClass(it.admit?.prob)">
                   {{ fmtProb(it.admit) }}<span v-if="it.admit?.isEstimated" class="text-[9px] text-amber-600">(估)</span>
                 </td>
               </tr>
@@ -3642,10 +3684,16 @@ const VoluntaryReport = {
           <div v-for="it in items" :key="it.id" class="mb-3 p-2 border rounded text-xs page-break-inside-avoid"
                :class="it.plan.isNew==='新增'?'bg-yellow-50 border-yellow-300':''">
             <div class="font-bold flex items-center justify-between">
-              <span>#{{ it.idx }} [{{ tierLabel(it.score25) }}] {{ it.plan.schoolName }} · {{ it.plan.majorName26 || it.plan.majorName25 }}</span>
+              <span>#{{ it.idx }} [{{ tierLabel(it.score25) }}]
+                <span v-if="it.plan.isNew==='新增'" class="text-red-600 text-xs px-1 bg-red-50 rounded">新</span>
+                <span v-else-if="it.plan.diff" class="text-amber-700 text-xs px-1 bg-amber-50 rounded">变</span>
+                {{ it.plan.schoolName }} · {{ it.plan.majorName26 || it.plan.majorName25 }}
+                <span v-if="it.admit?.heat?.idx >= 4" class="ml-1 text-[10px] px-1 rounded"
+                      :class="it.admit.heat.idx >= 6 ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'">🔥{{ it.admit.heat.name }}</span>
+              </span>
               <span class="text-sm"
-                    :class="it.admit?.prob >= 0.7 ? 'text-green-700' : it.admit?.prob >= 0.4 ? 'text-amber-700' : 'text-red-600'">
-                录取率 {{ fmtProb(it.admit) }}
+                    :class="probColorClass(it.admit?.prob)">
+                录取率 {{ fmtProb(it.admit) }}<span v-if="it.admit?.isEstimated" class="text-[10px] text-amber-600 ml-0.5">(估)</span>
               </span>
             </div>
             <div class="grid grid-cols-4 gap-1 mt-1 text-[11px]">
@@ -3718,7 +3766,7 @@ const VoluntaryReport = {
                 <td class="border px-1 py-0.5 text-center">{{ it.score25 || '—' }}/{{ it.rank25 || '—' }}</td>
                 <td class="border px-1 py-0.5 text-center">{{ it.enroll }}</td>
                 <td class="border px-1 py-0.5 text-center font-bold"
-                    :class="(admitProbFn(it.plan)?.prob || 0) >= 0.7 ? 'text-green-700' : (admitProbFn(it.plan)?.prob || 0) >= 0.4 ? 'text-amber-700' : 'text-red-600'">
+                    :class="probColorClass(admitProbFn(it.plan)?.prob)">
                   {{ fmtProb(admitProbFn(it.plan)) }}<span v-if="admitProbFn(it.plan)?.isEstimated" class="text-[9px] text-amber-600">(估)</span>
                 </td>
               </tr>
@@ -3740,6 +3788,8 @@ const VoluntaryReport = {
               <th class="border px-1 py-1">你的 N</th>
               <th class="border px-1 py-1">你的招生</th>
               <th class="border px-1 py-1">26 全体招生</th>
+              <th class="border px-1 py-1">26 同分</th>
+              <th class="border px-1 py-1">供给率</th>
               <th class="border px-1 py-1">学校</th>
             </tr></thead>
             <tbody>
@@ -3765,6 +3815,11 @@ const VoluntaryReport = {
                 <td class="border px-1 py-0.5 text-center font-bold">{{ r.count }}</td>
                 <td class="border px-1 py-0.5 text-center">{{ r.enroll }}</td>
                 <td class="border px-1 py-0.5 text-center text-blue-700 font-bold">{{ enrollAtScore(r.score)?.enroll || 0 }}</td>
+                <td class="border px-1 py-0.5 text-center">{{ r.cnt26 ?? '—' }}</td>
+                <td class="border px-1 py-0.5 text-center"
+                    :class="supplyRatioAt(r.score) >= 0.85 ? 'text-green-700 font-bold' : supplyRatioAt(r.score) >= 0.5 ? 'text-amber-700 font-bold' : supplyRatioAt(r.score) != null ? 'text-red-600' : 'text-slate-400'">
+                  {{ supplyRatioAt(r.score) != null ? (supplyRatioAt(r.score) * 100).toFixed(0) + '%' : '—' }}
+                </td>
                 <td class="border px-1 py-0.5">{{ schoolsAtScore(r.score) }}</td>
               </tr>
               </template>
@@ -3782,7 +3837,11 @@ const VoluntaryReport = {
               25 分 {{ r.score }} [{{ {chong:'冲',wen:'稳',bao:'保',out:'外'}[r.tier] }}] · 25位次 {{ r.rank25 ?? '—' }}
               <span v-if="r.deltaScore != null">· Δ {{ r.deltaScore > 0 ? '↑+' + r.deltaScore : r.deltaScore < 0 ? '↓' + r.deltaScore : '0' }}分</span>
               <span v-if="r.deltaRank != null">/{{ r.deltaRank > 0 ? '↑+' + r.deltaRank : r.deltaRank < 0 ? '↓' + r.deltaRank : '0' }}位</span>
-              · 你填报 <b>{{ r.count }}</b> 项 ({{ r.enroll }} 人) · 2026 全体招生 <b class="text-blue-700">{{ enrollAtScore(r.score)?.enroll || 0 }}</b> 人 ({{ enrollAtScore(r.score)?.plans.length || 0 }} 个专业)
+              · 你填报 <b>{{ r.count }}</b> 项 ({{ r.enroll }} 人) · 2026 全体招生 <b class="text-blue-700">{{ enrollAtScore(r.score)?.enroll || 0 }}</b> 人 ({{ enrollAtScore(r.score)?.plans.length || 0 }} 个专业) · 26 同分 <b class="text-slate-700">{{ r.cnt26 ?? '?' }}</b> 人
+              <span v-if="supplyRatioAt(r.score) != null" class="text-[10px]"
+                    :class="supplyRatioAt(r.score) >= 0.85 ? 'text-green-700' : supplyRatioAt(r.score) >= 0.5 ? 'text-amber-700' : 'text-red-600'">
+                (供给率 {{ (supplyRatioAt(r.score)*100).toFixed(0) }}%)
+              </span>
             </div>
             <!-- 你的志愿 -->
             <div class="mt-1 text-[10px] text-slate-600">📋 你已填报:</div>
@@ -3801,7 +3860,7 @@ const VoluntaryReport = {
                   </td>
                   <td class="border px-1 py-0.5 text-center w-12">{{ it.enroll }}人</td>
                   <td class="border px-1 py-0.5 text-center w-14 font-bold"
-                      :class="it.admit?.prob >= 0.7 ? 'text-green-700' : it.admit?.prob >= 0.4 ? 'text-amber-700' : 'text-red-600'">
+                      :class="probColorClass(it.admit?.prob)">
                     {{ fmtProb(it.admit) }}<span v-if="it.admit?.isEstimated" class="text-[9px] text-amber-600">(估)</span>
                   </td>
                 </tr>
@@ -3868,7 +3927,7 @@ const VoluntaryReport = {
                   <td class="border px-1 py-0.5 text-center w-16">{{ it.score25 }}/{{ it.rank25 }}</td>
                   <td class="border px-1 py-0.5 text-center w-10">{{ it.enroll }}人</td>
                   <td class="border px-1 py-0.5 text-center w-12 font-bold"
-                      :class="it.admit?.prob >= 0.7 ? 'text-green-700' : it.admit?.prob >= 0.4 ? 'text-amber-700' : 'text-red-600'">
+                      :class="probColorClass(it.admit?.prob)">
                     {{ fmtProb(it.admit) }}
                   </td>
                 </tr>
@@ -3883,7 +3942,7 @@ const VoluntaryReport = {
 
 // ========== 主 App ==========
 
-createApp({
+const __app = createApp({
   components: {
     ScoreTool, FilterPanel, ResultList, PlanCard, DetailDrawer, CompareBar, FavoritesBar,
     PrioritySettings, KeywordAutocomplete, VoluntaryAnalysis, VoluntaryReport,
@@ -4352,7 +4411,7 @@ createApp({
       }
       // 给每个 item 算 录取率
       for (const it of items) {
-        it.admit = computeAdmitProb(it.plan, { userRank25: anchorRank25, scoreRank: scoreRank.value });
+        it.admit = computeAdmitProb(it.plan, { userRank25: anchorRank25, scoreRank: scoreRank.value, supplyMap: supplyMap.value });
       }
       // V9: 招生维度分数聚合 (全 2026 plans, 在冲稳保整体范围内 [bao.lo, chong.hi])
       // 例: 25 分 618, 今年所有学校在 618 上招的总计划 + 来源 plans
@@ -4745,10 +4804,41 @@ createApp({
       if (!s25) return null;
       return rank25FromScore25(s25, sr);
     });
+    // 供给率 map: 25等位分 → { enroll26 (2026全体在该25分上招生数), cnt26 (该25分对应的26分同分人数), ratio }
+    const supplyMap = computed(() => {
+      const m = new Map();
+      const sr = scoreRank.value;
+      if (!sr) return m;
+      // 1) 聚合 2026 全体 plans 在每个 25 等位分上的总招生
+      const enrollMap = new Map();
+      for (const p of store.allPlans) {
+        if (!p) continue;
+        const s25 = p.isStopped ? p.score25 : p.ref25Score;
+        if (s25 == null) continue;
+        const e = p.enrollNum26 || 0;
+        if (!e) continue;
+        enrollMap.set(s25, (enrollMap.get(s25) || 0) + e);
+      }
+      // 2) 每个 25 score → 26 同分人数 (26 一分一段表 [score, cnt, cumRank])
+      const t26 = sr.oneScoreOneRank?.["2026"];
+      if (!t26) return m;
+      for (const [s25, enroll26] of enrollMap) {
+        const eq = equivFromScore25(s25, sr);
+        if (!eq?.score26) continue;
+        let cnt26 = null;
+        for (const row of t26) {
+          if (row[0] === eq.score26) { cnt26 = row[1]; break; }
+        }
+        if (!cnt26) continue;
+        m.set(s25, { enroll26, cnt26, score26: eq.score26, ratio: enroll26 / cnt26 });
+      }
+      return m;
+    });
     function admitProbFor(plan) {
       return computeAdmitProb(plan, {
         userRank25: userRank25Anchor.value,
         scoreRank: scoreRank.value,
+        supplyMap: supplyMap.value,
       });
     }
 
@@ -5602,6 +5692,9 @@ createApp({
       editPlanScore, revertPlanScore,
       onSortCol, sortFieldLabel, toggleSortDir, removeSortKey,
       onSortDragStart, onSortDrop,
+      probColorClass, supplyMap,
     };
   },
-}).mount("#app");
+});
+__app.config.globalProperties.probColorClass = probColorClass;
+__app.mount("#app");
