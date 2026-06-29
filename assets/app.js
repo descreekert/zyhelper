@@ -779,6 +779,7 @@ const ui = reactive({
   analysisExpandedScores: [],    // 一分一段行展开 (25 score) 列表
   analysisExpandedTiers: [],     // 冲稳保卡片展开 ['chong','wen','bao','out']
   analysisExpandedEnrollScores: [],  // 招生维度分数展开 (25 score list)
+  analysisExpandedMajors: [],    // 报考专业行展开 (mainName 列表)
   detailPlan: null,
   myScore: 0,
   myRank: 0,
@@ -2999,9 +3000,9 @@ const PrioritySettings = {
 
 // V9: 志愿分析 (普通视图 + 兼容 modal). prop.embedded=true 时去掉 modal 外壳
 const VoluntaryAnalysis = {
-  props: ["analysis", "listName", "anchorOverride", "rankOverride", "expandedSchools", "expandedScores", "expandedTiers", "expandedEnrollScores", "embedded",
+  props: ["analysis", "listName", "anchorOverride", "rankOverride", "expandedSchools", "expandedScores", "expandedTiers", "expandedEnrollScores", "expandedMajors", "embedded",
           "targets", "accepts"],
-  emits: ["close", "set-anchor", "set-rank", "toggle-school", "toggle-score", "toggle-tier", "toggle-enroll-score",
+  emits: ["close", "set-anchor", "set-rank", "toggle-school", "toggle-score", "toggle-tier", "toggle-enroll-score", "toggle-major",
           "update-targets", "update-accepts", "reset-transfer-lists"],
   setup(props, { emit }) {
     const maxScoreCount = computed(() => {
@@ -3461,6 +3462,96 @@ const VoluntaryAnalysis = {
           </section>
           </div><!-- /grid: 按分数 + 按学校 -->
 
+          <!-- 按 报考专业 聚合 -->
+          <section v-if="analysis.byMajor && analysis.byMajor.length">
+            <div class="text-xs text-slate-500 mb-1">每个报考专业 ({{ analysis.byMajor.length }} 个) — 点行展开详情. 主名收敛 (机械设计制造及其自动化(卓越) → 机械设计制造及其自动化)</div>
+            <div class="border rounded bg-white">
+              <table class="w-full text-xs">
+                <thead class="sticky top-0 bg-slate-100">
+                  <tr>
+                    <th class="px-2 py-1 text-left">报考专业</th>
+                    <th class="px-2 py-1 text-center w-12">分类</th>
+                    <th class="px-2 py-1 text-center w-10">N</th>
+                    <th class="px-2 py-1 text-center w-12">学校</th>
+                    <th class="px-2 py-1 text-center w-12">26计划</th>
+                    <th class="px-2 py-1 text-center w-8 text-red-600">冲</th>
+                    <th class="px-2 py-1 text-center w-8 text-amber-600">稳</th>
+                    <th class="px-2 py-1 text-center w-8 text-green-600">保</th>
+                    <th class="px-2 py-1 text-center w-16" title="该主名所有志愿录取率最大值">最佳录取率</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template v-for="m in analysis.byMajor" :key="m.name">
+                    <tr class="border-t hover:bg-slate-50 cursor-pointer"
+                        @click="$emit('toggle-major', m.name)">
+                      <td class="px-2 py-0.5">
+                        <span class="text-slate-400 mr-1">{{ expandedMajors.includes(m.name) ? '▾' : '▸' }}</span>
+                        {{ m.name }}
+                      </td>
+                      <td class="px-2 py-0.5 text-center">
+                        <span v-if="m.inTarget" class="text-[9px] px-1 rounded bg-green-100 text-green-700 font-bold" title="目标专业">✓</span>
+                        <span v-else-if="m.inAccept" class="text-[9px] px-1 rounded bg-amber-100 text-amber-700 font-bold" title="可接受转专业">⚠</span>
+                        <span v-else class="text-[9px] px-1 rounded bg-slate-100 text-slate-500" title="不在目标/可接受清单 (可能是大类)">·</span>
+                      </td>
+                      <td class="px-2 py-0.5 text-center font-bold">{{ m.count }}</td>
+                      <td class="px-2 py-0.5 text-center">{{ m.schoolCount }}</td>
+                      <td class="px-2 py-0.5 text-center">{{ m.enroll }}</td>
+                      <td class="px-2 py-0.5 text-center text-red-600">{{ m.tiers.chong || '-' }}</td>
+                      <td class="px-2 py-0.5 text-center text-amber-600">{{ m.tiers.wen || '-' }}</td>
+                      <td class="px-2 py-0.5 text-center text-green-600">{{ m.tiers.bao || '-' }}</td>
+                      <td class="px-2 py-0.5 text-center font-bold"
+                          :class="probColorClass(m.maxAdmitProb)"
+                          :title="m.maxAdmitItem ? ('最高: ' + m.maxAdmitItem.plan.schoolName) : ''">
+                        <span v-if="m.maxAdmitProb != null">{{ (m.maxAdmitProb*100).toFixed(0) }}%</span>
+                        <span v-else class="text-slate-300">—</span>
+                      </td>
+                    </tr>
+                    <tr v-if="expandedMajors.includes(m.name)" class="bg-slate-50">
+                      <td colspan="9" class="px-2 py-1">
+                        <table class="w-full text-[11px] bg-white border rounded">
+                          <thead>
+                            <tr class="bg-slate-100">
+                              <th class="px-2 py-1 text-left w-8">档</th>
+                              <th class="px-2 py-1 text-left">学校</th>
+                              <th class="px-2 py-1 text-left">26 招生专业 (完整名)</th>
+                              <th class="px-2 py-1 text-center w-16">25 分/位</th>
+                              <th class="px-2 py-1 text-center w-12">26 计划</th>
+                              <th class="px-2 py-1 text-center w-12">录取率</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr v-for="it in m.items" :key="it.id" class="border-t"
+                                :class="it.plan.isNew==='新增' ? 'bg-yellow-50/50' : ''">
+                              <td class="px-2 py-0.5 text-center">
+                                <span v-if="analysis.ranges.chong.lo <= it.score25 && it.score25 <= analysis.ranges.chong.hi" class="text-red-600 font-bold">冲</span>
+                                <span v-else-if="analysis.ranges.wen.lo <= it.score25 && it.score25 <= analysis.ranges.wen.hi" class="text-amber-600 font-bold">稳</span>
+                                <span v-else-if="analysis.ranges.bao.lo <= it.score25 && it.score25 <= analysis.ranges.bao.hi" class="text-green-600 font-bold">保</span>
+                                <span v-else class="text-slate-400">外</span>
+                              </td>
+                              <td class="px-2 py-0.5">{{ it.plan.schoolName }}</td>
+                              <td class="px-2 py-0.5">
+                                <span v-if="it.plan.isNew==='新增'" class="badge-new">新</span>
+                                <span v-else-if="it.plan.diff" class="badge-diff" :title="it.plan.diff">变</span>
+                                {{ it.plan.majorName26 || it.plan.majorName25 }}
+                              </td>
+                              <td class="px-2 py-0.5 text-center"><b>{{ it.score25 || '—' }}</b>/{{ it.rank25 || '—' }}</td>
+                              <td class="px-2 py-0.5 text-center">{{ it.enroll || '—' }}</td>
+                              <td class="px-2 py-0.5 text-center font-bold"
+                                  :class="probColorClass(it.admit?.prob)">
+                                <span v-if="it.admit?.prob != null">{{ (it.admit.prob*100).toFixed(0) }}%</span>
+                                <span v-else class="text-slate-400">—</span>
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
           <!-- 招生维度聚合 (2026 全体 plans, 不限志愿单) -->
           <section v-if="analysis.enrollByScore25 && analysis.enrollByScore25.length">
             <div class="text-xs text-slate-500 mb-1">
@@ -3672,6 +3763,17 @@ const VoluntaryReport = {
       return [...m.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]))
         .map(([n, list]) => ({ school: n, items: list }));
     });
+    const itemsByMajor = computed(() => {
+      const m = new Map();
+      for (const it of items.value) {
+        const full = it.plan.majorName26 || it.plan.majorName25 || "(未知)";
+        const n = mainNameOf(full) || full;
+        if (!m.has(n)) m.set(n, []);
+        m.get(n).push(it);
+      }
+      return [...m.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]))
+        .map(([n, list]) => ({ major: n, items: list }));
+    });
     function printReport() {
       window.print();
     }
@@ -3719,8 +3821,23 @@ const VoluntaryReport = {
       }
       return m;
     }
-    return { todayStr, items, summary, itemsByScore, itemsBySchool,
+    function majorMaxProb(g) {
+      let m = null;
+      for (const it of (g.items || [])) {
+        const p = it.admit?.prob;
+        if (p == null) continue;
+        if (m == null || p > m) m = p;
+      }
+      return m;
+    }
+    function majorSchoolCount(g) {
+      const s = new Set();
+      for (const it of (g.items || [])) s.add(it.plan.schoolName);
+      return s.size;
+    }
+    return { todayStr, items, summary, itemsByScore, itemsBySchool, itemsByMajor,
              enrollAtScore, schoolsAtScore, itemsAtScore, supplyRatioAt, schoolMaxProb,
+             majorMaxProb, majorSchoolCount,
              printReport, tierLabel, fmtProb };
   },
   template: `
@@ -4117,9 +4234,67 @@ const VoluntaryReport = {
           </div>
         </section>
 
-        <!-- 11. 转专业风险扫描 -->
+        <!-- 11. 报考专业总览 -->
         <section class="mb-6 page-break-before">
-          <h2 class="text-lg font-bold mb-2 bg-blue-50 px-2 py-1 border-l-4 border-blue-600">11. 转专业风险扫描</h2>
+          <h2 class="text-lg font-bold mb-2 bg-blue-50 px-2 py-1 border-l-4 border-blue-600">11. 报考专业总览 ({{ itemsByMajor.length }} 个专业)</h2>
+          <div class="text-[10px] text-slate-500 mb-1">主名收敛: 例 "机械设计制造及其自动化(教育部卓越)" 与 "机械设计制造及其自动化" 算同一专业</div>
+          <table class="w-full text-[10px] border-collapse">
+            <thead><tr class="bg-slate-100">
+              <th class="border px-1 py-1 text-left">报考专业 (主名)</th>
+              <th class="border px-1 py-1">N 项</th>
+              <th class="border px-1 py-1">学校</th>
+              <th class="border px-1 py-1">26 招生</th>
+              <th class="border px-1 py-1">冲</th>
+              <th class="border px-1 py-1">稳</th>
+              <th class="border px-1 py-1">保</th>
+              <th class="border px-1 py-1">最佳录取率</th>
+            </tr></thead>
+            <tbody>
+              <tr v-for="g in itemsByMajor" :key="g.major">
+                <td class="border px-1 py-0.5">{{ g.major }}</td>
+                <td class="border px-1 py-0.5 text-center font-bold">{{ g.items.length }}</td>
+                <td class="border px-1 py-0.5 text-center">{{ majorSchoolCount(g) }}</td>
+                <td class="border px-1 py-0.5 text-center">{{ g.items.reduce((s, i) => s + i.enroll, 0) }}</td>
+                <td class="border px-1 py-0.5 text-center text-red-600">{{ g.items.filter(i => tierLabel(i.score25)==='冲').length || '-' }}</td>
+                <td class="border px-1 py-0.5 text-center text-amber-700">{{ g.items.filter(i => tierLabel(i.score25)==='稳').length || '-' }}</td>
+                <td class="border px-1 py-0.5 text-center text-green-700">{{ g.items.filter(i => tierLabel(i.score25)==='保').length || '-' }}</td>
+                <td class="border px-1 py-0.5 text-center font-bold" :class="probColorClass(majorMaxProb(g))">
+                  <span v-if="majorMaxProb(g) != null">{{ (majorMaxProb(g)*100).toFixed(0) }}%</span>
+                  <span v-else class="text-slate-300">—</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <!-- 12. 报考专业详情 -->
+        <section class="mb-6 page-break-before">
+          <h2 class="text-lg font-bold mb-2 bg-blue-50 px-2 py-1 border-l-4 border-blue-600">12. 报考专业详情 — 每专业 志愿列表</h2>
+          <div v-for="g in itemsByMajor" :key="'mm-'+g.major" class="mb-3 page-break-inside-avoid">
+            <div class="font-bold text-sm bg-slate-100 px-2 py-1">
+              {{ g.major }} · {{ g.items.length }} 项 · 涉及 {{ majorSchoolCount(g) }} 校 · 26 招生 {{ g.items.reduce((s, i) => s + i.enroll, 0) }} 人
+            </div>
+            <table class="w-full text-[10px] border-collapse">
+              <tbody>
+                <tr v-for="it in g.items" :key="it.id" :class="it.plan.isNew==='新增'?'bg-yellow-50':''">
+                  <td class="border px-1 py-0.5 text-center w-8">{{ tierLabel(it.score25) }}</td>
+                  <td class="border px-1 py-0.5">{{ it.plan.schoolName }}</td>
+                  <td class="border px-1 py-0.5">{{ it.plan.majorName26 || it.plan.majorName25 }}</td>
+                  <td class="border px-1 py-0.5 text-center w-16">{{ it.score25 }}/{{ it.rank25 }}</td>
+                  <td class="border px-1 py-0.5 text-center w-10">{{ it.enroll }}人</td>
+                  <td class="border px-1 py-0.5 text-center w-12 font-bold"
+                      :class="probColorClass(it.admit?.prob)">
+                    {{ fmtProb(it.admit) }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- 13. 转专业风险扫描 -->
+        <section class="mb-6 page-break-before">
+          <h2 class="text-lg font-bold mb-2 bg-blue-50 px-2 py-1 border-l-4 border-blue-600">13. 转专业风险扫描</h2>
           <transfer-risk-section :analysis="analysis" :targets="targets" :accepts="accepts" :compact="true"></transfer-risk-section>
         </section>
       </div>
@@ -5170,7 +5345,43 @@ const __app = createApp({
           if (maxP == null || p > maxP) { maxP = p; maxIt = it; }
         }
         s.maxAdmitProb = maxP;
-        s.maxAdmitItem = maxIt;  // 引用该校最强项 (用于 tooltip)
+        s.maxAdmitItem = maxIt;
+      }
+      // 按 报考专业 聚合 (用 mainName 收敛同主名不同备注变体)
+      const majorMap = new Map();
+      for (const it of items) {
+        const fullName = it.plan.majorName26 || it.plan.majorName25 || "(未知)";
+        const mn = mainNameOf(fullName) || fullName;
+        if (!majorMap.has(mn)) majorMap.set(mn, {
+          name: mn,
+          count: 0, enroll: 0,
+          tiers: { chong: 0, wen: 0, bao: 0, out: 0 },
+          schools: new Set(),
+          items: [],
+        });
+        const row = majorMap.get(mn);
+        row.count++;
+        row.enroll += it.enroll;
+        row.tiers[tierOf(it.score25)]++;
+        row.schools.add(it.plan.schoolName);
+        row.items.push(it);
+      }
+      const byMajor = Array.from(majorMap.values()).sort((a, b) =>
+        b.count - a.count || a.name.localeCompare(b.name));
+      for (const r of byMajor) {
+        r.schoolCount = r.schools.size;
+        delete r.schools;
+        let maxP = null, maxIt = null;
+        for (const it of r.items) {
+          const p = it.admit?.prob;
+          if (p == null) continue;
+          if (maxP == null || p > maxP) { maxP = p; maxIt = it; }
+        }
+        r.maxAdmitProb = maxP;
+        r.maxAdmitItem = maxIt;
+        // 该主名 转专业类别 (取主名直接 vs target/accept)
+        r.inTarget = transferTargetSet.value.has(r.name);
+        r.inAccept = !r.inTarget && transferAcceptSet.value.has(r.name);
       }
       // V9: 招生维度分数聚合 (全 2026 plans, 在冲稳保整体范围内 [bao.lo, chong.hi])
       // 例: 25 分 618, 今年所有学校在 618 上招的总计划 + 来源 plans
@@ -5201,7 +5412,7 @@ const __app = createApp({
         });
       }
       return {
-        items, tiers, byScore, bySchool, ranges, enrollByScore25,
+        items, tiers, byScore, bySchool, byMajor, ranges, enrollByScore25,
         my26: ui.myScore, autoAnchor25: autoAnchor, anchor25, anchorRank25,
         myRank26: ui.myRank, userRank26,
         total, totalEnroll, insights, transferSummary,
