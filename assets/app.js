@@ -21,7 +21,7 @@ const LS_KEY_TRANSFER_ACCEPTS = "zyhelper_transfer_accepts_v1";  // 可接受转
 
 // 默认: 用户最初输入的两份清单 (可在 UI 编辑覆盖)
 const DEFAULT_TRANSFER_TARGETS = [
-  "电子信息工程","电子科学与技术","微电子科学与技术","数据科学与大数据技术",
+  "电子信息工程","电子科学与技术","微电子科学与工程","数据科学与大数据技术",
   "集成电路设计与集成系统","人工智能","软件工程","计算机科学与技术",
   "自动化","通信工程","机械工程","光电信息科学与工程","测控技术与仪器",
   "智能科学与技术","智能制造工程","机器人工程","车辆工程","交通运输",
@@ -698,7 +698,17 @@ const store = reactive({
   voluntaryBackup:  loadLS(LS_KEY_VOL_BACKUP, {}),
   // 用户自定义排序覆盖 (null = 用 priority.json 默认; Array<name> = 自定义顺序)
   priorityOverrides: loadLS(LS_KEY_PRIORITY_OVR, { schools: null, cities: null, majorClasses: null, majors: null }),
-  transferTargets: loadLS(LS_KEY_TRANSFER_TARGETS, DEFAULT_TRANSFER_TARGETS.slice()),
+  transferTargets: (() => {
+    const lst = loadLS(LS_KEY_TRANSFER_TARGETS, DEFAULT_TRANSFER_TARGETS.slice());
+    // 一次性迁移: 旧的错误名 "微电子科学与技术" → 正确 "微电子科学与工程"
+    let migrated = false;
+    const out = lst.map(s => {
+      if (s === "微电子科学与技术") { migrated = true; return "微电子科学与工程"; }
+      return s;
+    });
+    if (migrated) saveLS(LS_KEY_TRANSFER_TARGETS, out);
+    return out;
+  })(),
   transferAccepts: loadLS(LS_KEY_TRANSFER_ACCEPTS, DEFAULT_TRANSFER_ACCEPTS.slice()),
   // 用户手动修改的 plan 字段 (e.g. ref25Score) — { [planId]: { ref25Score, ref25Rank } }
   planOverrides: loadLS(LS_KEY_PLAN_OVR, {}),
