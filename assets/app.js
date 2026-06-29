@@ -5651,31 +5651,37 @@ const __app = createApp({
         const mode = prompt(summary, "1");
         if (!mode) return;
         if (mode === "1") {
+          const wasEmpty = voluntary.value.length === 0;
           const cur = [...voluntary.value];
           let added = 0;
           for (const id of matchedIds) {
             if (!cur.includes(id)) { cur.push(id); added++; }
           }
           voluntary.value = cur;
-          runAutoSort();
-          alert(`合并完成: 新增 ${added} 项 (${matchedIds.length - added} 项已存在跳过)`);
+          if (wasEmpty) {
+            // 空表 → 锁定源顺序
+            setPinnedActive([...matchedIds]); setPendingActive([]); clearBackupActive();
+            alert(`合并完成: 新增 ${added} 项 (源顺序已锁定 📌, 共 ${matchedIds.length} 项)`);
+          } else {
+            runAutoSort();
+            alert(`合并完成: 新增 ${added} 项 (${matchedIds.length - added} 项已存在跳过), 按 26 等位次排序`);
+          }
         } else if (mode === "2") {
-          // 替换: 导入项一律不锁定, 按自动排序规则 (26 等位次升序)
+          // 替换: 源顺序 + 全部锁定
           voluntary.value = [...matchedIds];
-          setPinnedActive([]);
+          setPinnedActive([...matchedIds]);
           setPendingActive([]);
           clearBackupActive();
-          runAutoSort();
-          alert(`替换完成: ${matchedIds.length} 项 (按 26 等位次自动排序)`);
+          alert(`替换完成: ${matchedIds.length} 项 (源顺序已锁定 📌)`);
         } else if (mode === "3") {
-          // 新建: 导入项一律不锁定
+          // 新建: 源顺序 + 全部锁定 (先 set pinned, 再切换 active 防止 watcher 自动重排)
           let name = data.name || '导入志愿';
           let i = 1;
           while (store.voluntaryLists[name]) { name = `${data.name || '导入志愿'} (${i++})`; }
+          store.voluntaryPinned = { ...store.voluntaryPinned, [name]: [...matchedIds] };
           store.voluntaryLists  = { ...store.voluntaryLists, [name]: [...matchedIds] };
           store.activeVoluntaryName = name;
-          // 切到新表会触发 watch → runAutoSort → 按 26 等位次排
-          alert(`新建志愿单 "${name}": ${matchedIds.length} 项 (按 26 等位次自动排序)`);
+          alert(`新建志愿单 "${name}": ${matchedIds.length} 项 (源顺序已锁定 📌)`);
         } else {
           alert("取消导入");
         }
@@ -5821,22 +5827,29 @@ const __app = createApp({
         const mode = prompt(summary, "3");
         if (!mode) return;
         if (mode === "1") {
+          const wasEmpty = voluntary.value.length === 0;
           const cur = [...voluntary.value];
           let added = 0;
           for (const id of matchedIds) if (!cur.includes(id)) { cur.push(id); added++; }
           voluntary.value = cur;
-          alert(`合并完成: 新增 ${added} 项 (${matchedIds.length - added} 项已存在跳过)`);
+          if (wasEmpty) {
+            setPinnedActive([...matchedIds]); setPendingActive([]); clearBackupActive();
+            alert(`合并完成: 新增 ${added} 项 (源顺序已锁定 📌, ${matchedIds.length} 项)`);
+          } else {
+            alert(`合并完成: 新增 ${added} 项 (${matchedIds.length - added} 项已存在跳过)`);
+          }
         } else if (mode === "2") {
           voluntary.value = [...matchedIds];
-          setPinnedActive([]); setPendingActive([]); clearBackupActive();
-          alert(`替换完成: ${matchedIds.length} 项`);
+          setPinnedActive([...matchedIds]); setPendingActive([]); clearBackupActive();
+          alert(`替换完成: ${matchedIds.length} 项 (源顺序已锁定 📌)`);
         } else if (mode === "3") {
           let name = file.name.replace(/\.html?$/i, "") || "辽宁导入";
           let i = 1;
           while (store.voluntaryLists[name]) { name = `${file.name.replace(/\.html?$/i, "")} (${i++})`; }
-          store.voluntaryLists = { ...store.voluntaryLists, [name]: [...matchedIds] };
+          store.voluntaryPinned = { ...store.voluntaryPinned, [name]: [...matchedIds] };
+          store.voluntaryLists  = { ...store.voluntaryLists, [name]: [...matchedIds] };
           store.activeVoluntaryName = name;
-          alert(`新建志愿单 "${name}": ${matchedIds.length} 项`);
+          alert(`新建志愿单 "${name}": ${matchedIds.length} 项 (源顺序已锁定 📌)`);
         } else { alert("取消导入"); }
       };
       input.click();
@@ -5929,20 +5942,27 @@ const __app = createApp({
           + `\n\n导入方式:\n  1. 合并到 "${store.activeVoluntaryName}"\n  2. 替换 "${store.activeVoluntaryName}"\n  3. 新建`;
         const mode = prompt(summary, "3"); if (!mode) return;
         if (mode === "1") {
+          const wasEmpty = voluntary.value.length === 0;
           const cur = [...voluntary.value]; let added = 0;
           for (const id of matchedIds) if (!cur.includes(id)) { cur.push(id); added++; }
           voluntary.value = cur;
-          alert(`合并完成: 新增 ${added}`);
+          if (wasEmpty) {
+            setPinnedActive([...matchedIds]); setPendingActive([]); clearBackupActive();
+            alert(`合并完成: 新增 ${added} (源顺序已锁定 📌)`);
+          } else {
+            alert(`合并完成: 新增 ${added}`);
+          }
         } else if (mode === "2") {
           voluntary.value = [...matchedIds];
-          setPinnedActive([]); setPendingActive([]); clearBackupActive();
-          alert(`替换完成: ${matchedIds.length}`);
+          setPinnedActive([...matchedIds]); setPendingActive([]); clearBackupActive();
+          alert(`替换完成: ${matchedIds.length} (源顺序已锁定 📌)`);
         } else if (mode === "3") {
           let name = file.name.replace(/\.csv$/i, "") || "CSV 导入";
           let i = 1; while (store.voluntaryLists[name]) name = `${file.name.replace(/\.csv$/i,'')} (${i++})`;
-          store.voluntaryLists = { ...store.voluntaryLists, [name]: [...matchedIds] };
+          store.voluntaryPinned = { ...store.voluntaryPinned, [name]: [...matchedIds] };
+          store.voluntaryLists  = { ...store.voluntaryLists, [name]: [...matchedIds] };
           store.activeVoluntaryName = name;
-          alert(`新建 "${name}": ${matchedIds.length}`);
+          alert(`新建 "${name}": ${matchedIds.length} (源顺序已锁定 📌)`);
         }
       };
       input.click();
