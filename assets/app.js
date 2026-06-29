@@ -3219,6 +3219,11 @@ const VoluntaryAnalysis = {
             </div>
           </section>
 
+          <!-- 录取候选 Top 汇总 (各档 Top 3 + 多阈值 Top 5) -->
+          <section>
+            <admit-top-summary :analysis="analysis"></admit-top-summary>
+          </section>
+
           <!-- 转专业风险分析 -->
           <section>
             <transfer-risk-section :analysis="analysis" :targets="targets" :accepts="accepts"
@@ -3919,38 +3924,9 @@ const VoluntaryReport = {
                 <li v-for="r in summary.risks" :key="r">{{ r }}</li>
               </ul>
             </div>
-            <div class="mt-3">
-              <b>各档录取率最高 Top 3:</b>
-              <template v-for="k in ['chong','wen','bao']" :key="k">
-                <div v-if="summary.topByTier[k].length" class="mt-1 pl-3 border-l-2"
-                     :class="k==='chong'?'border-red-400':k==='wen'?'border-amber-400':'border-green-400'">
-                  <span class="font-bold" :class="k==='chong'?'text-red-700':k==='wen'?'text-amber-700':'text-green-700'">
-                    {{ {chong:'冲',wen:'稳',bao:'保'}[k] }}档
-                  </span>:
-                  <span v-for="it in summary.topByTier[k]" :key="it.id" class="ml-2">
-                    {{ it.plan.schoolName }} · {{ (it.plan.majorName26 || it.plan.majorName25 || '').slice(0, 20) }}
-                    <b class="text-green-700">{{ fmtProb(it.admit) }}</b> ;
-                  </span>
-                </div>
-              </template>
-            </div>
-            <div class="mt-3">
-              <b>按阈值最有可能被录取的次序 Top 5</b>
-              <span class="text-[10px] text-slate-500 ml-1">(平行志愿首 5 个 概率 ≥ 阈值 的志愿, 按填报顺序)</span>:
-              <template v-for="b in summary.topByThreshold" :key="'th'+b.threshold">
-                <div class="mt-1 pl-3 border-l-2 border-blue-400">
-                  <span class="font-bold text-blue-700">≥ {{ (b.threshold*100).toFixed(0) }}%</span>:
-                  <template v-if="b.items.length">
-                    <span v-for="it in b.items" :key="'th'+b.threshold+'-'+it.id" class="ml-2 inline-block">
-                      <b class="text-orange-700">#{{ it.idx }}</b>
-                      {{ it.plan.schoolName }} · {{ (it.plan.majorName26 || it.plan.majorName25 || '').slice(0, 20) }}
-                      <b :class="probColorClass(it.admit?.prob)">{{ fmtProb(it.admit) }}</b><span v-if="it.admit?.isEstimated" class="text-[9px] text-amber-600">(估)</span> ;
-                    </span>
-                  </template>
-                  <span v-else class="ml-2 text-slate-400 text-[11px]">无志愿达到此阈值</span>
-                </div>
-              </template>
-            </div>
+          </div>
+          <div class="mt-4">
+            <admit-top-summary :analysis="analysis"></admit-top-summary>
           </div>
         </section>
 
@@ -4460,6 +4436,88 @@ const TransferRiskSection = {
           </table>
         </div>
       </template>
+    </div>
+  `,
+};
+
+// ========== 录取候选 Top 汇总 (各档 Top 3 + 多阈值 Top 5) ==========
+// 复用于 分析页 + PDF. 接 analysis (含 topByTier + topByThreshold).
+const AdmitTopSummary = {
+  props: ["analysis"],
+  setup(props) {
+    const tierMeta = { chong: { label: "冲", color: "red" }, wen: { label: "稳", color: "amber" }, bao: { label: "保", color: "green" } };
+    function shortMajor(it) {
+      const s = it.plan?.majorName26 || it.plan?.majorName25 || "";
+      return s.length > 22 ? s.slice(0, 22) + "…" : s;
+    }
+    return { tierMeta, shortMajor };
+  },
+  template: `
+    <div class="admit-top-summary space-y-3">
+      <!-- 各档 Top 3 -->
+      <div>
+        <div class="text-sm font-bold mb-1.5">🏆 各档录取率 Top 3</div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+          <div v-for="k in ['chong','wen','bao']" :key="'tt'+k"
+               class="border rounded p-2"
+               :class="k==='chong'?'border-red-200 bg-red-50/40':k==='wen'?'border-amber-200 bg-amber-50/40':'border-green-200 bg-green-50/40'">
+            <div class="font-bold text-xs mb-1"
+                 :class="k==='chong'?'text-red-700':k==='wen'?'text-amber-700':'text-green-700'">
+              {{ tierMeta[k].label }}档 <span class="text-slate-400 font-normal">({{ analysis.topByTier[k].length }})</span>
+            </div>
+            <ol v-if="analysis.topByTier[k].length" class="text-[11px] space-y-1">
+              <li v-for="(it, i) in analysis.topByTier[k]" :key="it.id" class="flex items-start gap-1.5">
+                <span class="font-bold w-3 text-slate-500">{{ i+1 }}.</span>
+                <span class="flex-1 leading-tight">
+                  <b>{{ it.plan.schoolName }}</b><br/>
+                  <span class="text-slate-600 text-[10px]">{{ shortMajor(it) }}</span>
+                </span>
+                <b class="shrink-0" :class="probColorClass(it.admit?.prob)">
+                  {{ (it.admit.prob*100).toFixed(0) }}%<span v-if="it.admit.isEstimated" class="text-[9px] text-amber-600">(估)</span>
+                </b>
+              </li>
+            </ol>
+            <div v-else class="text-[10px] text-slate-400">该档无志愿</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 多阈值 Top 5 -->
+      <div>
+        <div class="text-sm font-bold mb-1.5">🎯 按阈值最可能录取的次序 Top 5
+          <span class="text-[10px] text-slate-500 font-normal">(平行志愿首 5 个 prob ≥ 阈值, 按填报序)</span>
+        </div>
+        <table class="w-full text-[11px] border-collapse">
+          <thead><tr class="bg-slate-100">
+            <th class="border px-1.5 py-1 text-center w-12">阈值</th>
+            <th class="border px-1.5 py-1 text-left">1</th>
+            <th class="border px-1.5 py-1 text-left">2</th>
+            <th class="border px-1.5 py-1 text-left">3</th>
+            <th class="border px-1.5 py-1 text-left">4</th>
+            <th class="border px-1.5 py-1 text-left">5</th>
+          </tr></thead>
+          <tbody>
+            <tr v-for="b in analysis.topByThreshold" :key="'tb'+b.threshold" class="border-t align-top">
+              <td class="border px-1.5 py-1 text-center font-bold bg-blue-50 text-blue-700 align-middle">≥{{ (b.threshold*100).toFixed(0) }}%</td>
+              <template v-for="i in 5" :key="'tc'+b.threshold+i">
+                <td class="border px-1.5 py-1 leading-tight" style="min-width:120px">
+                  <template v-if="b.items[i-1]">
+                    <div class="flex items-center justify-between gap-1">
+                      <span class="text-orange-600 font-bold text-[10px]">#{{ b.items[i-1].idx }}</span>
+                      <b class="text-[11px]" :class="probColorClass(b.items[i-1].admit?.prob)">
+                        {{ (b.items[i-1].admit.prob*100).toFixed(0) }}%<span v-if="b.items[i-1].admit.isEstimated" class="text-[9px] text-amber-600">(估)</span>
+                      </b>
+                    </div>
+                    <div class="font-bold text-[11px]">{{ b.items[i-1].plan.schoolName }}</div>
+                    <div class="text-slate-600 text-[10px]">{{ shortMajor(b.items[i-1]) }}</div>
+                  </template>
+                  <span v-else class="text-slate-300 text-[10px]">—</span>
+                </td>
+              </template>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   `,
 };
@@ -5378,6 +5436,23 @@ const __app = createApp({
         s.maxAdmitProb = maxP;
         s.maxAdmitItem = maxIt;
       }
+      // 各档 录取率 Top 3 (排除 prob 为空)
+      const topByTier = {};
+      for (const k of ["chong", "wen", "bao"]) {
+        const list = (tiers[k].items || []).filter(it => it.admit?.prob != null)
+          .sort((a, b) => b.admit.prob - a.admit.prob);
+        topByTier[k] = list.slice(0, 3);
+      }
+      // 多阈值最有可能录取的 Top 5 (平行志愿首 N 个 prob >= 阈值, 含原序号)
+      const TOPN_THRESHOLDS = [0.45, 0.50, 0.60, 0.70];
+      const topByThreshold = TOPN_THRESHOLDS.map(T => ({
+        threshold: T,
+        items: items
+          .map((it, i) => ({ ...it, idx: i + 1 }))
+          .filter(it => it.admit?.prob != null && it.admit.prob >= T)
+          .slice(0, 5),
+      }));
+
       // 按 报考专业 聚合 (用 mainName 收敛同主名不同备注变体)
       const majorMap = new Map();
       for (const it of items) {
@@ -5447,6 +5522,7 @@ const __app = createApp({
         my26: ui.myScore, autoAnchor25: autoAnchor, anchor25, anchorRank25,
         myRank26: ui.myRank, userRank26,
         total, totalEnroll, insights, transferSummary,
+        topByTier, topByThreshold,
       };
     });
     // 志愿单 HTML 导出 (志愿填报标准 6 列格式)
@@ -6712,4 +6788,5 @@ const __app = createApp({
 __app.config.globalProperties.probColorClass = probColorClass;
 __app.component("AdmitTrendChart", AdmitTrendChart);
 __app.component("TransferRiskSection", TransferRiskSection);
+__app.component("AdmitTopSummary", AdmitTopSummary);
 __app.mount("#app");
