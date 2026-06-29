@@ -4038,6 +4038,26 @@ const AdmitTrendChart = {
       return out;
     });
 
+    // 阈值表: 列出 所有 >= 50% 的志愿 (按志愿顺序)
+    // 每条标出它命中的最高阈值 (供"首达点"提示参考)
+    const qualifyingPlans = computed(() => {
+      const pts = points.value;
+      const firstHitIdx = new Map();  // idx → 最高首达阈值
+      for (const h of thresholdHits.value) {
+        const prev = firstHitIdx.get(h.idx) || 0;
+        if (h.threshold > prev) firstHitIdx.set(h.idx, h.threshold);
+      }
+      return pts.filter(p => p.probPct >= 50).map(p => {
+        // 该 plan 自身能进入的最高阈值 (向下取整 5 倍)
+        const maxBucket = Math.floor(p.probPct / 5) * 5;
+        return {
+          ...p,
+          highestBucket: Math.min(95, Math.max(50, maxBucket)),
+          firstHitThreshold: firstHitIdx.get(p.idx) || null,  // null=非首达, 仅满足阈值
+        };
+      });
+    });
+
     // 同 idx 多阈值合并为一个 dot, 标签取最大阈值
     const chartDots = computed(() => {
       const m = new Map();
@@ -4116,7 +4136,7 @@ const AdmitTrendChart = {
     });
 
     return { W, padL, padR, padT, padB, points, linePath, fillPath,
-             thresholdHits, chartDots, xLabels, yGrid, yScale,
+             thresholdHits, qualifyingPlans, chartDots, xLabels, yGrid, yScale,
              svgRef, hoverIdx, hoverPoint, tipStyle, onMove, onLeave };
   },
   template: `
@@ -4204,9 +4224,11 @@ const AdmitTrendChart = {
             </div>
           </div>
         </div>
-        <table class="w-full text-[11px] mt-2 border-collapse">
+        <div class="text-xs text-slate-600 mt-2 mb-1">
+          <b>≥ 50% 录取概率志愿全列表</b> ({{qualifyingPlans.length}} 项, 按志愿顺序)
+        </div>
+        <table class="w-full text-[11px] border-collapse">
           <thead><tr class="bg-slate-100">
-            <th class="border px-2 py-1 text-center w-14">阈值</th>
             <th class="border px-2 py-1 text-center w-10">序号</th>
             <th class="border px-2 py-1 text-left">学校</th>
             <th class="border px-2 py-1 text-left">26 专业</th>
@@ -4214,11 +4236,11 @@ const AdmitTrendChart = {
             <th class="border px-2 py-1 text-center w-12">平均位</th>
             <th class="border px-2 py-1 text-center w-12">26 计划</th>
             <th class="border px-2 py-1 text-center w-14">概率</th>
+            <th class="border px-2 py-1 text-center w-16">阈值首达</th>
           </tr></thead>
           <tbody>
-            <tr v-for="h in thresholdHits" :key="'r'+h.threshold" class="border-t"
+            <tr v-for="h in qualifyingPlans" :key="'qp'+h.idx" class="border-t"
                 :class="h.isNew ? 'bg-yellow-50' : ''">
-              <td class="border px-2 py-1 text-center font-bold text-green-700">≥ {{h.threshold}}%</td>
               <td class="border px-2 py-1 text-center font-bold">#{{h.idx}}</td>
               <td class="border px-2 py-1">
                 <span v-if="h.isNew" class="text-red-600 text-[9px] font-bold mr-0.5">新</span>
@@ -4239,8 +4261,14 @@ const AdmitTrendChart = {
               <td class="border px-2 py-1 text-center font-bold" :class="probColorClass(h.probPct/100)">
                 {{h.probPct}}%<span v-if="h.isEst" class="text-[9px] text-amber-600 ml-0.5">(估)</span>
               </td>
+              <td class="border px-2 py-1 text-center">
+                <span v-if="h.firstHitThreshold" class="inline-block bg-green-100 text-green-800 font-bold rounded px-1 text-[10px]">
+                  ≥{{h.firstHitThreshold}}%
+                </span>
+                <span v-else class="text-slate-300">—</span>
+              </td>
             </tr>
-            <tr v-if="!thresholdHits.length"><td colspan="8" class="border px-2 py-2 text-center text-slate-400">未达到 50% 阈值 — 所有志愿录取概率均偏低, 建议补充更稳的志愿</td></tr>
+            <tr v-if="!qualifyingPlans.length"><td colspan="8" class="border px-2 py-2 text-center text-slate-400">无志愿达到 50% 阈值 — 建议补充更稳的志愿</td></tr>
           </tbody>
         </table>
         <div class="text-[10px] text-slate-400 mt-1 leading-snug">
