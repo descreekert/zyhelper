@@ -21,9 +21,10 @@ const LS_KEY_TRANSFER_ACCEPTS = "zyhelper_transfer_accepts_v1";  // 可接受转
 
 // 默认: 用户最初输入的两份清单 (可在 UI 编辑覆盖)
 const DEFAULT_TRANSFER_TARGETS = [
-  "电子信息工程","电子科学与技术","微电子科学与工程","数据科学与大数据技术",
-  "集成电路设计与集成系统","人工智能","软件工程","计算机科学与技术",
-  "自动化","通信工程","机械工程","机械设计制造及其自动化",
+  "电子信息工程","电子信息科学与技术","电子科学与技术","微电子科学与工程",
+  "数据科学与大数据技术","集成电路设计与集成系统","人工智能","软件工程",
+  "计算机科学与技术","物联网工程","自动化","通信工程",
+  "机械工程","机械设计制造及其自动化","机械电子工程",
   "光电信息科学与工程","测控技术与仪器",
   "智能科学与技术","智能制造工程","机器人工程","车辆工程","交通运输",
   "智能车辆工程","智慧交通","未来机器人","交叉工程",
@@ -73,18 +74,37 @@ function extractMajorsFromName(name) {
   return out.length ? out : [s];
 }
 
+// 取 专业名 第一个括号前的主名 (规范化空格 + 全角逗号)
+function mainNameOf(name) {
+  if (!name) return "";
+  return String(name).replace(/，/g, ",").replace(/\s+/g, "").split(/[(\[（［]/)[0];
+}
+
 // 给一个 plan 计算 "转专业风险" 标签:
 //   - ok    单专业在目标内 / 大类含任一目标
 //   - warn  单专业仅在可接受内 / 大类无目标但含任一可接受
 //   - error 全部都不在目标 + 可接受 范围
 function classifyTransfer(plan, targetSet, acceptSet) {
   if (!plan) return { level: "error", matchedTargets: [], matchedAccepts: [], majors: [] };
+  const name = plan.majorName26 || plan.majorName25 || "";
+  // 步骤 1: 若 主名 (括号前) 本身就是 目标/可接受 专业, 直接认定为单专业.
+  //   防止 "数据科学与大数据技术(大类招生,项目选拔进入,分流时专业任选)" 这类
+  //   描述性括号被误解析成 ["大类招生","项目选拔进入","分流时专业任选"].
+  //   也覆盖 "车辆工程(...试点班)" 等 qualifier 括号.
+  const main = mainNameOf(name);
+  if (main) {
+    if (targetSet.has(main)) {
+      return { level: "ok", matchedTargets: [main], matchedAccepts: [], majors: [main] };
+    }
+    if (acceptSet.has(main)) {
+      return { level: "warn", matchedTargets: [], matchedAccepts: [main], majors: [main] };
+    }
+  }
+  // 步骤 2: 主名不在清单 (典型 大类: 电子信息类 / 自动化类), 走 子专业列表
   let majors = [];
-  // 优先用 containedMajors (build_data 已解析); 没有则从专业名括号回退解析
   if (Array.isArray(plan.containedMajors) && plan.containedMajors.length) {
     majors = plan.containedMajors.slice();
   } else {
-    const name = plan.majorName26 || plan.majorName25 || "";
     majors = extractMajorsFromName(name);
   }
   const normed = majors.map(m => (m || "").replace(/\s+/g, "").trim()).filter(Boolean);
@@ -709,7 +729,7 @@ const store = reactive({
     });
     // 一次性迁移 2: 补全后期新增的默认目标专业 (如 "机械设计制造及其自动化")
     // 仅当用户的列表里 缺这些后期补默认项 时追加, 不影响用户自己增删的别的项.
-    const POST_ADDED_DEFAULTS = ["机械设计制造及其自动化"];
+    const POST_ADDED_DEFAULTS = ["机械设计制造及其自动化", "物联网工程", "机械电子工程", "电子信息科学与技术"];
     const have = new Set(out);
     for (const m of POST_ADDED_DEFAULTS) {
       if (!have.has(m)) { out.push(m); migrated = true; }
