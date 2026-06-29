@@ -4038,6 +4038,24 @@ const AdmitTrendChart = {
       return out;
     });
 
+    // ---- 用户选定的阈值 (互动). PDF compact 模式锁定 50 ----
+    const selectedThreshold = ref(50);
+    const effectiveThreshold = computed(() =>
+      props.compact ? 50 : selectedThreshold.value);
+    function setThreshold(v) {
+      if (props.compact) return;
+      v = Math.max(0, Math.min(95, Math.round(v / 5) * 5));
+      selectedThreshold.value = v;
+    }
+    function onYAxisClick(y) {
+      if (props.compact) return;
+      setThreshold(y);
+    }
+    function onHistClick(loBucket) {
+      if (props.compact) return;
+      setThreshold(loBucket);
+    }
+
     // 概率分布 (每 10% 一桶, 0-9/10-19/.../90-100)
     const probDistribution = computed(() => {
       const buckets = [];
@@ -4065,24 +4083,20 @@ const AdmitTrendChart = {
     const distMax = computed(() =>
       Math.max(1, ...probDistribution.value.map(b => b.count)));
 
-    // 阈值表: 列出 所有 >= 50% 的志愿 (按志愿顺序)
-    // 每条标出它命中的最高阈值 (供"首达点"提示参考)
+    // 阈值表: 列出 概率 >= effectiveThreshold 的志愿 (按志愿顺序)
+    // 互动模式下阈值随 selectedThreshold 变, PDF 模式固定 50.
     const qualifyingPlans = computed(() => {
+      const T = effectiveThreshold.value;
       const pts = points.value;
       const firstHitIdx = new Map();  // idx → 最高首达阈值
       for (const h of thresholdHits.value) {
         const prev = firstHitIdx.get(h.idx) || 0;
         if (h.threshold > prev) firstHitIdx.set(h.idx, h.threshold);
       }
-      return pts.filter(p => p.probPct >= 50).map(p => {
-        // 该 plan 自身能进入的最高阈值 (向下取整 5 倍)
-        const maxBucket = Math.floor(p.probPct / 5) * 5;
-        return {
-          ...p,
-          highestBucket: Math.min(95, Math.max(50, maxBucket)),
-          firstHitThreshold: firstHitIdx.get(p.idx) || null,  // null=非首达, 仅满足阈值
-        };
-      });
+      return pts.filter(p => p.probPct >= T).map(p => ({
+        ...p,
+        firstHitThreshold: firstHitIdx.get(p.idx) || null,
+      }));
     });
 
     // 同 idx 多阈值合并为一个 dot, 标签取最大阈值
@@ -4165,6 +4179,7 @@ const AdmitTrendChart = {
     return { W, padL, padR, padT, padB, points, linePath, fillPath,
              thresholdHits, qualifyingPlans, chartDots, xLabels, yGrid, yScale,
              probDistribution, distMax,
+             selectedThreshold, effectiveThreshold, setThreshold, onYAxisClick, onHistClick,
              svgRef, hoverIdx, hoverPoint, tipStyle, onMove, onLeave };
   },
   template: `
@@ -4173,12 +4188,35 @@ const AdmitTrendChart = {
         无可用录取概率数据 (请输入 26 分数, 且志愿单非空)
       </div>
       <div v-else>
-        <div class="flex items-center justify-between mb-1 text-xs text-slate-600">
+        <div class="flex items-center justify-between mb-1.5 text-xs text-slate-600">
           <span class="font-bold text-sm">📈 录取趋势 — 按志愿顺序 (共 {{ points.length }} 项)</span>
           <span class="flex items-center gap-3">
             <span class="flex items-center gap-1"><span class="inline-block w-5 h-0.5 bg-orange-500"></span>录取概率</span>
             <span class="flex items-center gap-1"><span class="inline-block w-2.5 h-2.5 rounded-full bg-green-500"></span>阈值首达点</span>
+            <span v-if="!compact" class="flex items-center gap-1"><span class="inline-block w-5 h-0.5 bg-blue-500" style="border-top:1px dashed #3b82f6"></span>当前阈值</span>
           </span>
+        </div>
+
+        <!-- 概率分布 直方图 (上方; 互动模式下点击柱设阈值) -->
+        <div class="mb-2 border rounded p-2 bg-slate-50">
+          <div class="text-xs text-slate-600 font-bold mb-1.5">
+            📊 概率分布 (按 10% 分桶)
+            <span v-if="!compact" class="text-[10px] text-slate-400 font-normal ml-1">— 点击柱设阈值</span>
+          </div>
+          <div class="flex items-end gap-1 h-16 px-1">
+            <div v-for="b in probDistribution" :key="'h'+b.lo"
+                 class="flex-1 flex flex-col items-center justify-end relative"
+                 :class="!compact ? 'cursor-pointer hover:opacity-80' : ''"
+                 @click="onHistClick(b.lo)"
+                 :title="b.lo+'-'+b.hi+'%: '+b.count+' 项'">
+              <span class="text-[10px] font-bold mb-0.5" :style="{color: b.color}">{{b.count || ''}}</span>
+              <div class="w-full rounded-t transition-all"
+                   :style="{height: (b.count/distMax*100)+'%', minHeight: b.count ? '3px' : '0', background: b.color, opacity: b.count ? (!compact && effectiveThreshold === b.lo ? 1 : (b.count ? 0.8 : 0.15)) : 0.12, outline: !compact && effectiveThreshold === b.lo ? '2px solid #3b82f6' : 'none'}"></div>
+            </div>
+          </div>
+          <div class="flex gap-1 mt-1 px-1">
+            <span v-for="b in probDistribution" :key="'l'+b.lo" class="flex-1 text-center text-[9px] text-slate-500">{{b.lo}}-{{b.hi}}</span>
+          </div>
         </div>
         <div class="relative">
           <svg :viewBox="'0 0 ' + W + ' ' + height" class="w-full bg-white border rounded"
@@ -4197,7 +4235,11 @@ const AdmitTrendChart = {
                     :x1="padL" :x2="W-padR" :y1="yScale(y)" :y2="yScale(y)"
                     stroke="#e2e8f0" stroke-dasharray="2,3"/>
               <text v-for="y in yGrid" :key="'l'+y"
-                    :x="padL-5" :y="yScale(y)+3" text-anchor="end" font-size="10" fill="#94a3b8">{{y}}</text>
+                    :x="padL-5" :y="yScale(y)+3" text-anchor="end" font-size="10"
+                    :fill="!compact && effectiveThreshold === y ? '#3b82f6' : '#94a3b8'"
+                    :font-weight="!compact && effectiveThreshold === y ? 'bold' : 'normal'"
+                    :style="!compact ? 'cursor:pointer' : ''"
+                    @click="onYAxisClick(y)">{{y}}</text>
             </g>
             <path :d="fillPath" fill="url(#admit-trend-grad)"/>
             <path :d="linePath" stroke="#f97316" stroke-width="1.5" fill="none"/>
@@ -4209,6 +4251,13 @@ const AdmitTrendChart = {
               <line :x1="h.x" :x2="h.x" :y1="h.y" :y2="yScale(0)" stroke="#84cc16" stroke-dasharray="2,2" stroke-width="0.8" opacity="0.4"/>
               <circle :cx="h.x" :cy="h.y" r="5" fill="#84cc16" stroke="white" stroke-width="1.5"/>
               <text :x="h.x" :y="h.y-9" text-anchor="middle" font-size="9" font-weight="bold" fill="#3f6212">≥{{h.threshold}}%</text>
+            </g>
+            <!-- 当前阈值 横线 + 角标 (互动模式) -->
+            <g v-if="!compact" style="pointer-events:none">
+              <line :x1="padL" :x2="W-padR" :y1="yScale(effectiveThreshold)" :y2="yScale(effectiveThreshold)"
+                    stroke="#3b82f6" stroke-width="1.5" stroke-dasharray="5,3" opacity="0.85"/>
+              <rect :x="W-padR-50" :y="yScale(effectiveThreshold)-9" width="48" height="16" rx="3" fill="#3b82f6"/>
+              <text :x="W-padR-26" :y="yScale(effectiveThreshold)+3" text-anchor="middle" font-size="10" fill="white" font-weight="bold">≥{{effectiveThreshold}}%</text>
             </g>
             <!-- hover indicator (互动) -->
             <g v-if="hoverPoint && !compact" style="pointer-events:none">
@@ -4252,22 +4301,21 @@ const AdmitTrendChart = {
             </div>
           </div>
         </div>
-        <!-- 概率分布直方图 (每 10% 一桶) -->
-        <div class="mt-3 border rounded p-2 bg-slate-50">
-          <div class="text-xs text-slate-600 font-bold mb-1.5">📊 概率分布 (按 10% 分桶, 共 {{points.length}} 项)</div>
-          <div class="flex items-end gap-1 h-20 px-1">
-            <div v-for="b in probDistribution" :key="'h'+b.lo" class="flex-1 flex flex-col items-center justify-end relative group">
-              <span class="text-[10px] font-bold mb-0.5" :style="{color: b.color}">{{b.count || ''}}</span>
-              <div class="w-full rounded-t transition-all" :style="{height: (b.count/distMax*100)+'%', minHeight: b.count ? '4px' : '0', background: b.color, opacity: b.count ? 1 : 0.15}" :title="b.lo+'-'+b.hi+'%: '+b.count+' 项'"></div>
-            </div>
-          </div>
-          <div class="flex gap-1 mt-1 px-1">
-            <span v-for="b in probDistribution" :key="'l'+b.lo" class="flex-1 text-center text-[9px] text-slate-500">{{b.lo}}-{{b.hi}}</span>
-          </div>
+        <!-- 阈值滑杆 (互动模式) -->
+        <div v-if="!compact" class="mt-2 px-1 flex items-center gap-3">
+          <span class="text-xs text-slate-500 whitespace-nowrap">阈值滑动:</span>
+          <input type="range" min="0" max="95" step="5"
+                 :value="selectedThreshold"
+                 @input="setThreshold(+$event.target.value)"
+                 class="flex-1 accent-blue-500"/>
+          <span class="text-sm font-bold text-blue-600 min-w-16 text-center bg-blue-50 rounded px-2 py-0.5">≥ {{selectedThreshold}}%</span>
+          <button v-if="selectedThreshold !== 50" @click="setThreshold(50)"
+                  class="text-[10px] text-slate-400 hover:text-blue-600">重置 50%</button>
         </div>
 
-        <div class="text-xs text-slate-600 mt-3 mb-1">
-          <b>≥ 50% 录取概率志愿全列表</b> ({{qualifyingPlans.length}} 项, 按志愿顺序)
+        <div class="text-xs text-slate-600 mt-3 mb-1 flex items-center justify-between">
+          <span><b>≥ {{effectiveThreshold}}% 录取概率志愿全列表</b> (<span class="text-blue-600 font-bold">{{qualifyingPlans.length}}</span> / {{points.length}} 项)</span>
+          <span v-if="!compact" class="text-[10px] text-slate-400">点击 概率分布 柱 / Y 轴数字 / 拖动 滑杆 调整阈值</span>
         </div>
         <table class="w-full text-[11px] border-collapse">
           <thead><tr class="bg-slate-100">
