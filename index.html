@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>2026 物理类志愿填报助手</title>
-  <link rel="stylesheet" href="assets/style.css?v=v13-top-pretty">
+  <link rel="stylesheet" href="assets/style.css?v=v14-ln-html">
   <script src="https://unpkg.com/vue@3.4.21/dist/vue.global.prod.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/chart.js@4.4.2/dist/chart.umd.js"></script>
@@ -274,6 +274,7 @@
               <button @click="exportVoluntaryByTier" v-if="voluntary.length" class="text-xs ml-1 text-amber-600 hover:underline" title="按当前表顺序导出 CSV (档作为一列)">📤 CSV</button>
               <button @click="exportVoluntaryJson" v-if="voluntary.length" class="text-xs ml-1 text-purple-600 hover:underline" title="导出 JSON (可跨设备/版本导入)">📤 JSON</button>
               <button @click="importVoluntaryJson" class="text-xs ml-1 text-green-600 hover:underline" title="从 JSON 文件导入: 合并/替换/新建">📥 导入 JSON</button>
+              <button @click="importLnVolHtml" class="text-xs ml-1 text-teal-600 hover:underline" title="从 辽宁招生考试网 HTML 志愿表 导入">📥 导入 辽宁HTML</button>
               <button @click="mergeFromOtherList" v-if="Object.keys(store.voluntaryLists).length > 1" class="text-xs ml-1 text-cyan-600 hover:underline" title="从其它志愿单合并到当前">🔀 合并</button>
               <button @click="clearVoluntary" v-if="voluntary.length" class="text-xs ml-1 text-red-500 hover:underline">清空</button>
               <!-- V9: 锁定状态 + 待确认批量操作 -->
@@ -523,6 +524,6 @@
     </template>
   </div>
 
-  <script src="assets/app.js?v=v13-top-pretty"></script>
+  <script src="assets/app.js?v=v14-ln-html"></script>
 </body>
 </html>

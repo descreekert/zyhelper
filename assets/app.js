@@ -5681,6 +5681,165 @@ const __app = createApp({
       input.click();
     }
 
+    // ---- 辽宁招生考试网 HTML 志愿表 导入 ----
+    // 文件结构: 3 张 el-table 表 (普通本科 / 特殊批次 / 高校专项 等)
+    // 每行 td 类似 `el-table_NNN_column_MMM` (列 id); thead 给出列名映射
+    // 第 1 张表 院校 cells 跨 4 行 (rowspan=4), 续行只有 专业 cells; 第 2-3 张 1 行 1 项
+    function parseLnVolHtml(htmlText) {
+      const doc = new DOMParser().parseFromString(htmlText, "text/html");
+      const out = [];
+      const cellText = (td) => {
+        if (!td) return "";
+        // 院校代号/专业代号: 嵌套 <div style="min-height: 23px;"> 内
+        const inner = td.querySelector('div.cell > div[style*="min-height"]');
+        if (inner) {
+          const t = inner.textContent.replace(/\s+/g, "").trim();
+          if (t) return t;
+        }
+        const cell = td.querySelector("div.cell");
+        return cell ? cell.textContent.replace(/\s+/g, " ").trim() : "";
+      };
+      const colKey = (el) => {
+        const cls = (el.className || "").split(/\s+/);
+        return cls.find(c => /^el-table_\d+_column_/.test(c)) || "";
+      };
+      const tables = doc.querySelectorAll(".el-table__body-wrapper table.el-table__body");
+      for (const tbl of tables) {
+        // header map: colKey → 标签 (序号/院校代号/院校名称/专业代号/专业名称/专业备注/专业服从志愿)
+        const headerMap = {};
+        const headerTbl = tbl.closest(".el-table")?.querySelector(".el-table__header-wrapper table.el-table__header");
+        if (headerTbl) {
+          headerTbl.querySelectorAll("thead > tr > th").forEach(th => {
+            const k = colKey(th);
+            const lbl = (th.querySelector("div.cell")?.textContent || "").trim();
+            if (k && lbl) headerMap[k] = lbl;
+          });
+        }
+        if (!Object.values(headerMap).some(v => v === "院校名称")) continue; // 非志愿表
+        let curSchool = { code: "", name: "" };
+        const rows = tbl.querySelectorAll("tbody > tr");
+        for (const tr of rows) {
+          const tds = [...tr.querySelectorAll("td")];
+          const data = { 序号: "", 院校代号: "", 院校名称: "", 专业代号: "", 专业名称: "", 专业备注: "" };
+          for (const td of tds) {
+            const lbl = headerMap[colKey(td)];
+            if (!lbl) continue;
+            const v = cellText(td);
+            if (v) data[lbl] = v;
+          }
+          if (data.院校代号) curSchool.code = data.院校代号;
+          if (data.院校名称) curSchool.name = data.院校名称;
+          if (!data.院校代号 && curSchool.code) data.院校代号 = curSchool.code;
+          if (!data.院校名称 && curSchool.name) data.院校名称 = curSchool.name;
+          // 跳过纯占位 (无院校无专业)
+          if (!data.院校名称 || (!data.专业代号 && !data.专业名称)) continue;
+          out.push({
+            schoolCode: data.院校代号 || "",
+            schoolName: data.院校名称 || "",
+            majorCode:  data.专业代号 || "",
+            majorName:  data.专业名称 || "",
+            remarks:    data.专业备注 || "",
+          });
+        }
+      }
+      return out;
+    }
+
+    function matchLnEntries(entries) {
+      const all = store.allPlans;
+      const bySchoolName = new Map();
+      for (const p of all) {
+        if (!bySchoolName.has(p.schoolName)) bySchoolName.set(p.schoolName, []);
+        bySchoolName.get(p.schoolName).push(p);
+      }
+      const matched = [];
+      const unmatched = [];
+      for (const e of entries) {
+        const cands = bySchoolName.get(e.schoolName) || [];
+        let found = null;
+        // 1. 同校 + 院校代号 + 专业代号 全等
+        if (e.schoolCode && e.majorCode) {
+          found = cands.find(p => p.schoolCode === e.schoolCode && p.majorCode26 === e.majorCode);
+        }
+        // 2. 同校 + 专业代号 (代号是该校内唯一)
+        if (!found && e.majorCode) {
+          found = cands.find(p => p.majorCode26 === e.majorCode);
+        }
+        // 3. 同校 + 专业名 完全一致 (含 26 或 25 名)
+        if (!found && e.majorName) {
+          found = cands.find(p => p.majorName26 === e.majorName || p.majorName25 === e.majorName);
+        }
+        // 4. 同校 + 主名 完全一致 (mainName 收敛)
+        if (!found && e.majorName) {
+          const eMain = mainNameOf(e.majorName);
+          if (eMain) {
+            found = cands.find(p => mainNameOf(p.majorName26 || p.majorName25) === eMain);
+          }
+        }
+        if (found) matched.push({ entry: e, plan: found });
+        else unmatched.push(e);
+      }
+      return { matched, unmatched };
+    }
+
+    function importLnVolHtml() {
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = ".html,.htm,text/html";
+      input.onchange = async (ev) => {
+        const file = ev.target.files?.[0];
+        if (!file) return;
+        let entries;
+        try {
+          const text = await file.text();
+          entries = parseLnVolHtml(text);
+        } catch (e) { alert("HTML 解析失败: " + e.message); return; }
+        if (!entries.length) { alert("未在 HTML 中找到志愿条目. 文件格式可能不对."); return; }
+        const { matched, unmatched } = matchLnEntries(entries);
+        if (!matched.length) {
+          alert(`解析出 ${entries.length} 条志愿, 但 0 条在数据库中匹配. 可能学校名差异.\n例: ${entries.slice(0, 3).map(e => e.schoolName + ' · ' + e.majorName).join('\n  ')}`);
+          return;
+        }
+        // 去重保持顺序
+        const matchedIds = [];
+        const seen = new Set();
+        for (const m of matched) {
+          if (!seen.has(m.plan.id)) { matchedIds.push(m.plan.id); seen.add(m.plan.id); }
+        }
+        const unmatchedTxt = unmatched.length
+          ? `\n未匹配 ${unmatched.length} 项:\n  ${unmatched.slice(0, 8).map(e => `[${e.schoolCode || '?'}] ${e.schoolName} · ${e.majorName}`).join('\n  ')}${unmatched.length > 8 ? '\n  ...' : ''}`
+          : '';
+        const summary =
+          `📥 辽宁 HTML 志愿表 导入\n` +
+          `解析 ${entries.length} 条, 匹配 ${matched.length} 条 (去重后 ${matchedIds.length} 个 plan)${unmatchedTxt}\n\n` +
+          `导入方式 (输入数字):\n` +
+          `  1. 合并到当前 "${store.activeVoluntaryName}" (去重)\n` +
+          `  2. 替换当前 "${store.activeVoluntaryName}"\n` +
+          `  3. 新建志愿单 "${file.name.replace(/\.html?$/i, '')}"`;
+        const mode = prompt(summary, "3");
+        if (!mode) return;
+        if (mode === "1") {
+          const cur = [...voluntary.value];
+          let added = 0;
+          for (const id of matchedIds) if (!cur.includes(id)) { cur.push(id); added++; }
+          voluntary.value = cur;
+          alert(`合并完成: 新增 ${added} 项 (${matchedIds.length - added} 项已存在跳过)`);
+        } else if (mode === "2") {
+          voluntary.value = [...matchedIds];
+          setPinnedActive([]); setPendingActive([]); clearBackupActive();
+          alert(`替换完成: ${matchedIds.length} 项`);
+        } else if (mode === "3") {
+          let name = file.name.replace(/\.html?$/i, "") || "辽宁导入";
+          let i = 1;
+          while (store.voluntaryLists[name]) { name = `${file.name.replace(/\.html?$/i, "")} (${i++})`; }
+          store.voluntaryLists = { ...store.voluntaryLists, [name]: [...matchedIds] };
+          store.activeVoluntaryName = name;
+          alert(`新建志愿单 "${name}": ${matchedIds.length} 项`);
+        } else { alert("取消导入"); }
+      };
+      input.click();
+    }
+
     // V9: 从其它志愿单合并 (in-app)
     function mergeFromOtherList() {
       const others = Object.keys(store.voluntaryLists).filter(n => n !== store.activeVoluntaryName);
@@ -6763,7 +6922,7 @@ const __app = createApp({
       moveVoluntaryUp, moveVoluntaryDown, moveVoluntaryToTop, moveVoluntaryToBottom, clearVoluntary,
       newVoluntaryList, renameVoluntaryList, duplicateVoluntaryList, deleteVoluntaryList, switchVoluntaryList,
       voluntaryTierCounts, exportVoluntaryByTier, exportVoluntaryHtml, voluntaryAnalysis,
-      exportVoluntaryJson, importVoluntaryJson, mergeFromOtherList,
+      exportVoluntaryJson, importVoluntaryJson, importLnVolHtml, mergeFromOtherList,
       // V9: 锁定/待确认
       pinnedSet, pendingSet, backupPinnedSet,
       voluntaryPinnedCount: computed(() => pinnedSet.value.size),
