@@ -4038,6 +4038,33 @@ const AdmitTrendChart = {
       return out;
     });
 
+    // 概率分布 (每 10% 一桶, 0-9/10-19/.../90-100)
+    const probDistribution = computed(() => {
+      const buckets = [];
+      for (let i = 0; i < 10; i++) {
+        buckets.push({
+          lo: i * 10,
+          hi: i === 9 ? 100 : (i + 1) * 10 - 1,
+          count: 0,
+          // 颜色 跟 5 档 probColorClass 大致对齐
+          color: i >= 8 ? "#15803d" :        // 80+ 深绿
+                 i >= 6 ? "#059669" :        // 60-79 蓝绿
+                 i === 5 ? "#ca8a04" :       // 50-59 浅黄
+                 i >= 3 ? "#ea580c" :        // 30-49 橙
+                          "#dc2626",         // 0-29 红
+        });
+      }
+      for (const p of points.value) {
+        let i = Math.floor(p.probPct / 10);
+        if (i >= 10) i = 9;
+        if (i < 0) i = 0;
+        buckets[i].count++;
+      }
+      return buckets;
+    });
+    const distMax = computed(() =>
+      Math.max(1, ...probDistribution.value.map(b => b.count)));
+
     // 阈值表: 列出 所有 >= 50% 的志愿 (按志愿顺序)
     // 每条标出它命中的最高阈值 (供"首达点"提示参考)
     const qualifyingPlans = computed(() => {
@@ -4137,6 +4164,7 @@ const AdmitTrendChart = {
 
     return { W, padL, padR, padT, padB, points, linePath, fillPath,
              thresholdHits, qualifyingPlans, chartDots, xLabels, yGrid, yScale,
+             probDistribution, distMax,
              svgRef, hoverIdx, hoverPoint, tipStyle, onMove, onLeave };
   },
   template: `
@@ -4224,7 +4252,21 @@ const AdmitTrendChart = {
             </div>
           </div>
         </div>
-        <div class="text-xs text-slate-600 mt-2 mb-1">
+        <!-- 概率分布直方图 (每 10% 一桶) -->
+        <div class="mt-3 border rounded p-2 bg-slate-50">
+          <div class="text-xs text-slate-600 font-bold mb-1.5">📊 概率分布 (按 10% 分桶, 共 {{points.length}} 项)</div>
+          <div class="flex items-end gap-1 h-20 px-1">
+            <div v-for="b in probDistribution" :key="'h'+b.lo" class="flex-1 flex flex-col items-center justify-end relative group">
+              <span class="text-[10px] font-bold mb-0.5" :style="{color: b.color}">{{b.count || ''}}</span>
+              <div class="w-full rounded-t transition-all" :style="{height: (b.count/distMax*100)+'%', minHeight: b.count ? '4px' : '0', background: b.color, opacity: b.count ? 1 : 0.15}" :title="b.lo+'-'+b.hi+'%: '+b.count+' 项'"></div>
+            </div>
+          </div>
+          <div class="flex gap-1 mt-1 px-1">
+            <span v-for="b in probDistribution" :key="'l'+b.lo" class="flex-1 text-center text-[9px] text-slate-500">{{b.lo}}-{{b.hi}}</span>
+          </div>
+        </div>
+
+        <div class="text-xs text-slate-600 mt-3 mb-1">
           <b>≥ 50% 录取概率志愿全列表</b> ({{qualifyingPlans.length}} 项, 按志愿顺序)
         </div>
         <table class="w-full text-[11px] border-collapse">
