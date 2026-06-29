@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>2026 物理类志愿填报助手</title>
-  <link rel="stylesheet" href="assets/style.css?v=v14-ln-html">
+  <link rel="stylesheet" href="assets/style.css?v=v14-io-dropdown">
   <script src="https://unpkg.com/vue@3.4.21/dist/vue.global.prod.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/chart.js@4.4.2/dist/chart.umd.js"></script>
@@ -270,11 +270,39 @@
               <button v-if="voluntary.length && (store.viewMode==='voluntary' || store.viewMode==='analysis')"
                       @click="store.viewMode = 'report'" class="text-xs ml-2 text-purple-600 hover:underline font-bold"
                       title="生成完整 PDF 报告 (志愿表 + 分析 + 详情)">📄 PDF 报告</button>
-              <button @click="exportVoluntaryHtml" v-if="voluntary.length" class="text-xs ml-1 text-blue-600 hover:underline">📤 HTML</button>
-              <button @click="exportVoluntaryByTier" v-if="voluntary.length" class="text-xs ml-1 text-amber-600 hover:underline" title="按当前表顺序导出 CSV (档作为一列)">📤 CSV</button>
-              <button @click="exportVoluntaryJson" v-if="voluntary.length" class="text-xs ml-1 text-purple-600 hover:underline" title="导出 JSON (可跨设备/版本导入)">📤 JSON</button>
-              <button @click="importVoluntaryJson" class="text-xs ml-1 text-green-600 hover:underline" title="从 JSON 文件导入: 合并/替换/新建">📥 导入 JSON</button>
-              <button @click="importLnVolHtml" class="text-xs ml-1 text-teal-600 hover:underline" title="从 辽宁招生考试网 HTML 志愿表 导入">📥 导入 辽宁HTML</button>
+              <!-- 导出菜单 -->
+              <div v-if="voluntary.length" class="relative inline-block ml-1 import-export-menu">
+                <button @click="ui.showExportMenu = !ui.showExportMenu; ui.showImportMenu = false"
+                        class="text-xs text-blue-600 hover:underline">📤 导出 ▾</button>
+                <div v-if="ui.showExportMenu" class="absolute right-0 top-5 z-30 bg-white border rounded shadow-lg p-1 text-xs min-w-44">
+                  <button @click="exportLnVolHtml('official'); ui.showExportMenu = false"
+                          class="block w-full text-left px-2 py-1 hover:bg-blue-50 rounded">HTML — 官网格式</button>
+                  <button @click="exportLnVolHtml('prepick'); ui.showExportMenu = false"
+                          class="block w-full text-left px-2 py-1 hover:bg-blue-50 rounded">HTML — 官网预选模式</button>
+                  <button @click="exportVoluntaryHtml(); ui.showExportMenu = false"
+                          class="block w-full text-left px-2 py-1 hover:bg-blue-50 rounded">HTML — 简洁版 (打印)</button>
+                  <div class="border-t my-1"></div>
+                  <button @click="exportVoluntaryJson(); ui.showExportMenu = false"
+                          class="block w-full text-left px-2 py-1 hover:bg-blue-50 rounded">JSON</button>
+                  <button @click="exportVoluntaryCsv(); ui.showExportMenu = false"
+                          class="block w-full text-left px-2 py-1 hover:bg-blue-50 rounded">CSV</button>
+                  <button @click="exportVoluntaryByTier(); ui.showExportMenu = false"
+                          class="block w-full text-left px-2 py-1 hover:bg-blue-50 rounded">CSV — 按 冲稳保 档</button>
+                </div>
+              </div>
+              <!-- 导入菜单 -->
+              <div class="relative inline-block ml-1 import-export-menu">
+                <button @click="ui.showImportMenu = !ui.showImportMenu; ui.showExportMenu = false"
+                        class="text-xs text-green-600 hover:underline">📥 导入 ▾</button>
+                <div v-if="ui.showImportMenu" class="absolute right-0 top-5 z-30 bg-white border rounded shadow-lg p-1 text-xs min-w-44">
+                  <button @click="importLnVolHtml(); ui.showImportMenu = false"
+                          class="block w-full text-left px-2 py-1 hover:bg-green-50 rounded">HTML — 官网/预选 (自动识别)</button>
+                  <button @click="importVoluntaryJson(); ui.showImportMenu = false"
+                          class="block w-full text-left px-2 py-1 hover:bg-green-50 rounded">JSON</button>
+                  <button @click="importVoluntaryCsv(); ui.showImportMenu = false"
+                          class="block w-full text-left px-2 py-1 hover:bg-green-50 rounded">CSV</button>
+                </div>
+              </div>
               <button @click="mergeFromOtherList" v-if="Object.keys(store.voluntaryLists).length > 1" class="text-xs ml-1 text-cyan-600 hover:underline" title="从其它志愿单合并到当前">🔀 合并</button>
               <button @click="clearVoluntary" v-if="voluntary.length" class="text-xs ml-1 text-red-500 hover:underline">清空</button>
               <!-- V9: 锁定状态 + 待确认批量操作 -->
@@ -524,6 +552,6 @@
     </template>
   </div>
 
-  <script src="assets/app.js?v=v14-ln-html"></script>
+  <script src="assets/app.js?v=v14-io-dropdown"></script>
 </body>
 </html>

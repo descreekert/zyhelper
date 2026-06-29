@@ -771,6 +771,8 @@ const ui = reactive({
   showColSettings: false,
   showRatioPanel: false,
   showMoreMenu: false,
+  showImportMenu: false,
+  showExportMenu: false,
   showPrioritySettings: false,
   showVoluntaryAnalysis: false,
   analysisAnchor25: null,        // 用户手调 25 等位分 (null = 自动)
@@ -5840,6 +5842,250 @@ const __app = createApp({
       input.click();
     }
 
+    // ---- CSV 导入 / 导出 ----
+    // CSV 标准格式: 序号,院校代号,院校名称,专业代号,专业名称,专业备注
+    function csvEscape(v) {
+      const s = String(v ?? "");
+      if (/[",\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+      return s;
+    }
+    function exportVoluntaryCsv() {
+      const ids = voluntary.value;
+      if (!ids.length) { alert("当前志愿单为空"); return; }
+      const m = planByIdMap.value;
+      const header = ["序号", "院校代号", "院校名称", "专业代号", "专业名称", "专业备注"];
+      const rows = [header.join(",")];
+      ids.forEach((id, i) => {
+        const p = m[id]; if (!p) return;
+        rows.push([
+          i + 1, p.schoolCode || "", p.schoolName || "",
+          p.majorCode26 || "", p.majorName26 || p.majorName25 || "", p.remarks || "",
+        ].map(csvEscape).join(","));
+      });
+      const csv = "﻿" + rows.join("\n");   // BOM 防 Excel 乱码
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `志愿单_${store.activeVoluntaryName}_${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+    function parseCsvText(text) {
+      // 简单 CSV 解析 (支持双引号转义)
+      const rows = [];
+      let row = [], cell = "", inQuote = false;
+      for (let i = 0; i < text.length; i++) {
+        const c = text[i];
+        if (inQuote) {
+          if (c === '"') {
+            if (text[i+1] === '"') { cell += '"'; i++; }
+            else inQuote = false;
+          } else cell += c;
+        } else {
+          if (c === '"') inQuote = true;
+          else if (c === ",") { row.push(cell); cell = ""; }
+          else if (c === "\r") { /* skip */ }
+          else if (c === "\n") { row.push(cell); cell = ""; rows.push(row); row = []; }
+          else cell += c;
+        }
+      }
+      if (cell || row.length) { row.push(cell); rows.push(row); }
+      return rows.filter(r => r.some(c => c.trim()));
+    }
+    function importVoluntaryCsv() {
+      const input = document.createElement("input");
+      input.type = "file"; input.accept = ".csv,text/csv";
+      input.onchange = async (ev) => {
+        const file = ev.target.files?.[0]; if (!file) return;
+        let rows;
+        try {
+          let text = await file.text();
+          if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1); // strip BOM
+          rows = parseCsvText(text);
+        } catch (e) { alert("CSV 解析失败: " + e.message); return; }
+        if (rows.length < 2) { alert("CSV 行数不足 (需含表头 + 数据)"); return; }
+        const header = rows[0].map(s => s.trim());
+        const idx = {};
+        ["院校代号", "院校名称", "专业代号", "专业名称", "专业备注"].forEach(k => {
+          const i = header.indexOf(k); if (i >= 0) idx[k] = i;
+        });
+        if (idx["院校名称"] == null || (idx["专业名称"] == null && idx["专业代号"] == null)) {
+          alert("CSV 表头缺必要列: 院校名称 + (专业名称 或 专业代号)"); return;
+        }
+        const entries = rows.slice(1).map(r => ({
+          schoolCode: idx["院校代号"] != null ? (r[idx["院校代号"]] || "").trim() : "",
+          schoolName: (r[idx["院校名称"]] || "").trim(),
+          majorCode:  idx["专业代号"] != null ? (r[idx["专业代号"]] || "").trim() : "",
+          majorName:  idx["专业名称"] != null ? (r[idx["专业名称"]] || "").trim() : "",
+          remarks:    idx["专业备注"] != null ? (r[idx["专业备注"]] || "").trim() : "",
+        })).filter(e => e.schoolName && (e.majorName || e.majorCode));
+        const { matched, unmatched } = matchLnEntries(entries);
+        if (!matched.length) { alert(`解析 ${entries.length} 条, 0 匹配 (校名差异?)`); return; }
+        const matchedIds = []; const seen = new Set();
+        for (const m of matched) if (!seen.has(m.plan.id)) { matchedIds.push(m.plan.id); seen.add(m.plan.id); }
+        const summary = `📥 CSV 志愿表 导入\n解析 ${entries.length} 条, 匹配 ${matched.length} 条 (去重 ${matchedIds.length})`
+          + (unmatched.length ? `\n未匹配 ${unmatched.length}:\n  ${unmatched.slice(0,5).map(e=>e.schoolName+'·'+e.majorName).join('\n  ')}` : "")
+          + `\n\n导入方式:\n  1. 合并到 "${store.activeVoluntaryName}"\n  2. 替换 "${store.activeVoluntaryName}"\n  3. 新建`;
+        const mode = prompt(summary, "3"); if (!mode) return;
+        if (mode === "1") {
+          const cur = [...voluntary.value]; let added = 0;
+          for (const id of matchedIds) if (!cur.includes(id)) { cur.push(id); added++; }
+          voluntary.value = cur;
+          alert(`合并完成: 新增 ${added}`);
+        } else if (mode === "2") {
+          voluntary.value = [...matchedIds];
+          setPinnedActive([]); setPendingActive([]); clearBackupActive();
+          alert(`替换完成: ${matchedIds.length}`);
+        } else if (mode === "3") {
+          let name = file.name.replace(/\.csv$/i, "") || "CSV 导入";
+          let i = 1; while (store.voluntaryLists[name]) name = `${file.name.replace(/\.csv$/i,'')} (${i++})`;
+          store.voluntaryLists = { ...store.voluntaryLists, [name]: [...matchedIds] };
+          store.activeVoluntaryName = name;
+          alert(`新建 "${name}": ${matchedIds.length}`);
+        }
+      };
+      input.click();
+    }
+
+    // ---- 辽宁招生考试网 HTML 模板化 导出 ----
+    // 复用 assets/templates/ln_official.html 或 ln_prepick.html 作为模板:
+    // 解析 DOM → 清空所有 tbody → 把当前 voluntary 填到 "普通类本科批" (official)
+    // 或 单表 (prepick) → 序列化并下载. 保留 学生信息块 / 表头 / 样式 等原汁原味.
+    async function exportLnVolHtml(mode) {
+      const ids = voluntary.value;
+      if (!ids.length) { alert("当前志愿单为空"); return; }
+      const m = planByIdMap.value;
+      const plans = ids.map(id => m[id]).filter(Boolean);
+      const tplUrl = mode === "official" ? "assets/templates/ln_official.html" : "assets/templates/ln_prepick.html";
+      let tplText;
+      try {
+        const resp = await fetch(tplUrl);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        tplText = await resp.text();
+      } catch (e) { alert("加载模板失败: " + e.message); return; }
+      const doc = new DOMParser().parseFromString(tplText, "text/html");
+
+      // 找所有 .el-table__body tbody, 找出 "普通类本科批" 对应的 tbody (official),
+      // 或 唯一 tbody (prepick)
+      const tables = [...doc.querySelectorAll(".el-table")];
+      // 各 table 上方 sibling 是其 h2 title (.confirm-voluntary-title 或 <h2>)
+      function findTitleFor(tbl) {
+        // 向上找最近的祖先有 h2 兄弟
+        let cur = tbl;
+        for (let i = 0; i < 10 && cur; i++) {
+          cur = cur.parentElement;
+          if (!cur) break;
+          // 找前置兄弟 h2
+          let sib = cur.previousElementSibling;
+          while (sib) {
+            if (sib.tagName === "H2") return sib.textContent.trim();
+            const inner = sib.querySelector?.("h2");
+            if (inner) return inner.textContent.trim();
+            sib = sib.previousElementSibling;
+          }
+          // 或 cur 本身前面有 h2
+          const inner = cur.querySelector?.("h2");
+          if (inner) return inner.textContent.trim();
+        }
+        return "";
+      }
+
+      // 清空所有 tbody (作为基线 — 然后只填目标批次)
+      for (const tbl of tables) {
+        const tbody = tbl.querySelector("tbody");
+        if (tbody) tbody.innerHTML = "";
+      }
+
+      // 选目标 table: official → 标题含 "本科批" 且不含 "提前/专科/高职" 的那张
+      let targetTbl = null;
+      if (mode === "official") {
+        for (const tbl of tables) {
+          const title = findTitleFor(tbl);
+          if (/本科批/.test(title) && !/提前|专科|高职/.test(title)) { targetTbl = tbl; break; }
+        }
+      }
+      if (!targetTbl) targetTbl = tables[0];   // fallback (prepick 只 1 张; official 找不到也兜底)
+      if (!targetTbl) { alert("模板不含 el-table"); return; }
+
+      // 拿 header colKey → 列名
+      const colKey = (el) => ((el.className || "").split(/\s+/).find(c => /^el-table_\d+_column_/.test(c)) || "");
+      const headerMap = {};   // label → colKey
+      const headerTbl = targetTbl.querySelector(".el-table__header-wrapper table.el-table__header");
+      if (headerTbl) {
+        headerTbl.querySelectorAll("thead > tr > th").forEach(th => {
+          const k = colKey(th);
+          const lbl = (th.querySelector("div.cell")?.textContent || "").trim();
+          if (k && lbl) headerMap[lbl] = k;
+        });
+      }
+      // 拿 第一个 th 的 data-v-* (用于生成嵌套 div 的 data-v 属性, 视觉一致)
+      const sampleTh = headerTbl?.querySelector("th");
+      let dataVAttr = "";
+      if (sampleTh) {
+        for (const attr of sampleTh.attributes) {
+          if (attr.name.startsWith("data-v-")) { dataVAttr = attr.name; break; }
+        }
+      }
+
+      const tbody = targetTbl.querySelector("tbody");
+      if (!tbody) { alert("目标表无 tbody"); return; }
+
+      // 工具: 生成 cell 字符串
+      const dataV = dataVAttr ? ` ${dataVAttr}=""` : "";
+      function cellHtml(label, value, stripeClass) {
+        const ck = headerMap[label] || "";
+        const cls = `${ck} is-center ${stripeClass || ""}`.trim();
+        // 院校代号/专业代号 用嵌套 div (与模板一致)
+        if (label === "院校代号" || label === "专业代号") {
+          return `<td rowspan="1" colspan="1" class="${cls}"><div class="cell"><!----> <div${dataV} class="" style="min-height: 23px;">${value || ""}</div> <!----></div></td>`;
+        }
+        if (label === "专业备注") {
+          return `<td rowspan="1" colspan="1" class="${cls}"><div class="cell el-tooltip" style="width: 155px;">${value || ""}</div></td>`;
+        }
+        if (label === "专业服从志愿") {
+          return `<td rowspan="1" colspan="1" class="${cls}"><div class="cell">服从</div></td>`;
+        }
+        return `<td rowspan="1" colspan="1" class="${cls}"><div class="cell">${value || ""}</div></td>`;
+      }
+
+      // 渲染行
+      const orderedLabels = ["序号", "院校代号", "院校名称", "专业代号", "专业名称", "专业备注", "专业服从志愿"]
+        .filter(lbl => headerMap[lbl]);
+      let html = "";
+      plans.forEach((p, i) => {
+        const stripe = i % 2 === 1 ? "stripe" : "";
+        let tr = `<tr class="el-table__row">`;
+        for (const lbl of orderedLabels) {
+          let v = "";
+          switch (lbl) {
+            case "序号":       v = String(i + 1); break;
+            case "院校代号":   v = p.schoolCode || ""; break;
+            case "院校名称":   v = p.schoolName || ""; break;
+            case "专业代号":   v = p.majorCode26 || ""; break;
+            case "专业名称":   v = p.majorName26 || p.majorName25 || ""; break;
+            case "专业备注":   v = p.remarks || ""; break;
+            case "专业服从志愿": v = "服从"; break;
+          }
+          tr += cellHtml(lbl, v, stripe);
+        }
+        tr += `</tr>`;
+        html += tr;
+      });
+      tbody.innerHTML = html;
+
+      // 序列化下载
+      const out = "<!DOCTYPE html>\n" + doc.documentElement.outerHTML;
+      const blob = new Blob([out], { type: "text/html;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const stamp = new Date().toISOString().replace(/[:T]/g, "_").slice(0, 19);
+      a.download = `志愿_${store.activeVoluntaryName}_${mode === "official" ? "官网" : "预选"}_${stamp}.html`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
     // V9: 从其它志愿单合并 (in-app)
     function mergeFromOtherList() {
       const others = Object.keys(store.voluntaryLists).filter(n => n !== store.activeVoluntaryName);
@@ -6703,6 +6949,15 @@ const __app = createApp({
       if (on) document.addEventListener("mousedown", onRatioDocMouseDown);
       else document.removeEventListener("mousedown", onRatioDocMouseDown);
     });
+    // 点击空白处关闭 导入/导出 dropdown
+    function onIODocMouseDown(ev) {
+      const inside = ev.target.closest?.(".import-export-menu");
+      if (!inside) { ui.showImportMenu = false; ui.showExportMenu = false; }
+    }
+    watch(() => ui.showImportMenu || ui.showExportMenu, on => {
+      if (on) document.addEventListener("mousedown", onIODocMouseDown);
+      else document.removeEventListener("mousedown", onIODocMouseDown);
+    });
 
     // 当前单档激活状态 (头部按钮高亮用)
     const activeTier = computed(() => {
@@ -6923,6 +7178,7 @@ const __app = createApp({
       newVoluntaryList, renameVoluntaryList, duplicateVoluntaryList, deleteVoluntaryList, switchVoluntaryList,
       voluntaryTierCounts, exportVoluntaryByTier, exportVoluntaryHtml, voluntaryAnalysis,
       exportVoluntaryJson, importVoluntaryJson, importLnVolHtml, mergeFromOtherList,
+      exportVoluntaryCsv, importVoluntaryCsv, exportLnVolHtml,
       // V9: 锁定/待确认
       pinnedSet, pendingSet, backupPinnedSet,
       voluntaryPinnedCount: computed(() => pinnedSet.value.size),
