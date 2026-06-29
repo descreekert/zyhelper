@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>2026 物理类志愿填报助手</title>
-  <link rel="stylesheet" href="assets/style.css?v=v14-pin-on-import">
+  <link rel="stylesheet" href="assets/style.css?v=v15-tune">
   <script src="https://unpkg.com/vue@3.4.21/dist/vue.global.prod.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/chart.js@4.4.2/dist/chart.umd.js"></script>
@@ -438,10 +438,12 @@
             :expanded-majors="ui.analysisExpandedMajors"
             :targets="store.transferTargets"
             :accepts="store.transferAccepts"
+            :ignore-heat="ui.analysisIgnoreHeat"
             @close="store.viewMode = 'voluntary'"
             @update-targets="store.transferTargets = $event"
             @update-accepts="store.transferAccepts = $event"
             @reset-transfer-lists="resetTransferLists()"
+            @toggle-ignore-heat="ui.analysisIgnoreHeat = $event"
             @set-anchor="v => ui.analysisAnchor25 = v"
             @set-rank="v => ui.analysisAnchorRank26 = v"
             @toggle-school="n => {
@@ -552,6 +554,6 @@
     </template>
   </div>
 
-  <script src="assets/app.js?v=v14-pin-on-import"></script>
+  <script src="assets/app.js?v=v15-tune"></script>
 </body>
 </html>

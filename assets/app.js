@@ -265,7 +265,8 @@ function computeAdmitProb(plan, ctx) {
     const proxyRank = rank25FromScore25(planScore25 + 5, sr);
     if (!proxyRank) return { prob: null, isUncertain: true, reason: "新增-位次查不到", heat: majorHeat(plan), isEstimated: true };
     const heat = majorHeat(plan);
-    const effPlanRank = proxyRank * (1 + heat.pct);
+    const heatPct = ctx.ignoreHeat ? 0 : heat.pct;
+    const effPlanRank = proxyRank * (1 + heatPct);
     const diff = effPlanRank - userRank25;
     const probBase = 1 / (1 + Math.exp(-diff / SCALE - BIAS));
     const supply = ctx.supplyMap?.get(planScore25);
@@ -273,7 +274,8 @@ function computeAdmitProb(plan, ctx) {
     return {
       prob, probBase, supplyAdj: adj, supply,
       isUncertain: false, isEstimated: true,
-      heat, refRank: proxyRank, ref25: planScore25, effPlanRank, diff,
+      heat, heatApplied: !ctx.ignoreHeat,
+      refRank: proxyRank, ref25: planScore25, effPlanRank, diff,
     };
   }
   const r25  = plan.ref25Rank || plan.rank25 || null;
@@ -285,7 +287,8 @@ function computeAdmitProb(plan, ctx) {
     return { prob: null, isUncertain: true, reason: "位次缺失", heat: majorHeat(plan) };
   }
   const heat = majorHeat(plan);
-  const effPlanRank = refRank * (1 + heat.pct);
+  const heatPct = ctx.ignoreHeat ? 0 : heat.pct;
+  const effPlanRank = refRank * (1 + heatPct);
   const diff = effPlanRank - userRank25;
   const probBase = 1 / (1 + Math.exp(-diff / SCALE - BIAS));
   const planScore25 = plan.ref25Score || plan.score25 || null;
@@ -293,7 +296,8 @@ function computeAdmitProb(plan, ctx) {
   const { prob, adj } = applySupplyAdj(probBase, supply);
   return {
     prob, probBase, supplyAdj: adj, supply,
-    isUncertain: false, heat, refRank, ref25: r25, avgRank: ravg, effPlanRank, diff,
+    isUncertain: false, heat, heatApplied: !ctx.ignoreHeat,
+    refRank, ref25: r25, avgRank: ravg, effPlanRank, diff,
   };
 }
 
@@ -782,6 +786,7 @@ const ui = reactive({
   analysisExpandedTiers: [],     // 冲稳保卡片展开 ['chong','wen','bao','out']
   analysisExpandedEnrollScores: [],  // 招生维度分数展开 (25 score list)
   analysisExpandedMajors: [],    // 报考专业行展开 (mainName 列表)
+  analysisIgnoreHeat: false,     // 分析页: 录取率忽略专业热度调整
   detailPlan: null,
   myScore: 0,
   myRank: 0,
@@ -3003,9 +3008,9 @@ const PrioritySettings = {
 // V9: 志愿分析 (普通视图 + 兼容 modal). prop.embedded=true 时去掉 modal 外壳
 const VoluntaryAnalysis = {
   props: ["analysis", "listName", "anchorOverride", "rankOverride", "expandedSchools", "expandedScores", "expandedTiers", "expandedEnrollScores", "expandedMajors", "embedded",
-          "targets", "accepts"],
+          "targets", "accepts", "ignoreHeat"],
   emits: ["close", "set-anchor", "set-rank", "toggle-school", "toggle-score", "toggle-tier", "toggle-enroll-score", "toggle-major",
-          "update-targets", "update-accepts", "reset-transfer-lists"],
+          "update-targets", "update-accepts", "reset-transfer-lists", "toggle-ignore-heat"],
   setup(props, { emit }) {
     const maxScoreCount = computed(() => {
       if (!props.analysis) return 1;
@@ -3100,6 +3105,12 @@ const VoluntaryAnalysis = {
               </span>
               <span>志愿: <b class="text-blue-600">{{ analysis.total }}</b> 项</span>
               <span>26 计划: <b class="text-blue-600">{{ analysis.totalEnroll }}</b> 人</span>
+              <label class="flex items-center gap-1 cursor-pointer ml-3 text-slate-600"
+                     title="勾选: 录取率算法忽略专业热度 (电子信息/计算机 等热度调整)">
+                <input type="checkbox" :checked="ignoreHeat" @change="$emit('toggle-ignore-heat', $event.target.checked)"
+                       class="cursor-pointer">
+                <span>🔥 忽略专业热度</span>
+              </label>
             </div>
             <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 mt-2 text-xs">
               <div v-for="k in ['chong','wen','bao','out']" :key="k"
@@ -4616,7 +4627,7 @@ const AdmitTrendChart = {
       props.compact ? 50 : selectedThreshold.value);
     function setThreshold(v) {
       if (props.compact) return;
-      v = Math.max(0, Math.min(95, Math.round(v / 5) * 5));
+      v = Math.max(0, Math.min(99, Math.round(+v)));
       selectedThreshold.value = v;
     }
     function onYAxisClick(y) {
@@ -4626,6 +4637,18 @@ const AdmitTrendChart = {
     function onHistClick(loBucket) {
       if (props.compact) return;
       setThreshold(loBucket);
+    }
+    // 点击 SVG 内任意 Y 位置 → 精确设阈值 (任意 %)
+    function onSvgClickThreshold(e) {
+      if (props.compact) return;
+      const svg = e.currentTarget;
+      const rect = svg.getBoundingClientRect();
+      if (rect.height === 0) return;
+      const yPx = e.clientY - rect.top;
+      const vbY = yPx / rect.height * props.height;
+      // reverse: v = 100 - (vbY - padT) / (height-padT-padB) * 100
+      const v = 100 - (vbY - padT) / Math.max(1, props.height - padT - padB) * 100;
+      setThreshold(v);
     }
 
     // 概率分布 (每 10% 一桶, 0-9/10-19/.../90-100)
@@ -4751,7 +4774,7 @@ const AdmitTrendChart = {
     return { W, padL, padR, padT, padB, points, linePath, fillPath,
              thresholdHits, qualifyingPlans, chartDots, xLabels, yGrid, yScale,
              probDistribution, distMax,
-             selectedThreshold, effectiveThreshold, setThreshold, onYAxisClick, onHistClick,
+             selectedThreshold, effectiveThreshold, setThreshold, onYAxisClick, onHistClick, onSvgClickThreshold,
              svgRef, hoverIdx, hoverPoint, tipStyle, onMove, onLeave };
   },
   template: `
@@ -4795,7 +4818,7 @@ const AdmitTrendChart = {
                :class="compact ? '' : 'cursor-crosshair'"
                preserveAspectRatio="xMidYMid meet"
                :style="{minHeight: height+'px'}"
-               @mousemove="onMove" @mouseleave="onLeave">
+               @mousemove="onMove" @mouseleave="onLeave" @click="onSvgClickThreshold">
             <defs>
               <linearGradient id="admit-trend-grad" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stop-color="#f97316" stop-opacity="0.4"/>
@@ -4876,10 +4899,11 @@ const AdmitTrendChart = {
         <!-- 阈值滑杆 (互动模式) -->
         <div v-if="!compact" class="mt-2 px-1 flex items-center gap-3">
           <span class="text-xs text-slate-500 whitespace-nowrap">阈值滑动:</span>
-          <input type="range" min="0" max="95" step="5"
+          <input type="range" min="0" max="99" step="1"
                  :value="selectedThreshold"
                  @input="setThreshold(+$event.target.value)"
-                 class="flex-1 accent-blue-500"/>
+                 class="flex-1 accent-blue-500"
+                 :title="'按住 ←/→ 微调 1%, Shift+←/→ 跳 5%, 0-99 任意值'"/>
           <span class="text-sm font-bold text-blue-600 min-w-16 text-center bg-blue-50 rounded px-2 py-0.5">≥ {{selectedThreshold}}%</span>
           <button v-if="selectedThreshold !== 50" @click="setThreshold(50)"
                   class="text-[10px] text-slate-400 hover:text-blue-600">重置 50%</button>
@@ -5416,7 +5440,7 @@ const __app = createApp({
       const _tSet = transferTargetSet.value;
       const _aSet = transferAcceptSet.value;
       for (const it of items) {
-        it.admit = computeAdmitProb(it.plan, { userRank25: anchorRank25, scoreRank: scoreRank.value, supplyMap: supplyMap.value });
+        it.admit = computeAdmitProb(it.plan, { userRank25: anchorRank25, scoreRank: scoreRank.value, supplyMap: supplyMap.value, ignoreHeat: !!ui.analysisIgnoreHeat });
         it.transfer = classifyTransfer(it.plan, _tSet, _aSet);
       }
       // 转专业 汇总
@@ -5446,7 +5470,7 @@ const __app = createApp({
         topByTier[k] = list.slice(0, 3);
       }
       // 多阈值最有可能录取的 Top 5 (平行志愿首 N 个 prob >= 阈值, 含原序号)
-      const TOPN_THRESHOLDS = [0.45, 0.50, 0.60, 0.70];
+      const TOPN_THRESHOLDS = [0.30, 0.35, 0.40, 0.45, 0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80];
       const topByThreshold = TOPN_THRESHOLDS.map(T => ({
         threshold: T,
         items: items
