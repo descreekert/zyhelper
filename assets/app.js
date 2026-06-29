@@ -358,6 +358,7 @@ const COLUMNS = [
   { key: "tier",    label: "档",       width: 28,  sortable: false, fixed: true },
   { key: "city",    label: "城市",     width: 60,  sortable: true,  sortField: "city" },
   { key: "school",  label: "院校",     width: 200, sortable: true,  sortField: "schoolName" },
+  { key: "majorCode", label: "专业代码", width: 50, sortable: false },
   { key: "major",   label: "专业",     width: 240, sortable: false },
   { key: "num",     label: "计划",     width: 50,  sortable: true,  sortField: "enrollNum26" },
   { key: "dur",     label: "学制",     width: 40,  sortable: false },
@@ -1571,6 +1572,7 @@ const ResultList = {
         case "rank":    return p.isStopped ? p.rank25 : p.ref25Rank;
         case "conf":    return p.refConfidence || (p.isStopped ? "停招" : "");
         case "diff":    return p.diffSummary || p.diff || "—";
+        case "majorCode": return p.majorCode26 || "—";
         case "remarks": return p.remarks || "—";
         case "sp":      return p.schoolPriority ?? "—";
         case "mp":      return p.majorPriority ?? "—";
