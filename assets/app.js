@@ -3967,12 +3967,26 @@ const AdmitTrendChart = {
 
     const points = computed(() => {
       return (props.items || [])
-        .map((it, i) => ({
-          idx: i + 1,
-          probPct: it.admit?.prob != null ? Math.round(it.admit.prob * 100) : null,
-          name: (it.plan?.schoolName || "") + " · " + (it.plan?.majorName26 || it.plan?.majorName25 || ""),
-          isEst: !!it.admit?.isEstimated,
-        }))
+        .map((it, i) => {
+          const p = it.plan || {};
+          return {
+            idx: i + 1,
+            probPct: it.admit?.prob != null ? Math.round(it.admit.prob * 100) : null,
+            schoolName: p.schoolName || "",
+            majorName: p.majorName26 || p.majorName25 || "",
+            city: p.city || "",
+            score25: it.score25 ?? null,
+            rank25: it.rank25 ?? null,
+            avgRank: p.avgRank ?? null,
+            enroll26: it.enroll ?? p.enrollNum26 ?? null,
+            tuition: p.tuition ?? null,
+            isNew: p.isNew === "新增",
+            heat: it.admit?.heat || null,
+            isEst: !!it.admit?.isEstimated,
+            // name 兼容旧用法
+            name: (p.schoolName || "") + " · " + (p.majorName26 || p.majorName25 || ""),
+          };
+        })
         .filter(p => p.probPct != null);
     });
 
@@ -4016,7 +4030,8 @@ const AdmitTrendChart = {
         if (i < 0) continue;
         const p = pts[i];
         out.push({
-          threshold: T, idx: p.idx, probPct: p.probPct, name: p.name, isEst: p.isEst,
+          threshold: T,
+          ...p,
           x: xScale(p.idx, N), y: yScale(p.probPct),
         });
       }
@@ -4165,31 +4180,67 @@ const AdmitTrendChart = {
                 {{hoverPoint.probPct}}%
               </span>
               <span v-if="hoverPoint.isEst" class="text-amber-300 text-[10px] ml-1">(估)</span>
+              <span v-if="hoverPoint.isNew" class="text-yellow-300 text-[10px] ml-1 bg-yellow-500/20 rounded px-1">新</span>
               <span v-if="hoverPoint.hitThresholds && hoverPoint.hitThresholds.length"
                     class="ml-2 text-[10px] bg-green-600/40 text-green-200 rounded px-1">
                 ≥{{Math.max(...hoverPoint.hitThresholds)}}% 首达
               </span>
             </div>
-            <div class="text-[11px] text-slate-200 mt-0.5" style="max-width:230px;white-space:normal">
-              {{hoverPoint.name}}
+            <div class="text-[11px] text-slate-100 mt-1 font-bold" style="max-width:260px;white-space:normal">
+              {{hoverPoint.schoolName}}
+              <span v-if="hoverPoint.city" class="text-[10px] text-slate-300 font-normal ml-1">[{{hoverPoint.city}}]</span>
+            </div>
+            <div class="text-[11px] text-slate-200" style="max-width:260px;white-space:normal">
+              {{hoverPoint.majorName}}
+              <span v-if="hoverPoint.heat && hoverPoint.heat.idx >= 4" class="text-[9px] ml-1 px-1 rounded"
+                    :class="hoverPoint.heat.idx >= 6 ? 'bg-red-500/40 text-red-100' : 'bg-amber-500/40 text-amber-100'">🔥{{hoverPoint.heat.name}}</span>
+            </div>
+            <div class="text-[11px] text-slate-300 mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
+              <span v-if="hoverPoint.score25">25 分 <b class="text-white">{{hoverPoint.score25}}</b></span>
+              <span v-if="hoverPoint.rank25">25 位 <b class="text-white">{{hoverPoint.rank25}}</b></span>
+              <span v-if="hoverPoint.avgRank && hoverPoint.avgRank !== hoverPoint.rank25">平均位 <b class="text-white">{{hoverPoint.avgRank}}</b></span>
+              <span v-if="hoverPoint.enroll26">26 计划 <b class="text-white">{{hoverPoint.enroll26}}</b></span>
+              <span v-if="hoverPoint.tuition">学费 <b class="text-white">¥{{hoverPoint.tuition}}</b></span>
             </div>
           </div>
         </div>
-        <table class="w-full text-[11px] mt-2 border-collapse" :class="compact ? '' : ''">
+        <table class="w-full text-[11px] mt-2 border-collapse">
           <thead><tr class="bg-slate-100">
-            <th class="border px-2 py-1 text-center w-16">阈值</th>
-            <th class="border px-2 py-1 text-center w-12">序号</th>
-            <th class="border px-2 py-1 text-left">最先满足该阈值的志愿 (按 平行志愿 顺序最先命中)</th>
-            <th class="border px-2 py-1 text-center w-16">实际概率</th>
+            <th class="border px-2 py-1 text-center w-14">阈值</th>
+            <th class="border px-2 py-1 text-center w-10">序号</th>
+            <th class="border px-2 py-1 text-left">学校</th>
+            <th class="border px-2 py-1 text-left">26 专业</th>
+            <th class="border px-2 py-1 text-center w-20">25 分/位次</th>
+            <th class="border px-2 py-1 text-center w-12">平均位</th>
+            <th class="border px-2 py-1 text-center w-12">26 计划</th>
+            <th class="border px-2 py-1 text-center w-14">概率</th>
           </tr></thead>
           <tbody>
-            <tr v-for="h in thresholdHits" :key="'r'+h.threshold" class="border-t">
+            <tr v-for="h in thresholdHits" :key="'r'+h.threshold" class="border-t"
+                :class="h.isNew ? 'bg-yellow-50' : ''">
               <td class="border px-2 py-1 text-center font-bold text-green-700">≥ {{h.threshold}}%</td>
               <td class="border px-2 py-1 text-center font-bold">#{{h.idx}}</td>
-              <td class="border px-2 py-1">{{h.name}}<span v-if="h.isEst" class="text-[10px] text-amber-600 ml-1">(估)</span></td>
-              <td class="border px-2 py-1 text-center" :class="probColorClass(h.probPct/100)">{{h.probPct}}%</td>
+              <td class="border px-2 py-1">
+                <span v-if="h.isNew" class="text-red-600 text-[9px] font-bold mr-0.5">新</span>
+                {{h.schoolName}}
+                <span v-if="h.city" class="text-[9px] text-slate-500 ml-0.5">{{h.city}}</span>
+              </td>
+              <td class="border px-2 py-1">
+                {{h.majorName}}
+                <span v-if="h.heat && h.heat.idx >= 4" class="ml-0.5 text-[9px] px-1 rounded"
+                      :class="h.heat.idx >= 6 ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'">🔥{{h.heat.name}}</span>
+              </td>
+              <td class="border px-2 py-1 text-center">
+                <span v-if="h.score25"><b>{{h.score25}}</b>/{{h.rank25 || '?'}}</span>
+                <span v-else class="text-slate-400">—</span>
+              </td>
+              <td class="border px-2 py-1 text-center text-slate-600">{{h.avgRank || '—'}}</td>
+              <td class="border px-2 py-1 text-center">{{h.enroll26 || '—'}}</td>
+              <td class="border px-2 py-1 text-center font-bold" :class="probColorClass(h.probPct/100)">
+                {{h.probPct}}%<span v-if="h.isEst" class="text-[9px] text-amber-600 ml-0.5">(估)</span>
+              </td>
             </tr>
-            <tr v-if="!thresholdHits.length"><td colspan="4" class="border px-2 py-2 text-center text-slate-400">未达到 50% 阈值 — 所有志愿录取概率均偏低, 建议补充更稳的志愿</td></tr>
+            <tr v-if="!thresholdHits.length"><td colspan="8" class="border px-2 py-2 text-center text-slate-400">未达到 50% 阈值 — 所有志愿录取概率均偏低, 建议补充更稳的志愿</td></tr>
           </tbody>
         </table>
         <div class="text-[10px] text-slate-400 mt-1 leading-snug">
