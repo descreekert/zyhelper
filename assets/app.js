@@ -31,17 +31,60 @@ const DEFAULT_TRANSFER_ACCEPTS = [
   "数学与应用数学","大气科学","能源与动力工程","新能源科学与工程",
 ];
 
+// 从专业名解析出 含 "(A、B、C)" 或 "[A,B,C]" 形式的子专业 list.
+// 若名字没有括号 (单专业), 返回该主名本身.
+//   "自动化类(自动化、工业智能、电子科学与技术)" → ["自动化", "工业智能", "电子科学与技术"]
+//   "机械设计制造及其自动化"                   → ["机械设计制造及其自动化"]
+//   "工科试验班(A、B)[X、Y]"                  → ["A","B","X","Y"] (取所有顶层括号)
+function extractMajorsFromName(name) {
+  if (!name) return [];
+  const out = [];
+  const s = String(name).replace(/，/g, ",").replace(/\s+/g, "");
+  // 找所有顶层 () 或 [] 内的内容
+  let depth = 0, buf = "", inside = false;
+  const innerSegs = [];
+  for (const ch of s) {
+    if (ch === "(" || ch === "[" || ch === "（" || ch === "［") {
+      if (depth === 0) { inside = true; buf = ""; }
+      else if (inside) buf += ch;
+      depth++;
+    } else if (ch === ")" || ch === "]" || ch === "）" || ch === "］") {
+      depth--;
+      if (depth === 0 && inside) {
+        innerSegs.push(buf);
+        inside = false; buf = "";
+      } else if (inside) buf += ch;
+    } else if (inside) {
+      buf += ch;
+    }
+  }
+  if (innerSegs.length === 0) {
+    // 无括号: 单专业, 返回主名
+    return [s];
+  }
+  // 拆分每段, 按 顿号 / 逗号
+  for (const seg of innerSegs) {
+    for (const part of seg.split(/[、,]/)) {
+      const p = part.trim();
+      if (p) out.push(p);
+    }
+  }
+  return out.length ? out : [s];
+}
+
 // 给一个 plan 计算 "转专业风险" 标签:
 //   - ok    单专业在目标内 / 大类含任一目标
 //   - warn  单专业仅在可接受内 / 大类无目标但含任一可接受
 //   - error 全部都不在目标 + 可接受 范围
 function classifyTransfer(plan, targetSet, acceptSet) {
   if (!plan) return { level: "error", matchedTargets: [], matchedAccepts: [], majors: [] };
-  const contained = plan.containedMajors || [];
-  let majors = contained.length > 0 ? contained.slice() : [];
-  if (!majors.length) {
-    const fallback = plan.majorName26 || plan.majorName25 || "";
-    if (fallback) majors = [fallback];
+  let majors = [];
+  // 优先用 containedMajors (build_data 已解析); 没有则从专业名括号回退解析
+  if (Array.isArray(plan.containedMajors) && plan.containedMajors.length) {
+    majors = plan.containedMajors.slice();
+  } else {
+    const name = plan.majorName26 || plan.majorName25 || "";
+    majors = extractMajorsFromName(name);
   }
   const normed = majors.map(m => (m || "").replace(/\s+/g, "").trim()).filter(Boolean);
   const matchedTargets = normed.filter(m => targetSet.has(m));
