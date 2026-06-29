@@ -4049,8 +4049,60 @@ const AdmitTrendChart = {
 
     const yGrid = [0, 20, 40, 60, 80, 100];
 
+    // ---- 互动: hover 显示具体志愿 (PDF 用 compact=true 关掉) ----
+    const svgRef = ref(null);
+    const hoverIdx = ref(null);
+    const hoverPx = ref({ x: 0, y: 0 });   // 鼠标在 svg 内的像素坐标
+    function onMove(e) {
+      if (props.compact) return;
+      const svg = e.currentTarget;
+      const rect = svg.getBoundingClientRect();
+      const xPx = e.clientX - rect.left;
+      const yPx = e.clientY - rect.top;
+      const N = points.value.length;
+      if (!N || rect.width === 0) return;
+      // pixel → viewBox X → idx
+      const vbX = xPx / rect.width * W;
+      let idx = Math.round((vbX - padL) / Math.max(1, W - padL - padR) * (N - 1) + 1);
+      idx = Math.max(1, Math.min(N, idx));
+      hoverIdx.value = idx;
+      hoverPx.value = { x: xPx, y: yPx, rectW: rect.width, rectH: rect.height };
+    }
+    function onLeave() { hoverIdx.value = null; }
+
+    const hoverPoint = computed(() => {
+      const i = hoverIdx.value;
+      if (i == null) return null;
+      const pts = points.value, N = pts.length;
+      const p = pts[i - 1];
+      if (!p) return null;
+      // hit threshold info (if this idx is a 阈值首达点)
+      const allHits = thresholdHits.value.filter(h => h.idx === p.idx).map(h => h.threshold);
+      return {
+        ...p,
+        x: xScale(p.idx, N),
+        y: yScale(p.probPct),
+        hitThresholds: allHits,
+      };
+    });
+
+    // tooltip pixel 位置 (相对 svg container)
+    const tipStyle = computed(() => {
+      if (!hoverPoint.value || !hoverPx.value.rectW) return { display: "none" };
+      const xPx = hoverPoint.value.x / W * hoverPx.value.rectW;
+      const yPx = hoverPoint.value.y / props.height * hoverPx.value.rectH;
+      const TIP_W = 240;
+      let left = xPx + 14;
+      if (left + TIP_W > hoverPx.value.rectW) left = xPx - TIP_W - 14;
+      if (left < 4) left = 4;
+      let top = yPx - 60;
+      if (top < 4) top = yPx + 14;
+      return { left: left + "px", top: top + "px" };
+    });
+
     return { W, padL, padR, padT, padB, points, linePath, fillPath,
-             thresholdHits, chartDots, xLabels, yGrid, yScale };
+             thresholdHits, chartDots, xLabels, yGrid, yScale,
+             svgRef, hoverIdx, hoverPoint, tipStyle, onMove, onLeave };
   },
   template: `
     <div class="admit-trend-chart">
@@ -4065,34 +4117,64 @@ const AdmitTrendChart = {
             <span class="flex items-center gap-1"><span class="inline-block w-2.5 h-2.5 rounded-full bg-green-500"></span>阈值首达点</span>
           </span>
         </div>
-        <svg :viewBox="'0 0 ' + W + ' ' + height" class="w-full bg-white border rounded"
-             preserveAspectRatio="xMidYMid meet"
-             :style="{minHeight: height+'px'}">
-          <defs>
-            <linearGradient id="admit-trend-grad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stop-color="#f97316" stop-opacity="0.4"/>
-              <stop offset="100%" stop-color="#f97316" stop-opacity="0"/>
-            </linearGradient>
-          </defs>
-          <g>
-            <line v-for="y in yGrid" :key="'g'+y"
-                  :x1="padL" :x2="W-padR" :y1="yScale(y)" :y2="yScale(y)"
-                  stroke="#e2e8f0" stroke-dasharray="2,3"/>
-            <text v-for="y in yGrid" :key="'l'+y"
-                  :x="padL-5" :y="yScale(y)+3" text-anchor="end" font-size="10" fill="#94a3b8">{{y}}</text>
-          </g>
-          <path :d="fillPath" fill="url(#admit-trend-grad)"/>
-          <path :d="linePath" stroke="#f97316" stroke-width="1.5" fill="none"/>
-          <g>
-            <text v-for="t in xLabels" :key="'x'+t.idx"
-                  :x="t.x" :y="height-10" text-anchor="middle" font-size="9" fill="#94a3b8">#{{t.idx}}</text>
-          </g>
-          <g v-for="h in chartDots" :key="'h'+h.idx">
-            <line :x1="h.x" :x2="h.x" :y1="h.y" :y2="yScale(0)" stroke="#84cc16" stroke-dasharray="2,2" stroke-width="0.8" opacity="0.4"/>
-            <circle :cx="h.x" :cy="h.y" r="5" fill="#84cc16" stroke="white" stroke-width="1.5"/>
-            <text :x="h.x" :y="h.y-9" text-anchor="middle" font-size="9" font-weight="bold" fill="#3f6212">≥{{h.threshold}}%</text>
-          </g>
-        </svg>
+        <div class="relative">
+          <svg :viewBox="'0 0 ' + W + ' ' + height" class="w-full bg-white border rounded"
+               :class="compact ? '' : 'cursor-crosshair'"
+               preserveAspectRatio="xMidYMid meet"
+               :style="{minHeight: height+'px'}"
+               @mousemove="onMove" @mouseleave="onLeave">
+            <defs>
+              <linearGradient id="admit-trend-grad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#f97316" stop-opacity="0.4"/>
+                <stop offset="100%" stop-color="#f97316" stop-opacity="0"/>
+              </linearGradient>
+            </defs>
+            <g>
+              <line v-for="y in yGrid" :key="'g'+y"
+                    :x1="padL" :x2="W-padR" :y1="yScale(y)" :y2="yScale(y)"
+                    stroke="#e2e8f0" stroke-dasharray="2,3"/>
+              <text v-for="y in yGrid" :key="'l'+y"
+                    :x="padL-5" :y="yScale(y)+3" text-anchor="end" font-size="10" fill="#94a3b8">{{y}}</text>
+            </g>
+            <path :d="fillPath" fill="url(#admit-trend-grad)"/>
+            <path :d="linePath" stroke="#f97316" stroke-width="1.5" fill="none"/>
+            <g>
+              <text v-for="t in xLabels" :key="'x'+t.idx"
+                    :x="t.x" :y="height-10" text-anchor="middle" font-size="9" fill="#94a3b8">#{{t.idx}}</text>
+            </g>
+            <g v-for="h in chartDots" :key="'h'+h.idx">
+              <line :x1="h.x" :x2="h.x" :y1="h.y" :y2="yScale(0)" stroke="#84cc16" stroke-dasharray="2,2" stroke-width="0.8" opacity="0.4"/>
+              <circle :cx="h.x" :cy="h.y" r="5" fill="#84cc16" stroke="white" stroke-width="1.5"/>
+              <text :x="h.x" :y="h.y-9" text-anchor="middle" font-size="9" font-weight="bold" fill="#3f6212">≥{{h.threshold}}%</text>
+            </g>
+            <!-- hover indicator (互动) -->
+            <g v-if="hoverPoint && !compact" style="pointer-events:none">
+              <line :x1="hoverPoint.x" :x2="hoverPoint.x" :y1="padT" :y2="height-padB"
+                    stroke="#475569" stroke-dasharray="3,3" stroke-width="0.8" opacity="0.6"/>
+              <circle :cx="hoverPoint.x" :cy="hoverPoint.y" r="7" fill="white" stroke="#f97316" stroke-width="2"/>
+              <circle :cx="hoverPoint.x" :cy="hoverPoint.y" r="2.5" fill="#f97316"/>
+            </g>
+          </svg>
+          <!-- hover tooltip (HTML overlay) -->
+          <div v-if="hoverPoint && !compact"
+               class="absolute pointer-events-none bg-slate-800 text-white rounded shadow-lg px-2.5 py-1.5 z-10 leading-tight"
+               :style="tipStyle">
+            <div class="font-bold text-sm whitespace-nowrap">
+              <span class="text-orange-300">#{{hoverPoint.idx}}</span>
+              <span class="ml-2" :class="hoverPoint.probPct >= 80 ? 'text-green-300' : hoverPoint.probPct >= 60 ? 'text-emerald-300' : hoverPoint.probPct >= 50 ? 'text-yellow-300' : hoverPoint.probPct >= 35 ? 'text-orange-300' : 'text-red-300'">
+                {{hoverPoint.probPct}}%
+              </span>
+              <span v-if="hoverPoint.isEst" class="text-amber-300 text-[10px] ml-1">(估)</span>
+              <span v-if="hoverPoint.hitThresholds && hoverPoint.hitThresholds.length"
+                    class="ml-2 text-[10px] bg-green-600/40 text-green-200 rounded px-1">
+                ≥{{Math.max(...hoverPoint.hitThresholds)}}% 首达
+              </span>
+            </div>
+            <div class="text-[11px] text-slate-200 mt-0.5" style="max-width:230px;white-space:normal">
+              {{hoverPoint.name}}
+            </div>
+          </div>
+        </div>
         <table class="w-full text-[11px] mt-2 border-collapse" :class="compact ? '' : ''">
           <thead><tr class="bg-slate-100">
             <th class="border px-2 py-1 text-center w-16">阈值</th>
