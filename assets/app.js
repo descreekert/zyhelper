@@ -23,7 +23,8 @@ const LS_KEY_TRANSFER_ACCEPTS = "zyhelper_transfer_accepts_v1";  // 可接受转
 const DEFAULT_TRANSFER_TARGETS = [
   "电子信息工程","电子科学与技术","微电子科学与工程","数据科学与大数据技术",
   "集成电路设计与集成系统","人工智能","软件工程","计算机科学与技术",
-  "自动化","通信工程","机械工程","光电信息科学与工程","测控技术与仪器",
+  "自动化","通信工程","机械工程","机械设计制造及其自动化",
+  "光电信息科学与工程","测控技术与仪器",
   "智能科学与技术","智能制造工程","机器人工程","车辆工程","交通运输",
   "智能车辆工程","智慧交通","未来机器人","交叉工程",
 ];
@@ -700,12 +701,19 @@ const store = reactive({
   priorityOverrides: loadLS(LS_KEY_PRIORITY_OVR, { schools: null, cities: null, majorClasses: null, majors: null }),
   transferTargets: (() => {
     const lst = loadLS(LS_KEY_TRANSFER_TARGETS, DEFAULT_TRANSFER_TARGETS.slice());
-    // 一次性迁移: 旧的错误名 "微电子科学与技术" → 正确 "微电子科学与工程"
     let migrated = false;
+    // 一次性迁移 1: 旧的错误名 "微电子科学与技术" → 正确 "微电子科学与工程"
     const out = lst.map(s => {
       if (s === "微电子科学与技术") { migrated = true; return "微电子科学与工程"; }
       return s;
     });
+    // 一次性迁移 2: 补全后期新增的默认目标专业 (如 "机械设计制造及其自动化")
+    // 仅当用户的列表里 缺这些后期补默认项 时追加, 不影响用户自己增删的别的项.
+    const POST_ADDED_DEFAULTS = ["机械设计制造及其自动化"];
+    const have = new Set(out);
+    for (const m of POST_ADDED_DEFAULTS) {
+      if (!have.has(m)) { out.push(m); migrated = true; }
+    }
     if (migrated) saveLS(LS_KEY_TRANSFER_TARGETS, out);
     return out;
   })(),
