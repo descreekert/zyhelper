@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>2026 物理类志愿填报助手</title>
-  <link rel="stylesheet" href="assets/style.css?v=v9-new-est">
+  <link rel="stylesheet" href="assets/style.css?v=v9-est-pdf">
   <script src="https://unpkg.com/vue@3.4.21/dist/vue.global.prod.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/chart.js@4.4.2/dist/chart.umd.js"></script>
@@ -402,6 +402,7 @@
             :expanded-schools="ui.analysisExpandedSchools"
             :expanded-scores="ui.analysisExpandedScores"
             :expanded-tiers="ui.analysisExpandedTiers"
+            :expanded-enroll-scores="ui.analysisExpandedEnrollScores"
             @close="store.viewMode = 'voluntary'"
             @set-anchor="v => ui.analysisAnchor25 = v"
             @set-rank="v => ui.analysisAnchorRank26 = v"
@@ -418,6 +419,11 @@
             @toggle-tier="k => {
               const i = ui.analysisExpandedTiers.indexOf(k);
               ui.analysisExpandedTiers = (i >= 0) ? [] : [k];
+            }"
+            @toggle-enroll-score="s => {
+              const i = ui.analysisExpandedEnrollScores.indexOf(s);
+              if (i >= 0) ui.analysisExpandedEnrollScores.splice(i, 1);
+              else ui.analysisExpandedEnrollScores.push(s);
             }"
           ></voluntary-analysis>
 
@@ -502,6 +508,6 @@
     </template>
   </div>
 
-  <script src="assets/app.js?v=v9-new-est"></script>
+  <script src="assets/app.js?v=v9-est-pdf"></script>
 </body>
 </html>

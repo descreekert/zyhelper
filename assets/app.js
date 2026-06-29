@@ -133,30 +133,32 @@ function majorHeat(plan) {
   if (/能源|动力工程|新能源/.test(text)) return { idx: 1, pct: 0.01, name: "能动" };
   return { idx: 0, pct: 0, name: "其他" };
 }
-// ctx: { userRank25, proxyNewRank? }
-//   userRank25: 用户 25 等位位次 (主要计算依据)
-//   proxyNewRank: anchor25+5 分对应的 25 位次, 用于新增专业的粗估
+// ctx: { userRank25, scoreRank }
+//   userRank25: 用户 25 等位位次
+//   scoreRank: 完整 scoreRank 对象 (新增专业 proxy 用)
 function computeAdmitProb(plan, ctx) {
   if (!plan) return { prob: null, isUncertain: true };
-  // 兼容: 旧调用传 number, 新调用传 object
   if (typeof ctx === "number") ctx = { userRank25: ctx };
   ctx = ctx || {};
   const userRank25 = ctx.userRank25;
-  const proxyNewRank = ctx.proxyNewRank;
+  const sr = ctx.scoreRank;
   const SCALE = 1500, BIAS = 0.4;
-  // 新增专业: 用 proxyNewRank (anchor+5 分位次) 粗估
+  // 新增专业: 用 plan 自己的 25 分 + 5 (粗估录取线上浮 5 分)
   if (plan.isNew === "新增") {
-    if (!proxyNewRank || !userRank25) {
+    const planScore25 = plan.ref25Score || plan.score25 || null;
+    if (!planScore25 || !userRank25 || !sr) {
       return { prob: null, isUncertain: true, reason: "新增", heat: majorHeat(plan) };
     }
+    const proxyRank = rank25FromScore25(planScore25 + 5, sr);
+    if (!proxyRank) return { prob: null, isUncertain: true, reason: "新增-位次查不到", heat: majorHeat(plan) };
     const heat = majorHeat(plan);
-    const effPlanRank = proxyNewRank * (1 + heat.pct);
+    const effPlanRank = proxyRank * (1 + heat.pct);
     const diff = effPlanRank - userRank25;
     const prob = 1 / (1 + Math.exp(-diff / SCALE - BIAS));
     return {
       prob: Math.max(0.02, Math.min(0.98, prob)),
-      isUncertain: false, isEstimated: true,    // (估) 标
-      heat, refRank: proxyNewRank, effPlanRank, diff,
+      isUncertain: false, isEstimated: true,
+      heat, refRank: proxyRank, ref25: planScore25, effPlanRank, diff,
     };
   }
   const r25  = plan.ref25Rank || plan.rank25 || null;
@@ -626,6 +628,7 @@ const ui = reactive({
   analysisExpandedSchools: [],   // 学校行展开 id 列表
   analysisExpandedScores: [],    // 一分一段行展开 (25 score) 列表
   analysisExpandedTiers: [],     // 冲稳保卡片展开 ['chong','wen','bao','out']
+  analysisExpandedEnrollScores: [],  // 招生维度分数展开 (25 score list)
   detailPlan: null,
   myScore: 0,
   myRank: 0,
@@ -2828,8 +2831,8 @@ const PrioritySettings = {
 
 // V9: 志愿分析 (普通视图 + 兼容 modal). prop.embedded=true 时去掉 modal 外壳
 const VoluntaryAnalysis = {
-  props: ["analysis", "listName", "anchorOverride", "rankOverride", "expandedSchools", "expandedScores", "expandedTiers", "embedded"],
-  emits: ["close", "set-anchor", "set-rank", "toggle-school", "toggle-score", "toggle-tier"],
+  props: ["analysis", "listName", "anchorOverride", "rankOverride", "expandedSchools", "expandedScores", "expandedTiers", "expandedEnrollScores", "embedded"],
+  emits: ["close", "set-anchor", "set-rank", "toggle-school", "toggle-score", "toggle-tier", "toggle-enroll-score"],
   setup(props, { emit }) {
     const maxScoreCount = computed(() => {
       if (!props.analysis) return 1;
@@ -3258,6 +3261,84 @@ const VoluntaryAnalysis = {
           </section>
           </div><!-- /grid: 按分数 + 按学校 -->
 
+          <!-- 招生维度聚合 (2026 全体 plans, 不限志愿单) -->
+          <section v-if="analysis.enrollByScore25 && analysis.enrollByScore25.length">
+            <div class="text-xs text-slate-500 mb-1">
+              📊 招生维度聚合 — 2026 年所有学校在冲稳保各 25 分的总招生 (点行展开看具体学校/专业)
+            </div>
+            <div class="border rounded bg-white overflow-hidden">
+              <table class="w-full text-xs analysis-score-table">
+                <thead>
+                  <tr class="bg-slate-100 border-b-2 border-slate-300">
+                    <th class="px-2 py-1.5 text-left w-12">25 分</th>
+                    <th class="px-2 py-1.5 text-center w-8">档</th>
+                    <th class="px-2 py-1.5 text-center w-12">→26</th>
+                    <th class="px-2 py-1.5 text-center w-14">2026 总招生</th>
+                    <th class="px-2 py-1.5 text-center w-12">学校数</th>
+                    <th class="px-2 py-1.5 text-left">说明</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template v-for="r in analysis.enrollByScore25" :key="'enr-' + r.score25">
+                    <tr v-if="r.enroll > 0"
+                        :class="[
+                          'border-b border-slate-200 cursor-pointer transition-colors',
+                          {chong:'tier-row-chong', wen:'tier-row-wen', bao:'tier-row-bao'}[r.tier] || '',
+                          expandedEnrollScores.includes(r.score25) ? 'bg-blue-50' : 'hover:bg-slate-50'
+                        ]"
+                        @click="$emit('toggle-enroll-score', r.score25)">
+                      <td class="px-2 py-1.5 font-bold">
+                        <span class="text-slate-400 mr-1">{{ expandedEnrollScores.includes(r.score25) ? '▾' : '▸' }}</span>
+                        {{ r.score25 }}
+                      </td>
+                      <td class="px-2 py-1.5 text-center">
+                        <span class="inline-block px-1.5 rounded text-white text-[10px] font-bold"
+                              :class="r.tier==='chong'?'bg-red-500':r.tier==='wen'?'bg-amber-500':r.tier==='bao'?'bg-green-500':'bg-slate-400'">
+                          {{ {chong:'冲',wen:'稳',bao:'保',out:'外'}[r.tier] }}
+                        </span>
+                      </td>
+                      <td class="px-2 py-1.5 text-center text-slate-600">{{ r.equiv26 ?? '—' }}</td>
+                      <td class="px-2 py-1.5 text-center font-bold text-blue-700">{{ r.enroll }}</td>
+                      <td class="px-2 py-1.5 text-center">{{ r.schools }}</td>
+                      <td class="px-2 py-1.5 text-slate-500">{{ r.plans.length }} 个专业组</td>
+                    </tr>
+                    <tr v-if="r.enroll > 0 && expandedEnrollScores.includes(r.score25)" class="bg-slate-50 border-b border-slate-300">
+                      <td colspan="6" class="px-2 py-1">
+                        <table class="w-full text-[11px] bg-white border rounded">
+                          <thead>
+                            <tr class="bg-slate-100">
+                              <th class="px-2 py-1 text-left">学校</th>
+                              <th class="px-2 py-1 text-left">城市</th>
+                              <th class="px-2 py-1 text-left">26 招生专业</th>
+                              <th class="px-2 py-1 text-center w-14">25 分/位</th>
+                              <th class="px-2 py-1 text-center w-12">26 计划</th>
+                              <th class="px-2 py-1 text-center w-12">学费</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr v-for="p in r.plans" :key="p.id" class="border-t"
+                                :class="p.isNew==='新增' ? 'bg-yellow-50/50' : ''">
+                              <td class="px-2 py-0.5">{{ p.schoolName }}</td>
+                              <td class="px-2 py-0.5">{{ p.city || '—' }}</td>
+                              <td class="px-2 py-0.5">
+                                <span v-if="p.isNew==='新增'" class="badge-new">新</span>
+                                <span v-else-if="p.diff" class="badge-diff" :title="p.diff">变</span>
+                                {{ p.majorName26 || p.majorName25 || '—' }}
+                              </td>
+                              <td class="px-2 py-0.5 text-center"><b>{{ p.isStopped ? p.score25 : p.ref25Score }}</b>/{{ p.isStopped ? p.rank25 : p.ref25Rank }}</td>
+                              <td class="px-2 py-0.5 text-center">{{ p.enrollNum26 || '—' }}</td>
+                              <td class="px-2 py-0.5 text-center">{{ p.tuition || '—' }}</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
           <!-- Insights -->
           <section v-if="analysis.insights.length">
             <div class="text-xs text-slate-500 mb-1">💡 建议 ({{ analysis.insights.length }})</div>
@@ -3406,7 +3487,27 @@ const VoluntaryReport = {
       if (!admit || admit.prob == null) return "—";
       return (admit.prob * 100).toFixed(0) + "%";
     }
-    return { todayStr, items, summary, itemsByScore, itemsBySchool, printReport, tierLabel, fmtProb };
+    // 招生维度查询 (从 analysis.enrollByScore25 索引)
+    const enrollScoreMap = computed(() => {
+      const m = new Map();
+      if (props.analysis?.enrollByScore25) {
+        for (const r of props.analysis.enrollByScore25) m.set(r.score25, r);
+      }
+      return m;
+    });
+    function enrollAtScore(s) { return enrollScoreMap.value.get(s) || null; }
+    function schoolsAtScore(s) {
+      const r = enrollScoreMap.value.get(s);
+      if (!r) return "";
+      const names = [...new Set(r.plans.map(p => p.schoolName))];
+      return names.slice(0, 8).join("、") + (names.length > 8 ? ` 等 ${names.length} 所` : "");
+    }
+    function itemsAtScore(s) {
+      return items.value.filter(it => it.score25 === s);
+    }
+    return { todayStr, items, summary, itemsByScore, itemsBySchool,
+             enrollAtScore, schoolsAtScore, itemsAtScore,
+             printReport, tierLabel, fmtProb };
   },
   template: `
     <div class="voluntary-report">
@@ -3426,7 +3527,8 @@ const VoluntaryReport = {
           <div class="mt-2 inline-flex gap-6 text-sm">
             <span>26 分: <b class="text-blue-600">{{ analysis.my26 }}</b></span>
             <span>25 等位: <b class="text-blue-600">{{ analysis.anchor25 }}</b></span>
-            <span>26 位次 (预测): <b class="text-blue-600">{{ analysis.userRank26 }}</b></span>
+            <span>26 真实位次: <b class="text-blue-600">{{ analysis.myRank26 }}</b></span>
+            <span v-if="analysis.userRank26 !== analysis.myRank26">26 预测位次: <b class="text-purple-700">{{ analysis.userRank26 }}</b> (手调)</span>
             <span>总志愿: <b class="text-blue-600">{{ items.length }}</b> 项</span>
             <span>26 计划总: <b class="text-blue-600">{{ analysis.totalEnroll }}</b> 人</span>
           </div>
@@ -3517,13 +3619,15 @@ const VoluntaryReport = {
                   <span v-if="it.plan.isNew==='新增'" class="text-red-600 font-bold">[新]</span>
                   <span v-else-if="it.plan.diff" class="text-amber-700">[变]</span>
                   {{ it.plan.majorName26 || it.plan.majorName25 }}
+                  <span v-if="it.admit?.heat?.idx >= 4" class="ml-0.5 text-[8px] px-0.5 rounded"
+                        :class="it.admit.heat.idx >= 6 ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'">🔥{{ it.admit.heat.name }}</span>
                 </td>
                 <td class="border px-1 py-0.5 text-center">{{ it.score25 }}/{{ it.rank25 }}</td>
                 <td class="border px-1 py-0.5 text-center">{{ it.enroll }}</td>
                 <td class="border px-1 py-0.5 text-center">{{ it.plan.tuition }}</td>
                 <td class="border px-1 py-0.5 text-center font-bold"
                     :class="it.admit?.prob >= 0.7 ? 'text-green-700' : it.admit?.prob >= 0.4 ? 'text-amber-700' : it.admit?.prob != null ? 'text-red-600' : 'text-slate-400'">
-                  {{ fmtProb(it.admit) }}
+                  {{ fmtProb(it.admit) }}<span v-if="it.admit?.isEstimated" class="text-[9px] text-amber-600">(估)</span>
                 </td>
               </tr>
             </tbody>
@@ -3604,12 +3708,16 @@ const VoluntaryReport = {
                   <span v-else-if="it.plan.diff" class="text-amber-700">变</span>
                 </td>
                 <td class="border px-1 py-0.5">{{ it.plan.schoolName }}</td>
-                <td class="border px-1 py-0.5">{{ it.plan.majorName26 || it.plan.majorName25 }}</td>
+                <td class="border px-1 py-0.5">
+                  {{ it.plan.majorName26 || it.plan.majorName25 }}
+                  <span v-if="admitProbFn(it.plan)?.heat?.idx >= 4" class="ml-0.5 text-[8px] px-0.5 rounded"
+                        :class="admitProbFn(it.plan).heat.idx >= 6 ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'">🔥{{ admitProbFn(it.plan).heat.name }}</span>
+                </td>
                 <td class="border px-1 py-0.5 text-center">{{ it.score25 || '—' }}/{{ it.rank25 || '—' }}</td>
                 <td class="border px-1 py-0.5 text-center">{{ it.enroll }}</td>
                 <td class="border px-1 py-0.5 text-center font-bold"
                     :class="(admitProbFn(it.plan)?.prob || 0) >= 0.7 ? 'text-green-700' : (admitProbFn(it.plan)?.prob || 0) >= 0.4 ? 'text-amber-700' : 'text-red-600'">
-                  {{ fmtProb(admitProbFn(it.plan)) }}
+                  {{ fmtProb(admitProbFn(it.plan)) }}<span v-if="admitProbFn(it.plan)?.isEstimated" class="text-[9px] text-amber-600">(估)</span>
                 </td>
               </tr>
             </tbody>
@@ -3617,51 +3725,104 @@ const VoluntaryReport = {
         </section>
         </template><!-- /v-for tier -->
 
-        <!-- 6. 分数总览 -->
+        <!-- 6. 分数总览 (沿用分析页 byScore 样式, 加 26 总招生 + 你填报的学校) -->
         <section class="mb-6 page-break-before">
-          <h2 class="text-lg font-bold mb-2 bg-blue-50 px-2 py-1 border-l-4 border-blue-600">6. 分数总览 ({{ itemsByScore.length }} 个不同分数)</h2>
-          <table class="w-full text-[10px] border-collapse">
+          <h2 class="text-lg font-bold mb-2 bg-blue-50 px-2 py-1 border-l-4 border-blue-600">6. 分数总览 (按 25 分聚合)</h2>
+          <table class="w-full text-[10px] border-collapse analysis-score-table">
             <thead><tr class="bg-slate-100">
               <th class="border px-1 py-1">25 分</th>
               <th class="border px-1 py-1">档</th>
-              <th class="border px-1 py-1">N 项</th>
-              <th class="border px-1 py-1">26 招生</th>
+              <th class="border px-1 py-1">25位次</th>
+              <th class="border px-1 py-1">Δ分</th>
+              <th class="border px-1 py-1">Δ位次</th>
+              <th class="border px-1 py-1">你的 N</th>
+              <th class="border px-1 py-1">你的招生</th>
+              <th class="border px-1 py-1">26 全体招生</th>
               <th class="border px-1 py-1">学校</th>
             </tr></thead>
             <tbody>
-              <tr v-for="g in itemsByScore" :key="g.score25">
-                <td class="border px-1 py-0.5 text-center font-bold">{{ g.score25 }}</td>
-                <td class="border px-1 py-0.5 text-center">{{ tierLabel(g.score25) }}</td>
-                <td class="border px-1 py-0.5 text-center">{{ g.items.length }}</td>
-                <td class="border px-1 py-0.5 text-center">{{ g.items.reduce((s, i) => s + i.enroll, 0) }}</td>
-                <td class="border px-1 py-0.5">{{ [...new Set(g.items.map(i => i.plan.schoolName))].join('、') }}</td>
+              <template v-for="r in analysis.byScore" :key="'pdf-bs-'+r.score">
+              <tr v-if="r.count > 0"
+                  :class="r.tier === 'chong' ? 'tier-row-chong' : r.tier === 'wen' ? 'tier-row-wen' : r.tier === 'bao' ? 'tier-row-bao' : ''">
+                <td class="border px-1 py-0.5 text-center font-bold">{{ r.score }}</td>
+                <td class="border px-1 py-0.5 text-center">
+                  <span class="inline-block px-1 rounded text-white text-[9px] font-bold"
+                        :class="r.tier==='chong'?'bg-red-500':r.tier==='wen'?'bg-amber-500':r.tier==='bao'?'bg-green-500':'bg-slate-400'">
+                    {{ {chong:'冲',wen:'稳',bao:'保',out:'外'}[r.tier] }}
+                  </span>
+                </td>
+                <td class="border px-1 py-0.5 text-center">{{ r.rank25 ?? '—' }}</td>
+                <td class="border px-1 py-0.5 text-center"
+                    :class="r.deltaScore > 0 ? 'text-red-600 font-bold' : r.deltaScore < 0 ? 'text-green-700 font-bold' : 'text-amber-700'">
+                  {{ r.deltaScore > 0 ? '↑+' + r.deltaScore : r.deltaScore < 0 ? '↓' + r.deltaScore : '0' }}
+                </td>
+                <td class="border px-1 py-0.5 text-center"
+                    :class="r.deltaRank > 0 ? 'text-red-600 font-bold' : r.deltaRank < 0 ? 'text-green-700 font-bold' : 'text-amber-700'">
+                  {{ r.deltaRank > 0 ? '↑+' + r.deltaRank : r.deltaRank < 0 ? '↓' + r.deltaRank : '0' }}
+                </td>
+                <td class="border px-1 py-0.5 text-center font-bold">{{ r.count }}</td>
+                <td class="border px-1 py-0.5 text-center">{{ r.enroll }}</td>
+                <td class="border px-1 py-0.5 text-center text-blue-700 font-bold">{{ enrollAtScore(r.score)?.enroll || 0 }}</td>
+                <td class="border px-1 py-0.5">{{ schoolsAtScore(r.score) }}</td>
               </tr>
+              </template>
             </tbody>
           </table>
         </section>
 
-        <!-- 7. 分数详情 (每分志愿列表) -->
+        <!-- 7. 分数详情 (你填报的志愿 + 该分全体招生学校) -->
         <section class="mb-6 page-break-before">
-          <h2 class="text-lg font-bold mb-2 bg-blue-50 px-2 py-1 border-l-4 border-blue-600">7. 分数详情 — 每分的志愿来源</h2>
-          <div v-for="g in itemsByScore" :key="'sd-'+g.score25" class="mb-3 page-break-inside-avoid">
-            <div class="font-bold text-sm bg-slate-100 px-2 py-1">
-              25 分 {{ g.score25 }} [{{ tierLabel(g.score25) }}] · {{ g.items.length }} 项 · 26 招生 {{ g.items.reduce((s, i) => s + i.enroll, 0) }} 人
+          <h2 class="text-lg font-bold mb-2 bg-blue-50 px-2 py-1 border-l-4 border-blue-600">7. 分数详情 — 你的志愿 + 2026 全体招生来源</h2>
+          <template v-for="r in analysis.byScore" :key="'pdf-sd-'+r.score">
+          <div v-if="r.count > 0" class="mb-4 page-break-inside-avoid">
+            <div class="font-bold text-sm px-2 py-1 border-l-4"
+                 :class="r.tier === 'chong' ? 'bg-red-50 border-red-500' : r.tier === 'wen' ? 'bg-amber-50 border-amber-500' : r.tier === 'bao' ? 'bg-green-50 border-green-500' : 'bg-slate-100 border-slate-400'">
+              25 分 {{ r.score }} [{{ {chong:'冲',wen:'稳',bao:'保',out:'外'}[r.tier] }}] · 25位次 {{ r.rank25 ?? '—' }}
+              <span v-if="r.deltaScore != null">· Δ {{ r.deltaScore > 0 ? '↑+' + r.deltaScore : r.deltaScore < 0 ? '↓' + r.deltaScore : '0' }}分</span>
+              <span v-if="r.deltaRank != null">/{{ r.deltaRank > 0 ? '↑+' + r.deltaRank : r.deltaRank < 0 ? '↓' + r.deltaRank : '0' }}位</span>
+              · 你填报 <b>{{ r.count }}</b> 项 ({{ r.enroll }} 人) · 2026 全体招生 <b class="text-blue-700">{{ enrollAtScore(r.score)?.enroll || 0 }}</b> 人 ({{ enrollAtScore(r.score)?.plans.length || 0 }} 个专业)
             </div>
+            <!-- 你的志愿 -->
+            <div class="mt-1 text-[10px] text-slate-600">📋 你已填报:</div>
             <table class="w-full text-[10px] border-collapse">
               <tbody>
-                <tr v-for="it in g.items" :key="it.id" :class="it.plan.isNew==='新增'?'bg-yellow-50':''">
+                <tr v-for="it in itemsAtScore(r.score)" :key="'mine-'+it.id"
+                    :class="it.plan.isNew==='新增' ? 'bg-yellow-50' : ''">
                   <td class="border px-1 py-0.5 text-center w-8">#{{ it.idx }}</td>
                   <td class="border px-1 py-0.5">{{ it.plan.schoolName }}</td>
-                  <td class="border px-1 py-0.5">{{ it.plan.majorName26 || it.plan.majorName25 }}</td>
+                  <td class="border px-1 py-0.5">
+                    <span v-if="it.plan.isNew==='新增'" class="text-red-600 font-bold">[新]</span>
+                    <span v-else-if="it.plan.diff" class="text-amber-700">[变]</span>
+                    {{ it.plan.majorName26 || it.plan.majorName25 }}
+                    <span v-if="it.admit?.heat?.idx >= 4" class="ml-1 text-[9px] px-1 rounded"
+                          :class="it.admit.heat.idx >= 6 ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'">🔥{{ it.admit.heat.name }}</span>
+                  </td>
                   <td class="border px-1 py-0.5 text-center w-12">{{ it.enroll }}人</td>
-                  <td class="border px-1 py-0.5 text-center w-12 font-bold"
+                  <td class="border px-1 py-0.5 text-center w-14 font-bold"
                       :class="it.admit?.prob >= 0.7 ? 'text-green-700' : it.admit?.prob >= 0.4 ? 'text-amber-700' : 'text-red-600'">
-                    {{ fmtProb(it.admit) }}
+                    {{ fmtProb(it.admit) }}<span v-if="it.admit?.isEstimated" class="text-[9px] text-amber-600">(估)</span>
                   </td>
                 </tr>
               </tbody>
             </table>
+            <!-- 该分 2026 全体招生 -->
+            <div v-if="enrollAtScore(r.score) && enrollAtScore(r.score).plans.length" class="mt-2 text-[10px] text-slate-600">📊 2026 该分全体招生来源 ({{ enrollAtScore(r.score).plans.length }} 个专业, {{ enrollAtScore(r.score).enroll }} 人):</div>
+            <table v-if="enrollAtScore(r.score) && enrollAtScore(r.score).plans.length" class="w-full text-[10px] border-collapse">
+              <tbody>
+                <tr v-for="p in enrollAtScore(r.score).plans" :key="'enr-'+p.id"
+                    :class="p.isNew==='新增' ? 'bg-yellow-50' : ''">
+                  <td class="border px-1 py-0.5">{{ p.schoolName }}</td>
+                  <td class="border px-1 py-0.5">{{ p.city || '—' }}</td>
+                  <td class="border px-1 py-0.5">
+                    <span v-if="p.isNew==='新增'" class="text-red-600">[新]</span>
+                    {{ p.majorName26 || p.majorName25 }}
+                  </td>
+                  <td class="border px-1 py-0.5 text-center w-12">{{ p.enrollNum26 }}人</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
+          </template>
         </section>
 
         <!-- 8. 学校总览 -->
@@ -4187,13 +4348,40 @@ createApp({
       if (totalEnroll && tiers.bao.enroll < totalEnroll * 0.15) {
         insights.push({ level: "warn", text: `保档 26 计划人数仅 ${tiers.bao.enroll} (占 ${(tiers.bao.enroll/totalEnroll*100).toFixed(0)}%), 保底名额偏少` });
       }
-      // 给每个 item 算 录取率 (用 anchorRank25 + proxyNewRank)
-      const proxyNewR = rank25FromScore25(anchor25 + 5, scoreRank.value);
+      // 给每个 item 算 录取率
       for (const it of items) {
-        it.admit = computeAdmitProb(it.plan, { userRank25: anchorRank25, proxyNewRank: proxyNewR });
+        it.admit = computeAdmitProb(it.plan, { userRank25: anchorRank25, scoreRank: scoreRank.value });
+      }
+      // V9: 招生维度分数聚合 (全 2026 plans, 在冲稳保整体范围内 [bao.lo, chong.hi])
+      // 例: 25 分 618, 今年所有学校在 618 上招的总计划 + 来源 plans
+      const allLo = ranges.bao.lo, allHi = ranges.chong.hi;
+      const enrollMap = new Map();
+      for (const p of store.allPlans) {
+        const s25 = p.isStopped ? p.score25 : p.ref25Score;
+        if (s25 == null || s25 < allLo || s25 > allHi) continue;
+        const enroll = p.enrollNum26 || 0;
+        if (!enroll) continue;
+        if (!enrollMap.has(s25)) enrollMap.set(s25, { enroll: 0, plans: [], schools: new Set() });
+        const r = enrollMap.get(s25);
+        r.enroll += enroll;
+        r.plans.push(p);
+        r.schools.add(p.schoolName);
+      }
+      const enrollByScore25 = [];
+      for (let s = allHi; s >= allLo; s--) {
+        const r = enrollMap.get(s);
+        const eq = equivFromScore25(s, scoreRank.value);
+        enrollByScore25.push({
+          score25: s,
+          tier: tierOf(s),
+          equiv26: eq.score26,
+          enroll: r?.enroll || 0,
+          schools: r ? r.schools.size : 0,
+          plans: r?.plans || [],
+        });
       }
       return {
-        items, tiers, byScore, bySchool, ranges,
+        items, tiers, byScore, bySchool, ranges, enrollByScore25,
         my26: ui.myScore, autoAnchor25: autoAnchor, anchor25, anchorRank25,
         myRank26: ui.myRank, userRank26,
         total, totalEnroll, insights,
@@ -4555,19 +4743,10 @@ createApp({
       if (!s25) return null;
       return rank25FromScore25(s25, sr);
     });
-    // 新增专业 proxy: anchor25 + 5 分 的位次 (录取率粗估锚)
-    const proxyNewRank = computed(() => {
-      const sr = scoreRank.value;
-      if (!sr) return null;
-      let s25 = (ui.analysisAnchor25 > 0) ? ui.analysisAnchor25
-              : (ui.myScore > 0 ? equiv25FromScore26(ui.myScore, sr) : null);
-      if (!s25) return null;
-      return rank25FromScore25(s25 + 5, sr);
-    });
     function admitProbFor(plan) {
       return computeAdmitProb(plan, {
         userRank25: userRank25Anchor.value,
-        proxyNewRank: proxyNewRank.value,
+        scoreRank: scoreRank.value,
       });
     }
 
