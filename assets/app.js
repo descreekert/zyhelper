@@ -3079,6 +3079,11 @@ const VoluntaryAnalysis = {
             </div>
           </section>
 
+          <!-- 录取趋势图 (按志愿顺序 + 阈值首达点) -->
+          <section>
+            <admit-trend-chart :items="analysis.items"></admit-trend-chart>
+          </section>
+
           <!-- 占比柱 -->
           <section>
             <div class="text-xs text-slate-500 mb-1">冲稳保占比 (项数)</div>
@@ -3637,9 +3642,15 @@ const VoluntaryReport = {
           </div>
         </section>
 
-        <!-- 2. 完整志愿表 -->
+        <!-- 2. 录取趋势图 -->
+        <section class="mb-6 page-break-inside-avoid">
+          <h2 class="text-lg font-bold mb-2 bg-blue-50 px-2 py-1 border-l-4 border-blue-600">2. 录取趋势图 (按志愿顺序 + 阈值首达点)</h2>
+          <admit-trend-chart :items="analysis.items" :height="260" :compact="true"></admit-trend-chart>
+        </section>
+
+        <!-- 3. 完整志愿表 -->
         <section class="mb-6 page-break-before">
-          <h2 class="text-lg font-bold mb-2 bg-blue-50 px-2 py-1 border-l-4 border-blue-600">2. 完整志愿表 (按填报顺序)</h2>
+          <h2 class="text-lg font-bold mb-2 bg-blue-50 px-2 py-1 border-l-4 border-blue-600">3. 完整志愿表 (按填报顺序)</h2>
           <table class="w-full text-[10px] border-collapse">
             <thead>
               <tr class="bg-slate-100">
@@ -3679,9 +3690,9 @@ const VoluntaryReport = {
           </table>
         </section>
 
-        <!-- 3. 志愿详情 (每条 + 完整信息) -->
+        <!-- 4. 志愿详情 (每条 + 完整信息) -->
         <section class="mb-6 page-break-before">
-          <h2 class="text-lg font-bold mb-2 bg-blue-50 px-2 py-1 border-l-4 border-blue-600">3. 志愿详情</h2>
+          <h2 class="text-lg font-bold mb-2 bg-blue-50 px-2 py-1 border-l-4 border-blue-600">4. 志愿详情</h2>
           <div v-for="it in items" :key="it.id" class="mb-3 p-2 border rounded text-xs page-break-inside-avoid"
                :class="it.plan.isNew==='新增'?'bg-yellow-50 border-yellow-300':''">
             <div class="font-bold flex items-center justify-between">
@@ -3716,9 +3727,9 @@ const VoluntaryReport = {
           </div>
         </section>
 
-        <!-- 4. 分析总览 + 冲稳保占比 -->
+        <!-- 5. 分析总览 + 冲稳保占比 -->
         <section class="mb-6 page-break-before">
-          <h2 class="text-lg font-bold mb-2 bg-blue-50 px-2 py-1 border-l-4 border-blue-600">4. 分析总览</h2>
+          <h2 class="text-lg font-bold mb-2 bg-blue-50 px-2 py-1 border-l-4 border-blue-600">5. 分析总览</h2>
           <div class="grid grid-cols-4 gap-2 text-xs">
             <div v-for="k in ['chong','wen','bao','out']" :key="k"
                  :class="k==='chong'?'bg-red-50 border-red-200':k==='wen'?'bg-amber-50 border-amber-200':k==='bao'?'bg-green-50 border-green-200':'bg-slate-100'"
@@ -3734,13 +3745,13 @@ const VoluntaryReport = {
           </div>
         </section>
 
-        <!-- 5. 冲稳保详情 -->
+        <!-- 6. 冲稳保详情 -->
         <template v-for="k in ['chong','wen','bao']" :key="'tier-'+k">
         <section v-if="analysis.tiers[k].items.length"
                  class="mb-6 page-break-before">
           <h2 class="text-lg font-bold mb-2 px-2 py-1 border-l-4"
               :class="k==='chong'?'bg-red-50 border-red-600 text-red-800':k==='wen'?'bg-amber-50 border-amber-600 text-amber-800':'bg-green-50 border-green-600 text-green-800'">
-            5.{{ ['chong','wen','bao'].indexOf(k)+1 }} {{ {chong:'冲',wen:'稳',bao:'保'}[k] }}档详细 ({{ analysis.tiers[k].items.length }} 项)
+            6.{{ ['chong','wen','bao'].indexOf(k)+1 }} {{ {chong:'冲',wen:'稳',bao:'保'}[k] }}档详细 ({{ analysis.tiers[k].items.length }} 项)
           </h2>
           <table class="w-full text-[10px] border-collapse">
             <thead><tr class="bg-slate-100">
@@ -3776,9 +3787,9 @@ const VoluntaryReport = {
         </section>
         </template><!-- /v-for tier -->
 
-        <!-- 6. 分数总览 (沿用分析页 byScore 样式, 加 26 总招生 + 你填报的学校) -->
+        <!-- 7. 分数总览 (沿用分析页 byScore 样式, 加 26 总招生 + 你填报的学校) -->
         <section class="mb-6 page-break-before">
-          <h2 class="text-lg font-bold mb-2 bg-blue-50 px-2 py-1 border-l-4 border-blue-600">6. 分数总览 (按 25 分聚合)</h2>
+          <h2 class="text-lg font-bold mb-2 bg-blue-50 px-2 py-1 border-l-4 border-blue-600">7. 分数总览 (按 25 分聚合)</h2>
           <table class="w-full text-[10px] border-collapse analysis-score-table">
             <thead><tr class="bg-slate-100">
               <th class="border px-1 py-1">25 分</th>
@@ -3828,9 +3839,9 @@ const VoluntaryReport = {
           </table>
         </section>
 
-        <!-- 7. 分数详情 (你填报的志愿 + 该分全体招生学校) -->
+        <!-- 8. 分数详情 (你填报的志愿 + 该分全体招生学校) -->
         <section class="mb-6 page-break-before">
-          <h2 class="text-lg font-bold mb-2 bg-blue-50 px-2 py-1 border-l-4 border-blue-600">7. 分数详情 — 你的志愿 + 2026 全体招生来源</h2>
+          <h2 class="text-lg font-bold mb-2 bg-blue-50 px-2 py-1 border-l-4 border-blue-600">8. 分数详情 — 你的志愿 + 2026 全体招生来源</h2>
           <template v-for="r in analysis.byScore" :key="'pdf-sd-'+r.score">
           <div v-if="r.count > 0" class="mb-4 page-break-inside-avoid">
             <div class="font-bold text-sm px-2 py-1 border-l-4"
@@ -3887,9 +3898,9 @@ const VoluntaryReport = {
           </template>
         </section>
 
-        <!-- 8. 学校总览 -->
+        <!-- 9. 学校总览 -->
         <section class="mb-6 page-break-before">
-          <h2 class="text-lg font-bold mb-2 bg-blue-50 px-2 py-1 border-l-4 border-blue-600">8. 学校总览 ({{ itemsBySchool.length }} 所学校)</h2>
+          <h2 class="text-lg font-bold mb-2 bg-blue-50 px-2 py-1 border-l-4 border-blue-600">9. 学校总览 ({{ itemsBySchool.length }} 所学校)</h2>
           <table class="w-full text-[10px] border-collapse">
             <thead><tr class="bg-slate-100">
               <th class="border px-1 py-1 text-left">学校</th>
@@ -3912,9 +3923,9 @@ const VoluntaryReport = {
           </table>
         </section>
 
-        <!-- 9. 学校详情 -->
+        <!-- 10. 学校详情 -->
         <section class="mb-6 page-break-before">
-          <h2 class="text-lg font-bold mb-2 bg-blue-50 px-2 py-1 border-l-4 border-blue-600">9. 学校详情 — 每校志愿列表</h2>
+          <h2 class="text-lg font-bold mb-2 bg-blue-50 px-2 py-1 border-l-4 border-blue-600">10. 学校详情 — 每校志愿列表</h2>
           <div v-for="g in itemsBySchool" :key="'ss-'+g.school" class="mb-3 page-break-inside-avoid">
             <div class="font-bold text-sm bg-slate-100 px-2 py-1">
               {{ g.school }} · {{ g.items.length }} 项 · 26 招生 {{ g.items.reduce((s, i) => s + i.enroll, 0) }} 人
@@ -3936,6 +3947,174 @@ const VoluntaryReport = {
             </table>
           </div>
         </section>
+      </div>
+    </div>
+  `,
+};
+
+// ========== 录取趋势图 (按志愿顺序的录取概率折线 + 阈值首达点) ==========
+// 用于分析页 + PDF 报告. 纯 SVG, 无外部依赖.
+const AdmitTrendChart = {
+  props: {
+    items: { type: Array, required: true },   // 来自 analysis.items, 每项含 admit.prob
+    height: { type: Number, default: 280 },
+    compact: { type: Boolean, default: false }, // PDF 用紧凑布局
+  },
+  setup(props) {
+    const W = 800;
+    const padL = 36, padR = 14, padT = 14, padB = 32;
+    const thresholds = [50, 55, 60, 65, 70, 75, 80, 85, 90, 95];
+
+    const points = computed(() => {
+      return (props.items || [])
+        .map((it, i) => ({
+          idx: i + 1,
+          probPct: it.admit?.prob != null ? Math.round(it.admit.prob * 100) : null,
+          name: (it.plan?.schoolName || "") + " · " + (it.plan?.majorName26 || it.plan?.majorName25 || ""),
+          isEst: !!it.admit?.isEstimated,
+        }))
+        .filter(p => p.probPct != null);
+    });
+
+    function xScale(idx, N) {
+      if (N <= 1) return padL + (W - padL - padR) / 2;
+      return padL + (idx - 1) / (N - 1) * (W - padL - padR);
+    }
+    function yScale(v) {
+      return padT + (100 - v) / 100 * (props.height - padT - padB);
+    }
+
+    const linePath = computed(() => {
+      const pts = points.value, N = pts.length;
+      if (!N) return "";
+      return pts.map((p, i) => {
+        const x = xScale(p.idx, N).toFixed(1);
+        const y = yScale(p.probPct).toFixed(1);
+        return (i === 0 ? "M" : "L") + x + "," + y;
+      }).join(" ");
+    });
+
+    const fillPath = computed(() => {
+      const pts = points.value, N = pts.length;
+      if (!N) return "";
+      const top = pts.map((p, i) => {
+        const x = xScale(p.idx, N).toFixed(1);
+        const y = yScale(p.probPct).toFixed(1);
+        return (i === 0 ? "M" : "L") + x + "," + y;
+      }).join(" ");
+      const yBot = yScale(0).toFixed(1);
+      const xL = xScale(pts[N - 1].idx, N).toFixed(1);
+      const xF = xScale(pts[0].idx, N).toFixed(1);
+      return top + ` L${xL},${yBot} L${xF},${yBot} Z`;
+    });
+
+    const thresholdHits = computed(() => {
+      const pts = points.value, N = pts.length;
+      const out = [];
+      for (const T of thresholds) {
+        const i = pts.findIndex(p => p.probPct >= T);
+        if (i < 0) continue;
+        const p = pts[i];
+        out.push({
+          threshold: T, idx: p.idx, probPct: p.probPct, name: p.name, isEst: p.isEst,
+          x: xScale(p.idx, N), y: yScale(p.probPct),
+        });
+      }
+      return out;
+    });
+
+    // 同 idx 多阈值合并为一个 dot, 标签取最大阈值
+    const chartDots = computed(() => {
+      const m = new Map();
+      for (const h of thresholdHits.value) {
+        if (!m.has(h.idx) || m.get(h.idx).threshold < h.threshold) {
+          m.set(h.idx, h);
+        }
+      }
+      return [...m.values()];
+    });
+
+    const xLabels = computed(() => {
+      const pts = points.value, N = pts.length;
+      if (!N) return [];
+      const step = N > 80 ? 10 : N > 40 ? 5 : N > 16 ? 2 : 1;
+      const out = [];
+      for (let i = 0; i < N; i++) {
+        if (i === 0 || (i + 1) % step === 0 || i === N - 1) {
+          out.push({ idx: pts[i].idx, x: xScale(pts[i].idx, N) });
+        }
+      }
+      return out;
+    });
+
+    const yGrid = [0, 20, 40, 60, 80, 100];
+
+    return { W, padL, padR, padT, padB, points, linePath, fillPath,
+             thresholdHits, chartDots, xLabels, yGrid, yScale };
+  },
+  template: `
+    <div class="admit-trend-chart">
+      <div v-if="!points.length" class="text-center text-slate-400 py-6 text-xs border rounded bg-slate-50">
+        无可用录取概率数据 (请输入 26 分数, 且志愿单非空)
+      </div>
+      <div v-else>
+        <div class="flex items-center justify-between mb-1 text-xs text-slate-600">
+          <span class="font-bold text-sm">📈 录取趋势 — 按志愿顺序 (共 {{ points.length }} 项)</span>
+          <span class="flex items-center gap-3">
+            <span class="flex items-center gap-1"><span class="inline-block w-5 h-0.5 bg-orange-500"></span>录取概率</span>
+            <span class="flex items-center gap-1"><span class="inline-block w-2.5 h-2.5 rounded-full bg-green-500"></span>阈值首达点</span>
+          </span>
+        </div>
+        <svg :viewBox="'0 0 ' + W + ' ' + height" class="w-full bg-white border rounded"
+             preserveAspectRatio="xMidYMid meet"
+             :style="{minHeight: height+'px'}">
+          <defs>
+            <linearGradient id="admit-trend-grad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="#f97316" stop-opacity="0.4"/>
+              <stop offset="100%" stop-color="#f97316" stop-opacity="0"/>
+            </linearGradient>
+          </defs>
+          <g>
+            <line v-for="y in yGrid" :key="'g'+y"
+                  :x1="padL" :x2="W-padR" :y1="yScale(y)" :y2="yScale(y)"
+                  stroke="#e2e8f0" stroke-dasharray="2,3"/>
+            <text v-for="y in yGrid" :key="'l'+y"
+                  :x="padL-5" :y="yScale(y)+3" text-anchor="end" font-size="10" fill="#94a3b8">{{y}}</text>
+          </g>
+          <path :d="fillPath" fill="url(#admit-trend-grad)"/>
+          <path :d="linePath" stroke="#f97316" stroke-width="1.5" fill="none"/>
+          <g>
+            <text v-for="t in xLabels" :key="'x'+t.idx"
+                  :x="t.x" :y="height-10" text-anchor="middle" font-size="9" fill="#94a3b8">#{{t.idx}}</text>
+          </g>
+          <g v-for="h in chartDots" :key="'h'+h.idx">
+            <line :x1="h.x" :x2="h.x" :y1="h.y" :y2="yScale(0)" stroke="#84cc16" stroke-dasharray="2,2" stroke-width="0.8" opacity="0.4"/>
+            <circle :cx="h.x" :cy="h.y" r="5" fill="#84cc16" stroke="white" stroke-width="1.5"/>
+            <text :x="h.x" :y="h.y-9" text-anchor="middle" font-size="9" font-weight="bold" fill="#3f6212">≥{{h.threshold}}%</text>
+          </g>
+        </svg>
+        <table class="w-full text-[11px] mt-2 border-collapse" :class="compact ? '' : ''">
+          <thead><tr class="bg-slate-100">
+            <th class="border px-2 py-1 text-center w-16">阈值</th>
+            <th class="border px-2 py-1 text-center w-12">序号</th>
+            <th class="border px-2 py-1 text-left">最先满足该阈值的志愿 (按 平行志愿 顺序最先命中)</th>
+            <th class="border px-2 py-1 text-center w-16">实际概率</th>
+          </tr></thead>
+          <tbody>
+            <tr v-for="h in thresholdHits" :key="'r'+h.threshold" class="border-t">
+              <td class="border px-2 py-1 text-center font-bold text-green-700">≥ {{h.threshold}}%</td>
+              <td class="border px-2 py-1 text-center font-bold">#{{h.idx}}</td>
+              <td class="border px-2 py-1">{{h.name}}<span v-if="h.isEst" class="text-[10px] text-amber-600 ml-1">(估)</span></td>
+              <td class="border px-2 py-1 text-center" :class="probColorClass(h.probPct/100)">{{h.probPct}}%</td>
+            </tr>
+            <tr v-if="!thresholdHits.length"><td colspan="4" class="border px-2 py-2 text-center text-slate-400">未达到 50% 阈值 — 所有志愿录取概率均偏低, 建议补充更稳的志愿</td></tr>
+          </tbody>
+        </table>
+        <div class="text-[10px] text-slate-400 mt-1 leading-snug">
+          解读: 平行志愿按 #1 → #{{points.length}} 顺序投档,
+          一旦命中即录取该志愿. 表内每行的 "实际概率" 是该阈值下你最有把握命中的志愿.
+          高阈值更保守 (优先保底); 低阈值更激进 (优先冲刺).
+        </div>
       </div>
     </div>
   `,
@@ -5698,4 +5877,5 @@ const __app = createApp({
   },
 });
 __app.config.globalProperties.probColorClass = probColorClass;
+__app.component("AdmitTrendChart", AdmitTrendChart);
 __app.mount("#app");
