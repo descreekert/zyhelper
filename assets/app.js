@@ -6214,8 +6214,11 @@ const __app = createApp({
       } else {
         userRank26 = ui.myRank;
       }
-      // anchor 的 25 位次 (用于 Δ 计算)
-      const anchorRank25 = rank25FromScore25(anchor25, scoreRank.value);
+      // anchor 的 25 位次 (用于 Δ 计算 + admit prob)
+      // useRefinedQuery 启用 + rankRefine 可用 → 直接用 R25_final (与 cwb / userRank25Anchor 保持一致)
+      const anchorRank25 = (ui.useRefinedQuery && refined && refined.R25_final != null)
+        ? refined.R25_final
+        : rank25FromScore25(anchor25, scoreRank.value);
       const byScore = [];
       for (let s = hi; s >= lo; s--) {
         const r = scoreMap.get(s) || { count: 0, enroll: 0, items: [] };
@@ -7388,10 +7391,13 @@ const __app = createApp({
     });
 
     // V9: 用户 25 等位位次 (录取率计算用)
-    //   priority: ui.analysisAnchor25 (手调) > equiv25(myScore) auto
+    //   priority: useRefinedQuery → rankRefine.R25_final > ui.analysisAnchor25 (手调) > equiv25(myScore) auto
     const userRank25Anchor = computed(() => {
       const sr = scoreRank.value;
       if (!sr) return null;
+      if (ui.useRefinedQuery && rankRefine.value && rankRefine.value.R25_final != null) {
+        return rankRefine.value.R25_final;
+      }
       let s25 = (ui.analysisAnchor25 > 0) ? ui.analysisAnchor25
               : (ui.myScore > 0 ? equiv25FromScore26(ui.myScore, sr) : null);
       if (!s25) return null;
