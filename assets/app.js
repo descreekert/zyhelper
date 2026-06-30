@@ -817,6 +817,20 @@ const ui = reactive({
   ...loadLS(LS_KEY_UI, {}),
 });
 
+// 迁移 v23: 清除 旧"一键应用" 留下的 analysisAnchor25 / analysisAnchorRank26 (现在由 useRefinedQuery + rankRefine 接管)
+// 没这个清理, 切换 用修正位次 toggle OFF 时, 旧 LS 值会 override autoAnchor, 看上去"没变化"
+if (!loadLS("zyhelper_migrated_v23", false)) {
+  ui.analysisAnchor25 = null;
+  ui.analysisAnchorRank26 = null;
+  saveLS("zyhelper_migrated_v23", true);
+}
+
+// 切换 useRefinedQuery 时 顺手清掉手调 anchor/rank, 避免上次留下的值挡道
+watch(() => ui.useRefinedQuery, () => {
+  ui.analysisAnchor25 = null;
+  ui.analysisAnchorRank26 = null;
+});
+
 watch(() => Array.from(store.favorites), v => saveLS(LS_KEY_FAV, v));
 watch(() => store.voluntaryLists, v => saveLS(LS_KEY_VOL_LISTS, v), { deep: true });
 watch(() => store.voluntaryPinned,  v => saveLS(LS_KEY_VOL_PINNED, v),  { deep: true });
