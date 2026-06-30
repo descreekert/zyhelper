@@ -2983,10 +2983,10 @@ const PrioritySettings = {
           <button @click="$emit('close')" class="text-2xl leading-none text-slate-400 hover:text-red-500">×</button>
         </div>
         <!-- Tabs (含 排序 group + 配置 group) -->
-        <div class="flex border-b overflow-x-auto">
+        <div class="flex border-b overflow-x-auto flex-shrink-0">
           <button v-for="t in tabs" :key="t.key"
                   @click="activeTab = t.key"
-                  class="px-4 py-2 text-sm border-b-2 whitespace-nowrap"
+                  class="px-4 py-2 text-sm border-b-2 whitespace-nowrap flex-shrink-0"
                   :class="activeTab === t.key ? 'border-blue-600 text-blue-600 font-bold' : 'border-transparent text-slate-500 hover:bg-slate-50'">
             {{ t.label }}<span v-if="t.group==='priority'"> ({{ editing[t.key].length }})</span>
           </button>

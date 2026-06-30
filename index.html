@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>2026 物理类志愿填报助手</title>
-  <link rel="stylesheet" href="assets/style.css?v=v19-settings-v2">
+  <link rel="stylesheet" href="assets/style.css?v=v19-tabs-fix">
   <script src="https://unpkg.com/vue@3.4.21/dist/vue.global.prod.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/chart.js@4.4.2/dist/chart.umd.js"></script>
@@ -114,9 +114,6 @@
         <!-- 第 2 行: 冲稳保按钮独占一行 + 数据信息 -->
         <div v-if="cwb" class="px-4 pb-2 flex items-center gap-2 flex-wrap text-xs whitespace-nowrap">
           <span class="text-slate-500 whitespace-nowrap">志愿分布:</span>
-          <button @click="ui.showPrioritySettings = true; ui.showMoreMenu = false"
-                  class="px-1.5 py-0.5 rounded border text-slate-500 hover:bg-slate-100"
-                  title="比例/冲稳保段/转专业/位次 调节 (⚙ 设置)">⚙</button>
           <button @click="onApplyTier('chong', cwb.ranges.chong)"
                   class="px-2 py-1 rounded border"
                   :class="activeTier === 'chong' ? 'bg-red-600 border-red-700 text-white ring-2 ring-red-300' : 'bg-red-50 border-red-200 hover:bg-red-100'"
@@ -544,6 +541,6 @@
     </template>
   </div>
 
-  <script src="assets/app.js?v=v19-settings-v2"></script>
+  <script src="assets/app.js?v=v19-tabs-fix"></script>
 </body>
 </html>
