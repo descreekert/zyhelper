@@ -790,6 +790,7 @@ const ui = reactive({
   showImportMenu: false,
   showExportMenu: false,
   showPrioritySettings: false,
+  settingsInitialTab: null,        // 'schools' / 'transfer' / 'refine' / 'ratio' / 'cwbseg' / null
   showVoluntaryAnalysis: false,
   analysisAnchor25: null,        // 用户手调 25 等位分 (null = 自动)
   analysisAnchorRank26: null,    // 用户手调 26 实际位次 (null = 用 myRank, 用户提到"按 8150 作实际预测")
@@ -2840,14 +2841,16 @@ const FavoritesBar = {
 // === 排序设置 modal ===
 const PrioritySettings = {
   props: ["priority", "overrides", "filters", "transferTargets", "transferAccepts", "samePosPct",
-          "totalVolunteers", "ratioChong", "ratioWen", "ratioBao", "cwbRanges"],
+          "totalVolunteers", "ratioChong", "ratioWen", "ratioBao", "cwbRanges", "rankRefine",
+          "initialTab"],
   emits: ["close", "save", "reset",
           "update-transfer-targets", "update-transfer-accepts", "reset-transfer-lists",
-          "set-pos",
+          "set-pos", "apply-refine",
           "update:totalVolunteers", "update:ratioChong", "update:ratioWen", "update:ratioBao",
           "update-cwb-ranges", "reset-cwb-ranges"],
   setup(props, { emit }) {
-    const activeTab = ref("schools");
+    const activeTab = ref(props.initialTab || "schools");
+    watch(() => props.initialTab, v => { if (v) activeTab.value = v; });
     const tabs = [
       { key: "schools",      label: "🏫 学校",   nameKey: "name", filterKey: "schoolPriorityRange", mode: "range", group: "priority" },
       { key: "cities",       label: "🏙 城市",   nameKey: "city", filterKey: "cityPriorityMax",     mode: "max",   group: "priority" },
@@ -3159,32 +3162,77 @@ const PrioritySettings = {
           <!-- ====== 位次精修 tab ====== -->
           <template v-else-if="activeTab === 'refine'">
             <div class="text-xs text-slate-500 mb-3">
-              <b>同分位置</b> 决定你在 26 同分人群中的相对位次. 默认 50% (中部).
-              调整后 主查询 (勾"用修正位次查询") 和 分析页 的 rankRefine 会跟着变.
+              <b>位次精修</b> 把 26 同分组位置 + 上方扩招 综合,推出更准确的 25 等位分 / 位次.
+              主查询 / 分析 任一开启"用修正位次"即生效.
             </div>
-            <div class="border rounded p-4 bg-slate-50 space-y-3 text-sm">
-              <div class="flex items-center gap-2">
-                <span class="font-bold text-slate-700 w-24">同分位置:</span>
-                <button @click="$emit('set-pos', 0)" class="px-2 py-1 border rounded text-xs"
-                        :class="samePosPct==0 ? 'bg-blue-500 text-white' : 'bg-white'">上</button>
-                <input type="range" min="0" max="100" step="1" :value="samePosPct"
-                       @input="$emit('set-pos', +$event.target.value)" class="flex-1 accent-blue-500"/>
-                <button @click="$emit('set-pos', 50)" class="px-2 py-1 border rounded text-xs"
-                        :class="samePosPct==50 ? 'bg-blue-500 text-white' : 'bg-white'">中</button>
-                <button @click="$emit('set-pos', 100)" class="px-2 py-1 border rounded text-xs"
-                        :class="samePosPct==100 ? 'bg-blue-500 text-white' : 'bg-white'">下</button>
-                <span class="font-bold text-blue-600 w-14 text-right">{{ samePosPct }}%</span>
-              </div>
-              <div class="text-xs text-slate-500 leading-relaxed">
-                <b>含义</b>: 26 同分人数通常 100-300, 你的实际位次 = 一分一段累计 + (同分人数 - 1) × 位置%.<br>
-                <b>0% (上部)</b>: 同分中你考得最好<br>
-                <b>50% (中部, 默认)</b>: 平均水平<br>
-                <b>100% (下部)</b>: 同分中你考得最差 (最保守)
-              </div>
-              <div v-if="!samePosPct" class="text-xs text-amber-600">提示: 设 0% (上部) 等价于 用一分一段累计原值, 最乐观.</div>
+            <div v-if="!rankRefine" class="text-amber-600 text-sm border rounded p-3 bg-amber-50">
+              请先在顶部填 26 分数 (有志愿单更佳),才能算位次精修.
             </div>
-            <div class="mt-3 text-xs text-slate-500">
-              详细的扩招修正 + 分段招生变化 表 在 <b>分析页 → 总览 → 位次精修 折叠面板</b> 里查看 + "一键应用".
+            <div v-else class="border rounded p-4 bg-slate-50 space-y-3 text-sm">
+              <!-- Step 1 -->
+              <div>
+                <div class="font-bold text-slate-600 mb-2">Step 1 — 同分位置</div>
+                <div class="flex items-center gap-2 pl-3">
+                  <button @click="$emit('set-pos', 0)" class="px-2 py-1 border rounded text-xs"
+                          :class="samePosPct==0 ? 'bg-blue-500 text-white' : 'bg-white'">上</button>
+                  <input type="range" min="0" max="100" step="1" :value="samePosPct"
+                         @input="$emit('set-pos', +$event.target.value)" class="flex-1 accent-blue-500"/>
+                  <button @click="$emit('set-pos', 50)" class="px-2 py-1 border rounded text-xs"
+                          :class="samePosPct==50 ? 'bg-blue-500 text-white' : 'bg-white'">中</button>
+                  <button @click="$emit('set-pos', 100)" class="px-2 py-1 border rounded text-xs"
+                          :class="samePosPct==100 ? 'bg-blue-500 text-white' : 'bg-white'">下</button>
+                  <span class="font-bold text-blue-600 w-14 text-right">{{ samePosPct }}%</span>
+                </div>
+                <div class="text-xs text-slate-600 mt-1 pl-3">
+                  26 同分 <b>{{rankRefine.cnt26}}</b> 人 → 26 位次 <b class="text-blue-700">{{rankRefine.R26}}</b>
+                  → 反查 25 等位 <b class="text-purple-700">{{rankRefine.Y0}}</b> / 位次 <b>{{rankRefine.R25_0}}</b>
+                </div>
+                <div class="text-[10px] text-slate-400 mt-1 pl-3">
+                  0% (上)=同分最强 · 50% (中,默认)=平均 · 100% (下)=同分最弱 (最保守)
+                </div>
+              </div>
+
+              <!-- Step 2 -->
+              <div class="pt-3 border-t">
+                <div class="font-bold text-slate-600 mb-2">Step 2 — 上方扩招 (effective_ref25 ≥ {{rankRefine.Y0}}, {{rankRefine.nPlanAbove}} plan)</div>
+                <div class="pl-3 space-y-1 text-xs">
+                  <div>
+                    ✓ 目标+可接受 ({{rankRefine.cntA}} plan):
+                    <b :class="rankRefine.sumA >= 0 ? 'text-red-600' : 'text-green-600'">{{rankRefine.sumA >= 0 ? '+' : ''}}{{rankRefine.sumA}}</b> 名额
+                    <span v-if="rankRefine.sumA_zwhz" class="text-[10px] text-slate-500">(含高分中外合作 {{rankRefine.sumA_zwhz >= 0 ? '+' : ''}}{{rankRefine.sumA_zwhz}})</span>
+                    × 1.0
+                  </div>
+                  <div>
+                    ⚪ 其他专业 ({{rankRefine.cntB}} plan):
+                    <span>{{rankRefine.sumB >= 0 ? '+' : ''}}{{rankRefine.sumB}}</span> × 0.2 =
+                    <b>{{(rankRefine.sumB * 0.2).toFixed(0)}}</b>
+                  </div>
+                  <div class="font-bold pt-1">
+                    上方累计 →
+                    <span :class="rankRefine.totalShift >= 0 ? 'text-green-700' : 'text-red-600'">
+                      位次 {{rankRefine.totalShift >= 0 ? '-' + rankRefine.totalShift.toFixed(0) : '+' + (-rankRefine.totalShift).toFixed(0)}}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Step 3 -->
+              <div class="pt-3 border-t flex items-center justify-between flex-wrap gap-2">
+                <div>
+                  <b class="text-slate-700">修正后:</b>
+                  25 等位 <b class="text-purple-700">{{rankRefine.Y_final}}</b>
+                  / 位次 <b class="text-purple-700">{{rankRefine.R25_final}}</b>
+                </div>
+                <button @click="$emit('apply-refine')"
+                        class="px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 font-bold">
+                  一键应用 → 分析页 anchor25 / 实际预测位次
+                </button>
+              </div>
+              <div class="text-[10px] text-slate-400">
+                说明: 中外合作 plan 用 effective_ref25 = ref25 -15 (民族班 -10);
+                修正口径 = 目标+可接受 × 1.0 + 其他 × 0.2.
+                "用修正位次查询" 开启时, 主查询和分析页 自动用 修正后值, 无需点 一键应用.
+              </div>
             </div>
           </template>
         </div>
@@ -3207,10 +3255,10 @@ const PrioritySettings = {
 // V9: 志愿分析 (普通视图 + 兼容 modal). prop.embedded=true 时去掉 modal 外壳
 const VoluntaryAnalysis = {
   props: ["analysis", "listName", "anchorOverride", "rankOverride", "expandedSchools", "expandedScores", "expandedTiers", "expandedEnrollScores", "expandedMajors", "expandedCities", "embedded",
-          "targets", "accepts", "ignoreHeat", "rankRefine", "samePosPct"],
+          "targets", "accepts", "ignoreHeat", "rankRefine", "samePosPct", "useRefinedQuery"],
   emits: ["close", "set-anchor", "set-rank", "toggle-school", "toggle-score", "toggle-tier", "toggle-enroll-score", "toggle-major", "toggle-city",
           "update-targets", "update-accepts", "reset-transfer-lists", "toggle-ignore-heat",
-          "set-pos", "apply-refine"],
+          "set-pos", "apply-refine", "open-settings-refine"],
   setup(props, { emit }) {
     const maxScoreCount = computed(() => {
       if (!props.analysis) return 1;
@@ -3309,10 +3357,16 @@ const VoluntaryAnalysis = {
                 <button @click="resetAnchor" class="ml-1 text-xs text-slate-400 hover:text-blue-600" title="自动 (= {{ analysis.autoAnchor25 }})">⟲</button>
               </span>
               <span title="加权录取比率用. 默认 = 输入框里的 myRank, 可调 (例 8324→8150)">
-                26 实际预测位次:
+                25 等位位次:
                 <input type="number" v-model="rankInput" @change="commitRank" @blur="commitRank"
                        class="w-20 border rounded px-1 py-0.5 text-center font-bold text-purple-700">
                 <button @click="resetRank" class="ml-1 text-xs text-slate-400 hover:text-purple-600" title="自动 (= myRank {{ analysis.myRank26 }})">⟲</button>
+              </span>
+              <!-- 用修正位次 启用时 显示状态 -->
+              <span v-if="useRefinedQuery && rankRefine"
+                    class="flex items-center gap-1 px-2 py-1 rounded text-xs bg-purple-50 border border-purple-300 text-purple-700">
+                <span class="font-bold">🎯 已用修正位次</span>
+                <span>(同分 {{samePosPct}}%)</span>
               </span>
               <span>志愿: <b class="text-blue-600">{{ analysis.total }}</b> 项</span>
               <span>26 计划: <b class="text-blue-600">{{ analysis.totalEnroll }}</b> 人</span>
@@ -3324,171 +3378,18 @@ const VoluntaryAnalysis = {
               </label>
             </div>
 
-            <!-- 位次精修 折叠面板 -->
-            <details v-if="rankRefine" class="border rounded mt-2">
-              <summary class="px-2 py-1.5 text-xs cursor-pointer hover:bg-slate-50 font-bold text-slate-700">
-                ▾ 位次精修 — 同分位置 + 上方扩招修正
-                <span class="ml-2 text-[10px] font-normal text-slate-500">
-                  当前修正后: 25 等位 {{rankRefine.Y_final}} / 位次 {{rankRefine.R25_final}}
+            <!-- 位次精修 摘要 (折叠面板已移到 ⚙ 设置 → 🎯 位次精修 tab) -->
+            <div v-if="rankRefine" class="border rounded mt-2 px-3 py-2 bg-slate-50 text-xs flex items-center justify-between flex-wrap gap-2">
+              <div>
+                <span class="text-slate-500">🎯 位次精修 (同分 {{samePosPct}}%):</span>
+                修正后 25 等位 <b class="text-purple-700">{{rankRefine.Y_final}}</b> / 位次 <b class="text-purple-700">{{rankRefine.R25_final}}</b>
+                <span class="text-[10px] text-slate-400 ml-2">
                   ({{rankRefine.totalShift >= 0 ? '位次 -' + rankRefine.totalShift.toFixed(0) : '位次 +' + (-rankRefine.totalShift).toFixed(0)}})
                 </span>
-              </summary>
-              <div class="p-3 bg-slate-50 text-xs space-y-2">
-                <!-- Step 1 -->
-                <div class="flex items-center gap-2 flex-wrap">
-                  <span class="font-bold text-slate-600 w-20">Step 1 同分位置:</span>
-                  <button @click="$emit('set-pos', 0)" class="px-2 py-0.5 border rounded text-[10px]" :class="samePosPct==0 ? 'bg-blue-500 text-white' : 'bg-white'">上</button>
-                  <input type="range" min="0" max="100" step="1" :value="samePosPct"
-                         @input="$emit('set-pos', +$event.target.value)" class="flex-1 accent-blue-500"/>
-                  <button @click="$emit('set-pos', 50)" class="px-2 py-0.5 border rounded text-[10px]" :class="samePosPct==50 ? 'bg-blue-500 text-white' : 'bg-white'">中</button>
-                  <button @click="$emit('set-pos', 100)" class="px-2 py-0.5 border rounded text-[10px]" :class="samePosPct==100 ? 'bg-blue-500 text-white' : 'bg-white'">下</button>
-                  <span class="font-bold text-blue-600 w-10 text-right">{{samePosPct}}%</span>
-                </div>
-                <div class="pl-22 text-slate-600">
-                  26 同分 <b>{{rankRefine.cnt26}}</b> 人 → 26 位次 <b class="text-blue-700">{{rankRefine.R26}}</b>
-                  → 反查 25 等位 <b class="text-purple-700">{{rankRefine.Y0}}</b> / 位次 <b>{{rankRefine.R25_0}}</b>
-                </div>
-
-                <!-- Step 2 -->
-                <div class="pt-2 border-t">
-                  <div class="font-bold text-slate-600 mb-1">Step 2 上方扩招 (effective_ref25 ≥ {{rankRefine.Y0}}, {{rankRefine.nPlanAbove}} 个 plan)</div>
-                  <div class="pl-3 space-y-0.5">
-                    <div>
-                      ✓ 目标+可接受 ({{rankRefine.cntA}} plan):
-                      <b :class="rankRefine.sumA >= 0 ? 'text-red-600' : 'text-green-600'">
-                        {{rankRefine.sumA >= 0 ? '+' : ''}}{{rankRefine.sumA}}
-                      </b> 名额
-                      <span v-if="rankRefine.sumA_zwhz" class="text-[10px] text-slate-500">
-                        (含 高分中外合作 {{rankRefine.sumA_zwhz >= 0 ? '+' : ''}}{{rankRefine.sumA_zwhz}})
-                      </span>
-                      × 1.0 权重
-                    </div>
-                    <div>
-                      ⚪ 其他专业 ({{rankRefine.cntB}} plan):
-                      <span>{{rankRefine.sumB >= 0 ? '+' : ''}}{{rankRefine.sumB}}</span> 名额 × 0.2 权重 =
-                      <b>{{(rankRefine.sumB * 0.2).toFixed(0)}}</b>
-                    </div>
-                    <div class="font-bold pt-1">
-                      上方累计 →
-                      <span :class="rankRefine.totalShift >= 0 ? 'text-green-700' : 'text-red-600'">
-                        位次 {{rankRefine.totalShift >= 0 ? '-' + rankRefine.totalShift.toFixed(0) : '+' + (-rankRefine.totalShift).toFixed(0)}}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <!-- Step 3 -->
-                <div class="pt-2 border-t flex items-center justify-between flex-wrap gap-2">
-                  <div>
-                    <b class="text-slate-700">修正后:</b>
-                    25 等位 <b class="text-purple-700">{{rankRefine.Y_final}}</b>
-                    / 位次 <b class="text-purple-700">{{rankRefine.R25_final}}</b>
-                  </div>
-                  <button @click="$emit('apply-refine')"
-                          class="px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 font-bold">
-                    一键应用 → 25 等位分 / 实际预测位次
-                  </button>
-                </div>
-                <div class="text-[10px] text-slate-400">
-                  说明: 中外合作 plan 用 effective_ref25 = ref25 -15 (民族班 -10),
-                  分数低的中外合作 自然不入"上方"; 修正口径 = 目标+可接受 全部 + 其他 × 0.2
-                </div>
-
-                <!-- 招生变化 详情 (二级 折叠) -->
-                <details class="border rounded mt-2">
-                  <summary class="px-2 py-1 text-xs cursor-pointer hover:bg-slate-100 font-bold text-slate-600">
-                    📈 25→26 招生变化 明细
-                    <span class="text-[10px] font-normal text-slate-500 ml-1">点击展开 (含分段统计 + 行可展开看具体 plan)</span>
-                  </summary>
-                  <div class="p-2 bg-white border-t text-[11px]">
-                    <!-- 区间 toggle -->
-                    <div class="flex items-center gap-1 mb-1 text-[10px]">
-                      <span class="text-slate-500">分段:</span>
-                      <button @click="ecBucket='b20'" class="px-2 py-0.5 rounded" :class="ecBucket==='b20' ? 'bg-blue-500 text-white' : 'bg-slate-100'">20 分一段</button>
-                      <button @click="ecBucket='b10'" class="px-2 py-0.5 rounded" :class="ecBucket==='b10' ? 'bg-blue-500 text-white' : 'bg-slate-100'">10 分一段</button>
-                      <button @click="ecBucket='all'" class="px-2 py-0.5 rounded" :class="ecBucket==='all' ? 'bg-blue-500 text-white' : 'bg-slate-100'">1 分</button>
-                      <span class="ml-2 text-slate-400">含 你的 25 等位分 ({{analysis.anchor25}}) 的段 紫底</span>
-                    </div>
-                    <table class="w-full text-[10px] border-collapse">
-                      <thead><tr class="bg-slate-100">
-                        <th class="border px-1 py-0.5 w-6"></th>
-                        <th class="border px-1 py-0.5 text-center">25 等位段</th>
-                        <th class="border px-1 py-0.5 text-center">25 招</th>
-                        <th class="border px-1 py-0.5 text-center">26 招</th>
-                        <th class="border px-1 py-0.5 text-center">Δ 总</th>
-                        <th class="border px-1 py-0.5 text-center" title="目标+可接受">Δ 目</th>
-                        <th class="border px-1 py-0.5 text-center" title="中外合作">Δ 中外</th>
-                        <th class="border px-1 py-0.5 text-center" title="其他">Δ 其他</th>
-                      </tr></thead>
-                      <tbody>
-                        <template v-for="(r, i) in currentEnrollChange" :key="ecBucket+'-'+(r.lo ?? r.score25)">
-                          <tr :class="(r.containsAnchor || r.score25 === analysis.anchor25) ? 'bg-purple-50' : ((r.lo ?? r.score25) >= analysis.anchor25 ? 'bg-blue-50' : '')">
-                            <td class="border px-1 py-0.5 text-center cursor-pointer text-slate-400"
-                                @click="ecExpanded[i] ? (ecExpanded[i]=false) : (ecExpanded[i]=true)">
-                              {{ ecExpanded[i] ? '▾' : '▸' }}
-                            </td>
-                            <td class="border px-1 py-0.5 text-center font-bold">
-                              <span v-if="r.lo != null">{{r.lo}}-{{r.hi}}</span>
-                              <span v-else>{{r.score25}}</span>
-                            </td>
-                            <td class="border px-1 py-0.5 text-center">{{r.n25 || '—'}}</td>
-                            <td class="border px-1 py-0.5 text-center">{{r.n26 || '—'}}</td>
-                            <td class="border px-1 py-0.5 text-center font-bold"
-                                :class="r.delta > 0 ? 'text-red-600' : r.delta < 0 ? 'text-green-700' : 'text-slate-400'">
-                              {{ r.delta > 0 ? '+' + r.delta : r.delta || '0' }}
-                            </td>
-                            <td class="border px-1 py-0.5 text-center">{{ r.delta_target > 0 ? '+' + r.delta_target : r.delta_target || '0' }}</td>
-                            <td class="border px-1 py-0.5 text-center text-slate-500">{{ r.delta_zwhz > 0 ? '+' + r.delta_zwhz : r.delta_zwhz || '0' }}</td>
-                            <td class="border px-1 py-0.5 text-center text-slate-400">{{ r.delta_other > 0 ? '+' + r.delta_other : r.delta_other || '0' }}</td>
-                          </tr>
-                          <tr v-if="ecExpanded[i]" class="bg-slate-50">
-                            <td colspan="8" class="border px-2 py-1">
-                              <table class="w-full text-[10px]">
-                                <thead><tr class="bg-slate-100">
-                                  <th class="px-1 py-0.5 text-left">学校 · 专业</th>
-                                  <th class="px-1 py-0.5 text-center w-8">25</th>
-                                  <th class="px-1 py-0.5 text-center w-8">26</th>
-                                  <th class="px-1 py-0.5 text-center w-8">Δ</th>
-                                  <th class="px-1 py-0.5 text-center w-10">标</th>
-                                </tr></thead>
-                                <tbody>
-                                  <!-- 区间桶 用 r.rows 平铺出所有 plan; 单 score 桶用 r.plans -->
-                                  <template v-for="pl in (r.rows ? r.rows.flatMap(rr => rr.plans) : r.plans)" :key="'pl-'+pl.schoolName+'-'+pl.majorName">
-                                    <tr class="border-t">
-                                      <td class="px-1 py-0.5">
-                                        <span class="font-bold">{{pl.schoolName}}</span>
-                                        <span class="text-slate-500"> · {{pl.majorName}}</span>
-                                      </td>
-                                      <td class="px-1 py-0.5 text-center">{{pl.n25 || '—'}}</td>
-                                      <td class="px-1 py-0.5 text-center">{{pl.n26 || '—'}}</td>
-                                      <td class="px-1 py-0.5 text-center font-bold"
-                                          :class="pl.delta > 0 ? 'text-red-600' : pl.delta < 0 ? 'text-green-700' : 'text-slate-400'">
-                                        {{pl.delta > 0 ? '+' + pl.delta : pl.delta || '0'}}
-                                      </td>
-                                      <td class="px-1 py-0.5 text-center text-[9px]">
-                                        <span v-if="pl.isNew" class="text-red-600 mr-0.5">新</span>
-                                        <span v-if="pl.isStopped" class="text-slate-500 mr-0.5">停</span>
-                                        <span v-if="pl.isZ" class="text-blue-600 mr-0.5">外</span>
-                                        <span v-if="pl.isTarget" class="text-green-700">目</span>
-                                      </td>
-                                    </tr>
-                                  </template>
-                                </tbody>
-                              </table>
-                            </td>
-                          </tr>
-                        </template>
-                      </tbody>
-                    </table>
-                    <div class="text-[10px] text-slate-400 mt-1">
-                      合计: 25 招 {{ totalEnroll25 }} → 26 招 {{ totalEnroll26 }}
-                      (Δ {{ totalEnroll26 - totalEnroll25 > 0 ? '+' : '' }}{{ totalEnroll26 - totalEnroll25 }})
-                      · 标: 新=新增 plan / 停=26 停招 / 外=中外合作 / 目=用户目标专业
-                    </div>
-                  </div>
-                </details>
               </div>
-            </details>
+              <button @click="$emit('open-settings-refine')"
+                      class="text-xs text-blue-600 hover:underline">⚙ 调整 / 应用</button>
+            </div>
           </div>
             <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 mt-2 text-xs">
               <div v-for="k in ['chong','wen','bao','out']" :key="k"
@@ -3858,6 +3759,8 @@ const VoluntaryAnalysis = {
           </section>
           </div><!-- /grid: 按分数 + 按学校 -->
 
+          <!-- 按 报考专业 + 城市 聚合 并排 -->
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <!-- 按 报考专业 聚合 -->
           <section v-if="analysis.byMajor && analysis.byMajor.length">
             <div class="text-xs text-slate-500 mb-1">每个报考专业 ({{ analysis.byMajor.length }} 个) — 点行展开详情. 主名收敛 (机械设计制造及其自动化(卓越) → 机械设计制造及其自动化)</div>
@@ -4031,7 +3934,10 @@ const VoluntaryAnalysis = {
               </table>
             </div>
           </section>
+          </div><!-- /grid: 报考专业 + 城市 -->
 
+          <!-- 招生维度聚合 + 25→26 招生变化 并排 -->
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <!-- 招生维度聚合 (2026 全体 plans, 不限志愿单) -->
           <section v-if="analysis.enrollByScore25 && analysis.enrollByScore25.length">
             <div class="text-xs text-slate-500 mb-1">
@@ -4109,6 +4015,96 @@ const VoluntaryAnalysis = {
               </table>
             </div>
           </section>
+
+          <!-- 25→26 招生变化 (独立 section) -->
+          <section v-if="analysis.enrollChangeByScore25 && analysis.enrollChangeByScore25.length" class="overflow-hidden">
+            <div class="text-xs text-slate-500 mb-1">
+              📈 25→26 招生变化 (按 25 等位分 分段)
+              <span class="ml-2">
+                <button @click="ecBucket='b20'" class="px-1.5 py-0.5 rounded text-[10px]" :class="ecBucket==='b20' ? 'bg-blue-500 text-white' : 'bg-slate-100'">20 分</button>
+                <button @click="ecBucket='b10'" class="px-1.5 py-0.5 rounded text-[10px]" :class="ecBucket==='b10' ? 'bg-blue-500 text-white' : 'bg-slate-100'">10 分</button>
+                <button @click="ecBucket='all'" class="px-1.5 py-0.5 rounded text-[10px]" :class="ecBucket==='all' ? 'bg-blue-500 text-white' : 'bg-slate-100'">1 分</button>
+              </span>
+              <span class="ml-2 text-slate-400">含 你的 25 等位分 ({{analysis.anchor25}}) 的段 紫底</span>
+            </div>
+            <div class="border rounded bg-white" style="max-height:420px;overflow-y:auto">
+              <table class="w-full text-[11px]">
+                <thead class="sticky top-0 bg-slate-100 z-10">
+                  <tr>
+                    <th class="px-1 py-1 w-6"></th>
+                    <th class="px-1 py-1 text-center">25 等位段</th>
+                    <th class="px-1 py-1 text-center">25 招</th>
+                    <th class="px-1 py-1 text-center">26 招</th>
+                    <th class="px-1 py-1 text-center">Δ 总</th>
+                    <th class="px-1 py-1 text-center" title="目标+可接受">Δ 目</th>
+                    <th class="px-1 py-1 text-center" title="中外合作">Δ 中外</th>
+                    <th class="px-1 py-1 text-center" title="其他">Δ 其他</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template v-for="(r, i) in currentEnrollChange" :key="ecBucket+'-'+(r.lo ?? r.score25)">
+                    <tr :class="(r.containsAnchor || r.score25 === analysis.anchor25) ? 'bg-purple-50' : ((r.lo ?? r.score25) >= analysis.anchor25 ? 'bg-blue-50' : '')">
+                      <td class="border-t px-1 py-0.5 text-center cursor-pointer text-slate-400"
+                          @click="ecExpanded[i] ? (ecExpanded[i]=false) : (ecExpanded[i]=true)">
+                        {{ ecExpanded[i] ? '▾' : '▸' }}
+                      </td>
+                      <td class="border-t px-1 py-0.5 text-center font-bold">
+                        <span v-if="r.lo != null">{{r.lo}}-{{r.hi}}</span>
+                        <span v-else>{{r.score25}}</span>
+                      </td>
+                      <td class="border-t px-1 py-0.5 text-center">{{r.n25 || '—'}}</td>
+                      <td class="border-t px-1 py-0.5 text-center">{{r.n26 || '—'}}</td>
+                      <td class="border-t px-1 py-0.5 text-center font-bold"
+                          :class="r.delta > 0 ? 'text-red-600' : r.delta < 0 ? 'text-green-700' : 'text-slate-400'">
+                        {{ r.delta > 0 ? '+' + r.delta : r.delta || '0' }}
+                      </td>
+                      <td class="border-t px-1 py-0.5 text-center">{{ r.delta_target > 0 ? '+' + r.delta_target : r.delta_target || '0' }}</td>
+                      <td class="border-t px-1 py-0.5 text-center text-slate-500">{{ r.delta_zwhz > 0 ? '+' + r.delta_zwhz : r.delta_zwhz || '0' }}</td>
+                      <td class="border-t px-1 py-0.5 text-center text-slate-400">{{ r.delta_other > 0 ? '+' + r.delta_other : r.delta_other || '0' }}</td>
+                    </tr>
+                    <tr v-if="ecExpanded[i]" class="bg-slate-50">
+                      <td colspan="8" class="border-t px-2 py-1">
+                        <table class="w-full text-[10px]">
+                          <thead><tr class="bg-slate-100">
+                            <th class="px-1 py-0.5 text-left">学校 · 专业</th>
+                            <th class="px-1 py-0.5 text-center w-8">25</th>
+                            <th class="px-1 py-0.5 text-center w-8">26</th>
+                            <th class="px-1 py-0.5 text-center w-8">Δ</th>
+                            <th class="px-1 py-0.5 text-center w-10">标</th>
+                          </tr></thead>
+                          <tbody>
+                            <template v-for="pl in (r.rows ? r.rows.flatMap(rr => rr.plans) : r.plans)" :key="'pl-'+pl.schoolName+'-'+pl.majorName">
+                              <tr class="border-t">
+                                <td class="px-1 py-0.5"><b>{{pl.schoolName}}</b> <span class="text-slate-500">· {{pl.majorName}}</span></td>
+                                <td class="px-1 py-0.5 text-center">{{pl.n25 || '—'}}</td>
+                                <td class="px-1 py-0.5 text-center">{{pl.n26 || '—'}}</td>
+                                <td class="px-1 py-0.5 text-center font-bold"
+                                    :class="pl.delta > 0 ? 'text-red-600' : pl.delta < 0 ? 'text-green-700' : 'text-slate-400'">
+                                  {{pl.delta > 0 ? '+' + pl.delta : pl.delta || '0'}}
+                                </td>
+                                <td class="px-1 py-0.5 text-center text-[9px]">
+                                  <span v-if="pl.isNew" class="text-red-600 mr-0.5">新</span>
+                                  <span v-if="pl.isStopped" class="text-slate-500 mr-0.5">停</span>
+                                  <span v-if="pl.isZ" class="text-blue-600 mr-0.5">外</span>
+                                  <span v-if="pl.isTarget" class="text-green-700">目</span>
+                                </td>
+                              </tr>
+                            </template>
+                          </tbody>
+                        </table>
+                      </td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+            <div class="text-[10px] text-slate-400 mt-1">
+              合计: 25 招 {{ totalEnroll25 }} → 26 招 {{ totalEnroll26 }}
+              (Δ {{ totalEnroll26 - totalEnroll25 > 0 ? '+' : '' }}{{ totalEnroll26 - totalEnroll25 }})
+              · 标: 新=新增 / 停=停招 / 外=中外合作 / 目=目标专业
+            </div>
+          </section>
+          </div><!-- /grid: 招生维度 + 招生变化 -->
 
           <!-- Insights -->
           <section v-if="analysis.insights.length">
@@ -5886,8 +5882,19 @@ const __app = createApp({
     const voluntaryAnalysis = computed(() => {
       if (!scoreRank.value || !ui.myScore) return null;
       const autoAnchor = equiv25FromScore26(ui.myScore, scoreRank.value);
-      const anchor25 = (ui.analysisAnchor25 && ui.analysisAnchor25 > 0)
-        ? ui.analysisAnchor25 : autoAnchor;
+      // anchor25 优先级:
+      //   1. ui.useRefinedQuery 开 + rankRefine 有效 → 用 rankRefine.Y_final (修正后)
+      //   2. ui.analysisAnchor25 (用户手调)
+      //   3. autoAnchor (默认从 26 分自动算)
+      const refined = rankRefine.value;
+      let anchor25;
+      if (ui.useRefinedQuery && refined && refined.Y_final) {
+        anchor25 = refined.Y_final;
+      } else if (ui.analysisAnchor25 && ui.analysisAnchor25 > 0) {
+        anchor25 = ui.analysisAnchor25;
+      } else {
+        anchor25 = autoAnchor;
+      }
       if (!anchor25) return null;
       const m = planByIdMap.value;
       const items = [];
@@ -5956,8 +5963,15 @@ const __app = createApp({
         cum26Map.set(sc, cum);
       }
       // 用户 26 位次 anchor (可手调, 例: 用户 myRank=8324 但想用 8150 做实际预测)
-      const userRank26 = (ui.analysisAnchorRank26 && ui.analysisAnchorRank26 > 0)
-        ? ui.analysisAnchorRank26 : ui.myRank;
+      // 优先级: useRefinedQuery → rankRefine.R25_final / analysisAnchorRank26 / ui.myRank
+      let userRank26;
+      if (ui.useRefinedQuery && refined && refined.R25_final) {
+        userRank26 = refined.R25_final;
+      } else if (ui.analysisAnchorRank26 && ui.analysisAnchorRank26 > 0) {
+        userRank26 = ui.analysisAnchorRank26;
+      } else {
+        userRank26 = ui.myRank;
+      }
       // anchor 的 25 位次 (用于 Δ 计算)
       const anchorRank25 = rank25FromScore25(anchor25, scoreRank.value);
       const byScore = [];

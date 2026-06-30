@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>2026 物理类志愿填报助手</title>
-  <link rel="stylesheet" href="assets/style.css?v=v19-pos-quick">
+  <link rel="stylesheet" href="assets/style.css?v=v20-refine-restructure">
   <script src="https://unpkg.com/vue@3.4.21/dist/vue.global.prod.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/chart.js@4.4.2/dist/chart.umd.js"></script>
@@ -59,6 +59,20 @@
             v-model:equiv-source="ui.equivSource"
             @apply-tier="onApplyTier"
           ></score-tool>
+
+          <!-- 修正后 26 等价分/位次 (启用 用修正位次 时显示) -->
+          <div v-if="ui.useRefinedQuery && rankRefine" class="text-xs flex items-center gap-1 bg-purple-50 border border-purple-200 rounded px-2 py-1">
+            <span class="text-purple-700 font-bold">🎯 修正:</span>
+            <span class="text-slate-600">等价 26 分</span>
+            <b class="text-purple-700">{{ refinedScore26 }}</b>
+            <span class="text-slate-400">/</span>
+            <span class="text-slate-600">25 等位</span>
+            <b class="text-purple-700">{{ rankRefine.Y_final }}</b>
+            <span class="text-slate-400">/</span>
+            <span class="text-slate-600">位次</span>
+            <b class="text-purple-700">{{ rankRefine.R25_final }}</b>
+            <span class="text-[10px] text-slate-400 ml-1">(同分 {{ ui.samePosPct }}%)</span>
+          </div>
 
           <div class="flex-1"></div>
 
@@ -416,6 +430,7 @@
             :ignore-heat="ui.analysisIgnoreHeat"
             :rank-refine="rankRefine"
             :same-pos-pct="ui.samePosPct"
+            :use-refined-query="ui.useRefinedQuery"
             @close="store.viewMode = 'voluntary'"
             @update-targets="store.transferTargets = $event"
             @update-accepts="store.transferAccepts = $event"
@@ -423,6 +438,7 @@
             @toggle-ignore-heat="ui.analysisIgnoreHeat = $event"
             @set-pos="setSamePosPct($event)"
             @apply-refine="applyRankRefine()"
+            @open-settings-refine="ui.settingsInitialTab = 'refine'; ui.showPrioritySettings = true"
             @set-anchor="v => ui.analysisAnchor25 = v"
             @set-rank="v => ui.analysisAnchorRank26 = v"
             @toggle-school="n => {
@@ -526,13 +542,16 @@
         :ratio-wen="ui.ratioWen"
         :ratio-bao="ui.ratioBao"
         :cwb-ranges="store.cwbRanges"
-        @close="ui.showPrioritySettings = false"
+        :rank-refine="rankRefine"
+        :initial-tab="ui.settingsInitialTab"
+        @close="ui.showPrioritySettings = false; ui.settingsInitialTab = null"
         @save="savePriorityOverrides"
         @reset="resetPriorityOverrides"
         @update-transfer-targets="store.transferTargets = $event"
         @update-transfer-accepts="store.transferAccepts = $event"
         @reset-transfer-lists="resetTransferLists()"
         @set-pos="setSamePosPct($event)"
+        @apply-refine="applyRankRefine()"
         @update:totalVolunteers="ui.totalVolunteers = $event"
         @update:ratioChong="ui.ratioChong = $event"
         @update:ratioWen="ui.ratioWen = $event"
@@ -556,6 +575,6 @@
     </template>
   </div>
 
-  <script src="assets/app.js?v=v19-pos-quick"></script>
+  <script src="assets/app.js?v=v20-refine-restructure"></script>
 </body>
 </html>
