@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>2026 物理类志愿填报助手</title>
-  <link rel="stylesheet" href="assets/style.css?v=v17-zwhz-adj">
+  <link rel="stylesheet" href="assets/style.css?v=v18-rank-refine">
   <script src="https://unpkg.com/vue@3.4.21/dist/vue.global.prod.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/chart.js@4.4.2/dist/chart.umd.js"></script>
@@ -440,11 +440,15 @@
             :targets="store.transferTargets"
             :accepts="store.transferAccepts"
             :ignore-heat="ui.analysisIgnoreHeat"
+            :rank-refine="rankRefine"
+            :same-pos-pct="ui.samePosPct"
             @close="store.viewMode = 'voluntary'"
             @update-targets="store.transferTargets = $event"
             @update-accepts="store.transferAccepts = $event"
             @reset-transfer-lists="resetTransferLists()"
             @toggle-ignore-heat="ui.analysisIgnoreHeat = $event"
+            @set-pos="setSamePosPct($event)"
+            @apply-refine="applyRankRefine()"
             @set-anchor="v => ui.analysisAnchor25 = v"
             @set-rank="v => ui.analysisAnchorRank26 = v"
             @toggle-school="n => {
@@ -560,6 +564,6 @@
     </template>
   </div>
 
-  <script src="assets/app.js?v=v17-zwhz-adj"></script>
+  <script src="assets/app.js?v=v18-rank-refine"></script>
 </body>
 </html>

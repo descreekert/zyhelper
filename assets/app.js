@@ -788,6 +788,7 @@ const ui = reactive({
   analysisExpandedMajors: [],    // 报考专业行展开 (mainName 列表)
   analysisExpandedCities: [],    // 城市行展开
   analysisIgnoreHeat: false,     // 分析页: 录取率忽略专业热度调整
+  samePosPct: 50,                // 同分组位置 (0=上 100=下, 默认 中)
   detailPlan: null,
   myScore: 0,
   myRank: 0,
@@ -3009,9 +3010,10 @@ const PrioritySettings = {
 // V9: 志愿分析 (普通视图 + 兼容 modal). prop.embedded=true 时去掉 modal 外壳
 const VoluntaryAnalysis = {
   props: ["analysis", "listName", "anchorOverride", "rankOverride", "expandedSchools", "expandedScores", "expandedTiers", "expandedEnrollScores", "expandedMajors", "expandedCities", "embedded",
-          "targets", "accepts", "ignoreHeat"],
+          "targets", "accepts", "ignoreHeat", "rankRefine", "samePosPct"],
   emits: ["close", "set-anchor", "set-rank", "toggle-school", "toggle-score", "toggle-tier", "toggle-enroll-score", "toggle-major", "toggle-city",
-          "update-targets", "update-accepts", "reset-transfer-lists", "toggle-ignore-heat"],
+          "update-targets", "update-accepts", "reset-transfer-lists", "toggle-ignore-heat",
+          "set-pos", "apply-refine"],
   setup(props, { emit }) {
     const maxScoreCount = computed(() => {
       if (!props.analysis) return 1;
@@ -3113,6 +3115,79 @@ const VoluntaryAnalysis = {
                 <span>🔥 忽略专业热度</span>
               </label>
             </div>
+
+            <!-- 位次精修 折叠面板 -->
+            <details v-if="rankRefine" class="border rounded mt-2">
+              <summary class="px-2 py-1.5 text-xs cursor-pointer hover:bg-slate-50 font-bold text-slate-700">
+                ▾ 位次精修 — 同分位置 + 上方扩招修正
+                <span class="ml-2 text-[10px] font-normal text-slate-500">
+                  当前修正后: 25 等位 {{rankRefine.Y_final}} / 位次 {{rankRefine.R25_final}}
+                  ({{rankRefine.totalShift >= 0 ? '位次 -' + rankRefine.totalShift.toFixed(0) : '位次 +' + (-rankRefine.totalShift).toFixed(0)}})
+                </span>
+              </summary>
+              <div class="p-3 bg-slate-50 text-xs space-y-2">
+                <!-- Step 1 -->
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span class="font-bold text-slate-600 w-20">Step 1 同分位置:</span>
+                  <button @click="$emit('set-pos', 0)" class="px-2 py-0.5 border rounded text-[10px]" :class="samePosPct==0 ? 'bg-blue-500 text-white' : 'bg-white'">上</button>
+                  <input type="range" min="0" max="100" step="1" :value="samePosPct"
+                         @input="$emit('set-pos', +$event.target.value)" class="flex-1 accent-blue-500"/>
+                  <button @click="$emit('set-pos', 50)" class="px-2 py-0.5 border rounded text-[10px]" :class="samePosPct==50 ? 'bg-blue-500 text-white' : 'bg-white'">中</button>
+                  <button @click="$emit('set-pos', 100)" class="px-2 py-0.5 border rounded text-[10px]" :class="samePosPct==100 ? 'bg-blue-500 text-white' : 'bg-white'">下</button>
+                  <span class="font-bold text-blue-600 w-10 text-right">{{samePosPct}}%</span>
+                </div>
+                <div class="pl-22 text-slate-600">
+                  26 同分 <b>{{rankRefine.cnt26}}</b> 人 → 26 位次 <b class="text-blue-700">{{rankRefine.R26}}</b>
+                  → 反查 25 等位 <b class="text-purple-700">{{rankRefine.Y0}}</b> / 位次 <b>{{rankRefine.R25_0}}</b>
+                </div>
+
+                <!-- Step 2 -->
+                <div class="pt-2 border-t">
+                  <div class="font-bold text-slate-600 mb-1">Step 2 上方扩招 (effective_ref25 ≥ {{rankRefine.Y0}}, {{rankRefine.nPlanAbove}} 个 plan)</div>
+                  <div class="pl-3 space-y-0.5">
+                    <div>
+                      ✓ 目标+可接受 ({{rankRefine.cntA}} plan):
+                      <b :class="rankRefine.sumA >= 0 ? 'text-red-600' : 'text-green-600'">
+                        {{rankRefine.sumA >= 0 ? '+' : ''}}{{rankRefine.sumA}}
+                      </b> 名额
+                      <span v-if="rankRefine.sumA_zwhz" class="text-[10px] text-slate-500">
+                        (含 高分中外合作 {{rankRefine.sumA_zwhz >= 0 ? '+' : ''}}{{rankRefine.sumA_zwhz}})
+                      </span>
+                      × 1.0 权重
+                    </div>
+                    <div>
+                      ⚪ 其他专业 ({{rankRefine.cntB}} plan):
+                      <span>{{rankRefine.sumB >= 0 ? '+' : ''}}{{rankRefine.sumB}}</span> 名额 × 0.2 权重 =
+                      <b>{{(rankRefine.sumB * 0.2).toFixed(0)}}</b>
+                    </div>
+                    <div class="font-bold pt-1">
+                      上方累计 →
+                      <span :class="rankRefine.totalShift >= 0 ? 'text-green-700' : 'text-red-600'">
+                        位次 {{rankRefine.totalShift >= 0 ? '-' + rankRefine.totalShift.toFixed(0) : '+' + (-rankRefine.totalShift).toFixed(0)}}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Step 3 -->
+                <div class="pt-2 border-t flex items-center justify-between flex-wrap gap-2">
+                  <div>
+                    <b class="text-slate-700">修正后:</b>
+                    25 等位 <b class="text-purple-700">{{rankRefine.Y_final}}</b>
+                    / 位次 <b class="text-purple-700">{{rankRefine.R25_final}}</b>
+                  </div>
+                  <button @click="$emit('apply-refine')"
+                          class="px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 font-bold">
+                    一键应用 → anchor25 / 实际预测位次
+                  </button>
+                </div>
+                <div class="text-[10px] text-slate-400">
+                  说明: 中外合作 plan 用 effective_ref25 = ref25 -15 (民族班 -10),
+                  分数低的中外合作 自然不入"上方"; 修正口径 = 目标+可接受 全部 + 其他 × 0.2
+                </div>
+              </div>
+            </details>
+          </div>
             <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 mt-2 text-xs">
               <div v-for="k in ['chong','wen','bao','out']" :key="k"
                    :class="[
@@ -3651,6 +3726,66 @@ const VoluntaryAnalysis = {
                     </tr>
                   </template>
                 </tbody>
+              </table>
+            </div>
+          </section>
+
+          <!-- 25→26 招生变化 (按 25 等位分 1 分一档) -->
+          <section v-if="analysis.enrollChangeByScore25 && analysis.enrollChangeByScore25.length">
+            <div class="text-xs text-slate-500 mb-1">
+              📈 25→26 招生变化 (按 25 等位分聚合, {{ analysis.enrollChangeByScore25.length }} 个分段) — 用户上方 (≥ anchor25 {{ analysis.anchor25 }}) 用蓝底高亮
+            </div>
+            <div class="border rounded bg-white overflow-x-auto" style="max-height:400px;overflow-y:auto">
+              <table class="w-full text-[11px]">
+                <thead class="sticky top-0 bg-slate-100 z-10">
+                  <tr>
+                    <th class="px-2 py-1 text-center w-14">25 等位</th>
+                    <th class="px-2 py-1 text-center w-12">25 招</th>
+                    <th class="px-2 py-1 text-center w-12">26 招</th>
+                    <th class="px-2 py-1 text-center w-14">Δ 总</th>
+                    <th class="px-2 py-1 text-center w-14" title="目标+可接受 专业">Δ 目标</th>
+                    <th class="px-2 py-1 text-center w-14" title="中外合作 单列">Δ 中外</th>
+                    <th class="px-2 py-1 text-center w-14" title="不在目标 也不在可接受">Δ 其他</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="r in analysis.enrollChangeByScore25" :key="r.score25"
+                      :class="r.score25 >= analysis.anchor25 ? 'bg-blue-50' : ''">
+                    <td class="border-t px-2 py-0.5 text-center font-bold"
+                        :class="r.score25 == analysis.anchor25 ? 'text-purple-700' : ''">{{ r.score25 }}</td>
+                    <td class="border-t px-2 py-0.5 text-center">{{ r.n25 || '—' }}</td>
+                    <td class="border-t px-2 py-0.5 text-center">{{ r.n26 || '—' }}</td>
+                    <td class="border-t px-2 py-0.5 text-center font-bold"
+                        :class="r.delta > 0 ? 'text-red-600' : r.delta < 0 ? 'text-green-700' : 'text-slate-400'">
+                      {{ r.delta > 0 ? '+' + r.delta : r.delta || '0' }}
+                    </td>
+                    <td class="border-t px-2 py-0.5 text-center"
+                        :class="r.delta_target > 0 ? 'text-red-600' : r.delta_target < 0 ? 'text-green-700' : 'text-slate-400'">
+                      {{ r.delta_target > 0 ? '+' + r.delta_target : r.delta_target || '0' }}
+                    </td>
+                    <td class="border-t px-2 py-0.5 text-center"
+                        :class="r.delta_zwhz > 0 ? 'text-red-600' : r.delta_zwhz < 0 ? 'text-green-700' : 'text-slate-400'">
+                      {{ r.delta_zwhz > 0 ? '+' + r.delta_zwhz : r.delta_zwhz || '0' }}
+                    </td>
+                    <td class="border-t px-2 py-0.5 text-center text-slate-500">
+                      {{ r.delta_other > 0 ? '+' + r.delta_other : r.delta_other || '0' }}
+                    </td>
+                  </tr>
+                </tbody>
+                <tfoot class="bg-slate-50 font-bold sticky bottom-0">
+                  <tr>
+                    <td class="border-t px-2 py-1">合计</td>
+                    <td class="border-t px-2 py-1 text-center">{{ analysis.enrollChangeByScore25.reduce((s,r)=>s+r.n25,0) }}</td>
+                    <td class="border-t px-2 py-1 text-center">{{ analysis.enrollChangeByScore25.reduce((s,r)=>s+r.n26,0) }}</td>
+                    <td class="border-t px-2 py-1 text-center"
+                        :class="(analysis.enrollChangeByScore25.reduce((s,r)=>s+r.delta,0)) > 0 ? 'text-red-600' : 'text-green-700'">
+                      {{ (analysis.enrollChangeByScore25.reduce((s,r)=>s+r.delta,0)) > 0 ? '+' : '' }}{{ analysis.enrollChangeByScore25.reduce((s,r)=>s+r.delta,0) }}
+                    </td>
+                    <td class="border-t px-2 py-1 text-center">{{ analysis.enrollChangeByScore25.reduce((s,r)=>s+r.delta_target,0) > 0 ? '+' : '' }}{{ analysis.enrollChangeByScore25.reduce((s,r)=>s+r.delta_target,0) }}</td>
+                    <td class="border-t px-2 py-1 text-center">{{ analysis.enrollChangeByScore25.reduce((s,r)=>s+r.delta_zwhz,0) > 0 ? '+' : '' }}{{ analysis.enrollChangeByScore25.reduce((s,r)=>s+r.delta_zwhz,0) }}</td>
+                    <td class="border-t px-2 py-1 text-center text-slate-500">{{ analysis.enrollChangeByScore25.reduce((s,r)=>s+r.delta_other,0) > 0 ? '+' : '' }}{{ analysis.enrollChangeByScore25.reduce((s,r)=>s+r.delta_other,0) }}</td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
           </section>
@@ -4478,9 +4613,46 @@ const VoluntaryReport = {
           </div>
         </section>
 
-        <!-- 15. 转专业风险扫描 -->
+        <!-- 15. 25→26 招生变化 -->
+        <section v-if="analysis.enrollChangeByScore25 && analysis.enrollChangeByScore25.length"
+                 class="mb-6 page-break-before">
+          <h2 class="text-lg font-bold mb-2 bg-blue-50 px-2 py-1 border-l-4 border-blue-600">15. 25→26 招生变化 (按 25 等位分)</h2>
+          <div class="text-[10px] text-slate-500 mb-1">
+            合计: 25 招 {{ analysis.enrollChangeByScore25.reduce((s,r)=>s+r.n25,0) }} → 26 招 {{ analysis.enrollChangeByScore25.reduce((s,r)=>s+r.n26,0) }}
+            (Δ {{ analysis.enrollChangeByScore25.reduce((s,r)=>s+r.delta,0) > 0 ? '+' : '' }}{{ analysis.enrollChangeByScore25.reduce((s,r)=>s+r.delta,0) }};
+            目标 Δ {{ analysis.enrollChangeByScore25.reduce((s,r)=>s+r.delta_target,0) > 0 ? '+' : '' }}{{ analysis.enrollChangeByScore25.reduce((s,r)=>s+r.delta_target,0) }};
+            中外 Δ {{ analysis.enrollChangeByScore25.reduce((s,r)=>s+r.delta_zwhz,0) > 0 ? '+' : '' }}{{ analysis.enrollChangeByScore25.reduce((s,r)=>s+r.delta_zwhz,0) }})
+            · 用户 anchor25 {{ analysis.anchor25 }} 以上的分段 加灰底
+          </div>
+          <table class="w-full text-[10px] border-collapse">
+            <thead><tr class="bg-slate-100">
+              <th class="border px-1 py-1">25 等位</th>
+              <th class="border px-1 py-1">25 招</th>
+              <th class="border px-1 py-1">26 招</th>
+              <th class="border px-1 py-1">Δ 总</th>
+              <th class="border px-1 py-1">Δ 目标</th>
+              <th class="border px-1 py-1">Δ 中外</th>
+              <th class="border px-1 py-1">Δ 其他</th>
+            </tr></thead>
+            <tbody>
+              <tr v-for="r in analysis.enrollChangeByScore25" :key="'ec'+r.score25"
+                  :class="r.score25 >= analysis.anchor25 ? 'bg-slate-100' : ''">
+                <td class="border px-1 py-0.5 text-center font-bold">{{ r.score25 }}</td>
+                <td class="border px-1 py-0.5 text-center">{{ r.n25 || '—' }}</td>
+                <td class="border px-1 py-0.5 text-center">{{ r.n26 || '—' }}</td>
+                <td class="border px-1 py-0.5 text-center font-bold"
+                    :class="r.delta > 0 ? 'text-red-600' : r.delta < 0 ? 'text-green-700' : ''">{{ r.delta > 0 ? '+' + r.delta : r.delta || '0' }}</td>
+                <td class="border px-1 py-0.5 text-center">{{ r.delta_target > 0 ? '+' + r.delta_target : r.delta_target || '0' }}</td>
+                <td class="border px-1 py-0.5 text-center">{{ r.delta_zwhz > 0 ? '+' + r.delta_zwhz : r.delta_zwhz || '0' }}</td>
+                <td class="border px-1 py-0.5 text-center text-slate-500">{{ r.delta_other > 0 ? '+' + r.delta_other : r.delta_other || '0' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <!-- 16. 转专业风险扫描 -->
         <section class="mb-6 page-break-before">
-          <h2 class="text-lg font-bold mb-2 bg-blue-50 px-2 py-1 border-l-4 border-blue-600">15. 转专业风险扫描</h2>
+          <h2 class="text-lg font-bold mb-2 bg-blue-50 px-2 py-1 border-l-4 border-blue-600">16. 转专业风险扫描</h2>
           <transfer-risk-section :analysis="analysis" :targets="targets" :accepts="accepts" :compact="true"></transfer-risk-section>
         </section>
       </div>
@@ -5788,8 +5960,51 @@ const __app = createApp({
           plans: r?.plans || [],
         });
       }
+      // 25→26 招生人数 变化 (按 25 等位分 1 分一档)
+      // 每档: 25/26 名额, Δ, 中外合作单列, 目标+可接受 单列
+      const enrollChangeMap = new Map();
+      for (const p of store.allPlans) {
+        const s25 = p.ref25Score ?? p.score25;
+        if (s25 == null) continue;
+        const eff = effectiveRef25(p);
+        const n25 = p.enrollNum25 || 0;
+        const n26 = p.enrollNum26 || 0;
+        if (!enrollChangeMap.has(s25)) {
+          enrollChangeMap.set(s25, {
+            score25: s25, n25: 0, n26: 0,
+            n25_zwhz: 0, n26_zwhz: 0,
+            n25_target: 0, n26_target: 0,
+            n25_other: 0, n26_other: 0,
+            eff_score: null, eff_n25: 0, eff_n26: 0,   // effective ref25 桶 (修正后)
+          });
+        }
+        const r = enrollChangeMap.get(s25);
+        r.n25 += n25; r.n26 += n26;
+        const isZ = (p.majorName26 || "").includes("中外合作办学");
+        if (isZ) { r.n25_zwhz += n25; r.n26_zwhz += n26; }
+        const tr = classifyTransfer(p, _tSet, _aSet);
+        if (tr.level === "ok" || tr.level === "warn") {
+          r.n25_target += n25; r.n26_target += n26;
+        } else {
+          r.n25_other += n25; r.n26_other += n26;
+        }
+        // effective bucket — 用 effective_ref25 单独再聚合 (供"按真实段位看"参考)
+        if (eff != null) {
+          if (!enrollChangeMap.has("eff:" + eff)) {
+            enrollChangeMap.set("eff:" + eff, { score25: eff, eff_n25: 0, eff_n26: 0, _isEff: true });
+          }
+          const er = enrollChangeMap.get("eff:" + eff);
+          er.eff_n25 += n25; er.eff_n26 += n26;
+        }
+      }
+      const enrollChangeByScore25 = Array.from(enrollChangeMap.values())
+        .filter(r => !r._isEff)
+        .map(r => ({ ...r, delta: r.n26 - r.n25, delta_zwhz: r.n26_zwhz - r.n25_zwhz, delta_target: r.n26_target - r.n25_target, delta_other: r.n26_other - r.n25_other }))
+        .sort((a, b) => b.score25 - a.score25);
+
       return {
         items, tiers, byScore, bySchool, byMajor, byCity, ranges, enrollByScore25,
+        enrollChangeByScore25,
         my26: ui.myScore, autoAnchor25: autoAnchor, anchor25, anchorRank25,
         myRank26: ui.myRank, userRank26,
         total, totalEnroll, insights, transferSummary,
@@ -6622,6 +6837,94 @@ const __app = createApp({
     function resetTransferLists() {
       store.transferTargets = DEFAULT_TRANSFER_TARGETS.slice();
       store.transferAccepts = DEFAULT_TRANSFER_ACCEPTS.slice();
+    }
+
+    // ===== 位次精修 (同分位置 + 上方扩招 → 修正 25 等位分/位次) =====
+    // effective_ref25 — 把 中外合作 -15, 民族班 -10 (LOW qualifier 实际录低于挂牌)
+    function effectiveRef25(plan) {
+      const base = plan.ref25Score ?? plan.score25;
+      if (base == null) return null;
+      const name = plan.majorName26 || plan.majorName25 || "";
+      if (name.includes("中外合作办学")) return base - 15;
+      if (name.includes("民族班"))       return base - 10;
+      return base;
+    }
+
+    const rankRefine = computed(() => {
+      const sr = scoreRank.value;
+      if (!sr || !ui.myScore) return null;
+      const s26 = ui.myScore;
+      const posPct = Math.max(0, Math.min(100, ui.samePosPct ?? 50));
+      const osr26 = sr.oneScoreOneRank?.["2026"] || [];
+      const osr25 = sr.oneScoreOneRank?.["2025"] || [];
+      if (!osr26.length || !osr25.length) return null;
+
+      // Step 1: 同分位置 修正
+      let cum = null, cnt = 0, prevCum = 0;
+      for (const [s, c, cu] of osr26) {
+        if (s === s26) { cum = cu; cnt = c; break; }
+        if (s < s26) break;
+        prevCum = cu;
+      }
+      if (cum == null) return null;
+      // group ranks: (prevCum+1) .. cum; pos=0 → 顶 (prevCum+1); pos=100 → 底 (cum)
+      const R26 = prevCum + 1 + Math.max(0, cnt - 1) * (posPct / 100);
+
+      // 反查 25 等位: 在 osr25 找 cum25 >= R26 的第一个 score
+      let Y0 = null, R25_0 = null;
+      for (const [s, _c, cu] of osr25) {
+        if (cu >= R26) { Y0 = s; R25_0 = cu; break; }
+      }
+      if (Y0 == null) return null;
+
+      // Step 2: 上方扩招 (effective_ref25 >= Y0)
+      const T = transferTargetSet.value;
+      const A = transferAcceptSet.value;
+      let sumA = 0, cntA = 0, sumA_zwhz = 0;
+      let sumB = 0, cntB = 0;
+      let nPlanAbove = 0;
+      for (const p of store.allPlans) {
+        const eff = effectiveRef25(p);
+        if (eff == null || eff < Y0) continue;
+        nPlanAbove++;
+        const delta = (p.enrollNum26 || 0) - (p.enrollNum25 || 0);
+        const tr = classifyTransfer(p, T, A);
+        const isZ = (p.majorName26 || "").includes("中外合作办学");
+        if (tr.level === "ok" || tr.level === "warn") {
+          sumA += delta; cntA++;
+          if (isZ) sumA_zwhz += delta;
+        } else {
+          sumB += delta; cntB++;
+        }
+      }
+      const totalShift = sumA * 1.0 + sumB * 0.2;
+      const R25_final = Math.round(R25_0 - totalShift);
+
+      // 反查 Y_final
+      let Y_final = null;
+      for (const [s, _c, cu] of osr25) {
+        if (cu >= R25_final) { Y_final = s; break; }
+      }
+      if (Y_final == null && osr25.length) Y_final = osr25[osr25.length - 1][0];
+
+      return {
+        s26, posPct, cnt26: cnt, R26: Math.round(R26),
+        Y0, R25_0,
+        nPlanAbove,
+        sumA, cntA, sumA_zwhz,
+        sumB, cntB,
+        totalShift, R25_final, Y_final,
+      };
+    });
+
+    function applyRankRefine() {
+      const r = rankRefine.value;
+      if (!r) return;
+      ui.analysisAnchor25 = r.Y_final;
+      ui.analysisAnchorRank26 = r.R25_final;
+    }
+    function setSamePosPct(v) {
+      ui.samePosPct = Math.max(0, Math.min(100, Math.round(+v || 0)));
     }
 
     // tier 映射 (id -> 'chong'|'wen'|'bao'|null)
@@ -7457,6 +7760,7 @@ const __app = createApp({
       store, ui, loading, loadingMsg, loadingPct,
       scoreRank, meta, priority, currentPage, cwb, tierMap, paneTargets, activeTier, filteredTierCounts, recommendData,
       admitProbFor, userRank25Anchor, transferOf, resetTransferLists,
+      rankRefine, applyRankRefine, setSamePosPct,
       transferTargetSet, transferAcceptSet,
       ratioSumOk, resetRatios,
       filtered, sorted, paged, planByIdMap, compareIdSet, keywordCandidatePool,
