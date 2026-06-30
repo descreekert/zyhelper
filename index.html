@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>2026 物理类志愿填报助手</title>
-  <link rel="stylesheet" href="assets/style.css?v=v18-cwb-unified">
+  <link rel="stylesheet" href="assets/style.css?v=v19-settings">
   <script src="https://unpkg.com/vue@3.4.21/dist/vue.global.prod.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/chart.js@4.4.2/dist/chart.umd.js"></script>
@@ -92,9 +92,9 @@
             <button @click="exportCsv" class="hide-mobile px-2 py-1 rounded border hover:bg-slate-100 no-print no-screenshot" title="导出 CSV">📥</button>
             <button @click="toggleDark" class="hide-mobile px-2 py-1 rounded border hover:bg-slate-100" title="切换暗色">{{ ui.dark ? '☀' : '🌙' }}</button>
             <!-- 排序设置 (desktop 也可见) -->
-            <button @click="ui.showPrioritySettings = true"
+            <button @click="ui.showPrioritySettings = true; ui.showMoreMenu = false"
                     class="px-2 py-1 rounded border hover:bg-slate-100"
-                    title="排序设置 (学校/城市/专业类)">⚙ 排序</button>
+                    title="设置 (排序 / 转专业 / 位次精修)">⚙ 设置</button>
             <!-- More 菜单 (仅 mobile 显示) -->
             <div class="show-mobile-only relative more-menu">
               <button @click="ui.showMoreMenu = !ui.showMoreMenu"
@@ -548,15 +548,22 @@
         </main>
       </div>
 
-      <!-- 排序设置 modal -->
+      <!-- 设置 modal (排序 + 转专业 + 位次精修) -->
       <priority-settings
         v-if="ui.showPrioritySettings && priority"
         :priority="priority"
         :overrides="store.priorityOverrides"
         :filters="store.filters"
+        :transfer-targets="store.transferTargets"
+        :transfer-accepts="store.transferAccepts"
+        :same-pos-pct="ui.samePosPct"
         @close="ui.showPrioritySettings = false"
         @save="savePriorityOverrides"
         @reset="resetPriorityOverrides"
+        @update-transfer-targets="store.transferTargets = $event"
+        @update-transfer-accepts="store.transferAccepts = $event"
+        @reset-transfer-lists="resetTransferLists()"
+        @set-pos="setSamePosPct($event)"
       ></priority-settings>
 
       <!-- Detail drawer -->
@@ -574,6 +581,6 @@
     </template>
   </div>
 
-  <script src="assets/app.js?v=v18-cwb-unified"></script>
+  <script src="assets/app.js?v=v19-settings"></script>
 </body>
 </html>

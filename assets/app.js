@@ -2830,16 +2830,33 @@ const FavoritesBar = {
 
 // === 排序设置 modal ===
 const PrioritySettings = {
-  props: ["priority", "overrides", "filters"],
-  emits: ["close", "save", "reset"],
+  props: ["priority", "overrides", "filters", "transferTargets", "transferAccepts", "samePosPct"],
+  emits: ["close", "save", "reset",
+          "update-transfer-targets", "update-transfer-accepts", "reset-transfer-lists",
+          "set-pos"],
   setup(props, { emit }) {
     const activeTab = ref("schools");
     const tabs = [
-      { key: "schools",      label: "学校",   nameKey: "name", filterKey: "schoolPriorityRange", mode: "range" },
-      { key: "cities",       label: "城市",   nameKey: "city", filterKey: "cityPriorityMax",     mode: "max" },
-      { key: "majorClasses", label: "专业类", nameKey: "name", filterKey: "majorClassPriorityMax", mode: "max" },
-      { key: "majors",       label: "专业",   nameKey: "name", filterKey: "majorPriorityMax",     mode: "max" },
+      { key: "schools",      label: "🏫 学校",   nameKey: "name", filterKey: "schoolPriorityRange", mode: "range", group: "priority" },
+      { key: "cities",       label: "🏙 城市",   nameKey: "city", filterKey: "cityPriorityMax",     mode: "max",   group: "priority" },
+      { key: "majorClasses", label: "📚 专业类", nameKey: "name", filterKey: "majorClassPriorityMax", mode: "max", group: "priority" },
+      { key: "majors",       label: "🔖 专业",   nameKey: "name", filterKey: "majorPriorityMax",     mode: "max", group: "priority" },
+      { key: "transfer",     label: "🎓 转专业",  group: "config" },
+      { key: "refine",       label: "🎯 位次精修", group: "config" },
     ];
+    // 转专业 编辑文本
+    const targetText = ref((props.transferTargets || []).join("\n"));
+    const acceptText = ref((props.transferAccepts || []).join("\n"));
+    watch(() => props.transferTargets, v => { targetText.value = (v || []).join("\n"); });
+    watch(() => props.transferAccepts, v => { acceptText.value = (v || []).join("\n"); });
+    function saveTargets() {
+      const lst = targetText.value.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+      emit("update-transfer-targets", lst);
+    }
+    function saveAccepts() {
+      const lst = acceptText.value.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+      emit("update-transfer-accepts", lst);
+    }
 
     // 编辑中的列表 (复制原 priority 数据 + 应用现有 override)
     const editing = reactive({ schools: [], cities: [], majorClasses: [], majors: [] });
@@ -2940,71 +2957,136 @@ const PrioritySettings = {
     }
     return { tabs, activeTab, editing, currentTab, currentItems, currentTopN,
              topNBreakIdx, hasOverride,
-             move, moveToTop, moveToBottom, moveToPosition, resetTab, save, chipSubLabel };
+             move, moveToTop, moveToBottom, moveToPosition, resetTab, save, chipSubLabel,
+             targetText, acceptText, saveTargets, saveAccepts };
   },
   template: `
     <div class="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
          @click.self="$emit('close')">
       <div class="bg-white rounded-lg shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
         <div class="flex items-center justify-between p-3 border-b">
-          <h3 class="font-bold text-lg">⚙ 排序设置</h3>
+          <h3 class="font-bold text-lg">⚙ 设置</h3>
           <button @click="$emit('close')" class="text-2xl leading-none text-slate-400 hover:text-red-500">×</button>
         </div>
-        <!-- Tabs -->
-        <div class="flex border-b">
+        <!-- Tabs (含 排序 group + 配置 group) -->
+        <div class="flex border-b overflow-x-auto">
           <button v-for="t in tabs" :key="t.key"
                   @click="activeTab = t.key"
-                  class="px-4 py-2 text-sm border-b-2"
+                  class="px-4 py-2 text-sm border-b-2 whitespace-nowrap"
                   :class="activeTab === t.key ? 'border-blue-600 text-blue-600 font-bold' : 'border-transparent text-slate-500 hover:bg-slate-50'">
-            {{ t.label }} ({{ editing[t.key].length }})
+            {{ t.label }}<span v-if="t.group==='priority'"> ({{ editing[t.key].length }})</span>
           </button>
         </div>
-        <!-- 列表 -->
+        <!-- 主体 (按 tab group 分支渲染) -->
         <div class="flex-1 overflow-y-auto p-3">
-          <div class="text-xs text-slate-500 mb-2">
-            当前 sort ≤ {{ currentTopN }} 在分隔线之上 (V9: 按学校排序值过滤, 含并列档).
-            点击 ↑/↓ 调整顺序, 或点击序号 # 跳位。
-            <button @click="resetTab" class="ml-2 text-amber-600 hover:underline">重置当前 tab 为默认</button>
-          </div>
-          <div v-if="hasOverride" class="text-xs bg-amber-50 border border-amber-200 text-amber-800 rounded p-2 mb-2">
-            ⚠ 当前显示的是<b>你之前手动保存的自定义排序</b>, 不是 priority.json 最新基础数据.
-            如果想看到最新的并列档位 (1,1,1 / 2,2 / 3,3,3...), 点击右上"重置当前 tab 为默认".
-          </div>
-          <div class="space-y-0.5">
-            <template v-for="(item, idx) in currentItems" :key="item[currentTab.nameKey] + idx">
-              <!-- 分隔线: 按 sort 值切 -->
-              <div v-if="idx === topNBreakIdx" class="text-center text-xs text-slate-400 my-2 border-t pt-1">
-                ── sort ≤ {{ currentTopN }} 分隔线 ({{ topNBreakIdx }} 项) ──
+          <!-- ====== priority tabs (学校/城市/专业类/专业 排序) ====== -->
+          <template v-if="currentTab && currentTab.group === 'priority'">
+            <div class="text-xs text-slate-500 mb-2">
+              当前 sort ≤ {{ currentTopN }} 在分隔线之上 (V9: 按学校排序值过滤, 含并列档).
+              点击 ↑/↓ 调整顺序, 或点击序号 # 跳位。
+              <button @click="resetTab" class="ml-2 text-amber-600 hover:underline">重置当前 tab 为默认</button>
+            </div>
+            <div v-if="hasOverride" class="text-xs bg-amber-50 border border-amber-200 text-amber-800 rounded p-2 mb-2">
+              ⚠ 当前显示的是<b>你之前手动保存的自定义排序</b>, 不是 priority.json 最新基础数据.
+              如果想看到最新的并列档位 (1,1,1 / 2,2 / 3,3,3...), 点击右上"重置当前 tab 为默认".
+            </div>
+            <div class="space-y-0.5">
+              <template v-for="(item, idx) in currentItems" :key="item[currentTab.nameKey] + idx">
+                <div v-if="idx === topNBreakIdx" class="text-center text-xs text-slate-400 my-2 border-t pt-1">
+                  ── sort ≤ {{ currentTopN }} 分隔线 ({{ topNBreakIdx }} 项) ──
+                </div>
+                <div class="priority-row flex items-center gap-2 p-1.5 hover:bg-slate-50 border-b">
+                  <button @click="moveToPosition(idx)"
+                          class="w-10 text-right text-xs text-slate-500 hover:text-blue-600"
+                          title="点击跳位">#{{ idx + 1 }}</button>
+                  <span v-if="item.sort != null"
+                        class="text-[10px] px-1.5 rounded bg-blue-100 text-blue-700 font-mono"
+                        :title="'学校排序值 ' + item.sort">{{ item.sort }}</span>
+                  <span class="flex-1 text-sm">
+                    {{ item[currentTab.nameKey] }}
+                    <span class="text-xs text-slate-400 ml-2">{{ chipSubLabel(item, currentTab.key) }}</span>
+                  </span>
+                  <button @click="moveToTop(idx)" :disabled="idx === 0"
+                          class="px-1 disabled:opacity-30 hover:bg-blue-50" title="置顶">⇈</button>
+                  <button @click="move(idx, -1)" :disabled="idx === 0"
+                          class="px-1 disabled:opacity-30 hover:bg-blue-50" title="上移">↑</button>
+                  <button @click="move(idx, 1)" :disabled="idx === currentItems.length - 1"
+                          class="px-1 disabled:opacity-30 hover:bg-blue-50" title="下移">↓</button>
+                  <button @click="moveToBottom(idx)" :disabled="idx === currentItems.length - 1"
+                          class="px-1 disabled:opacity-30 hover:bg-blue-50" title="置底">⇊</button>
+                </div>
+              </template>
+            </div>
+          </template>
+
+          <!-- ====== 转专业 tab ====== -->
+          <template v-else-if="activeTab === 'transfer'">
+            <div class="text-xs text-slate-500 mb-2">
+              <b>转专业风险扫描</b> 用这两个清单判断每个志愿:
+              单专业/大类含任一<b class="text-green-700">目标</b> → ✓ OK;
+              否则含任一<b class="text-amber-700">可接受</b> → ⚠ 需转;
+              都没有 → ✗ 错.
+              <button @click="$emit('reset-transfer-lists')" class="ml-2 text-amber-600 hover:underline">重置默认</button>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <div class="text-xs font-bold text-green-700 mb-1">目标专业 (无需转, {{ targetText.split('\\n').filter(x=>x.trim()).length }} 个)</div>
+                <textarea v-model="targetText" @blur="saveTargets" rows="18"
+                          class="w-full border rounded text-xs p-2 font-mono"
+                          placeholder="每行一个专业名"></textarea>
+                <div class="text-[10px] text-slate-400 mt-1">每行一个专业名, 失焦自动保存. 名字需与"招生专业 / 所含专业"列完全一致.</div>
               </div>
-              <div class="priority-row flex items-center gap-2 p-1.5 hover:bg-slate-50 border-b">
-                <button @click="moveToPosition(idx)"
-                        class="w-10 text-right text-xs text-slate-500 hover:text-blue-600"
-                        title="点击跳位">#{{ idx + 1 }}</button>
-                <span v-if="item.sort != null"
-                      class="text-[10px] px-1.5 rounded bg-blue-100 text-blue-700 font-mono"
-                      :title="'学校排序值 ' + item.sort">{{ item.sort }}</span>
-                <span class="flex-1 text-sm">
-                  {{ item[currentTab.nameKey] }}
-                  <span class="text-xs text-slate-400 ml-2">{{ chipSubLabel(item, currentTab.key) }}</span>
-                </span>
-                <button @click="moveToTop(idx)" :disabled="idx === 0"
-                        class="px-1 disabled:opacity-30 hover:bg-blue-50" title="置顶">⇈</button>
-                <button @click="move(idx, -1)" :disabled="idx === 0"
-                        class="px-1 disabled:opacity-30 hover:bg-blue-50" title="上移">↑</button>
-                <button @click="move(idx, 1)" :disabled="idx === currentItems.length - 1"
-                        class="px-1 disabled:opacity-30 hover:bg-blue-50" title="下移">↓</button>
-                <button @click="moveToBottom(idx)" :disabled="idx === currentItems.length - 1"
-                        class="px-1 disabled:opacity-30 hover:bg-blue-50" title="置底">⇊</button>
+              <div>
+                <div class="text-xs font-bold text-amber-700 mb-1">可接受转入 (录取后可转过去, {{ acceptText.split('\\n').filter(x=>x.trim()).length }} 个)</div>
+                <textarea v-model="acceptText" @blur="saveAccepts" rows="18"
+                          class="w-full border rounded text-xs p-2 font-mono"
+                          placeholder="每行一个专业名"></textarea>
+                <div class="text-[10px] text-slate-400 mt-1">大类志愿中若有此列专业, 标为"需转".</div>
               </div>
-            </template>
-          </div>
+            </div>
+          </template>
+
+          <!-- ====== 位次精修 tab ====== -->
+          <template v-else-if="activeTab === 'refine'">
+            <div class="text-xs text-slate-500 mb-3">
+              <b>同分位置</b> 决定你在 26 同分人群中的相对位次. 默认 50% (中部).
+              调整后 主查询 (勾"用修正位次查询") 和 分析页 的 rankRefine 会跟着变.
+            </div>
+            <div class="border rounded p-4 bg-slate-50 space-y-3 text-sm">
+              <div class="flex items-center gap-2">
+                <span class="font-bold text-slate-700 w-24">同分位置:</span>
+                <button @click="$emit('set-pos', 0)" class="px-2 py-1 border rounded text-xs"
+                        :class="samePosPct==0 ? 'bg-blue-500 text-white' : 'bg-white'">上</button>
+                <input type="range" min="0" max="100" step="1" :value="samePosPct"
+                       @input="$emit('set-pos', +$event.target.value)" class="flex-1 accent-blue-500"/>
+                <button @click="$emit('set-pos', 50)" class="px-2 py-1 border rounded text-xs"
+                        :class="samePosPct==50 ? 'bg-blue-500 text-white' : 'bg-white'">中</button>
+                <button @click="$emit('set-pos', 100)" class="px-2 py-1 border rounded text-xs"
+                        :class="samePosPct==100 ? 'bg-blue-500 text-white' : 'bg-white'">下</button>
+                <span class="font-bold text-blue-600 w-14 text-right">{{ samePosPct }}%</span>
+              </div>
+              <div class="text-xs text-slate-500 leading-relaxed">
+                <b>含义</b>: 26 同分人数通常 100-300, 你的实际位次 = 一分一段累计 + (同分人数 - 1) × 位置%.<br>
+                <b>0% (上部)</b>: 同分中你考得最好<br>
+                <b>50% (中部, 默认)</b>: 平均水平<br>
+                <b>100% (下部)</b>: 同分中你考得最差 (最保守)
+              </div>
+              <div v-if="!samePosPct" class="text-xs text-amber-600">提示: 设 0% (上部) 等价于 用一分一段累计原值, 最乐观.</div>
+            </div>
+            <div class="mt-3 text-xs text-slate-500">
+              详细的扩招修正 + 分段招生变化 表 在 <b>分析页 → 总览 → 位次精修 折叠面板</b> 里查看 + "一键应用".
+            </div>
+          </template>
         </div>
-        <!-- Footer -->
+        <!-- Footer (priority tabs 才显 保存按钮; 其它 tabs 自动保存) -->
         <div class="flex items-center justify-between p-3 border-t">
-          <button @click="$emit('reset')" class="text-sm text-red-500 hover:underline">重置全部默认</button>
+          <button v-if="currentTab && currentTab.group === 'priority'"
+                  @click="$emit('reset')" class="text-sm text-red-500 hover:underline">重置全部排序默认</button>
+          <span v-else class="text-xs text-slate-400">该 tab 改动自动保存</span>
           <div class="flex gap-2">
-            <button @click="$emit('close')" class="px-3 py-1 border rounded text-sm hover:bg-slate-100">取消</button>
-            <button @click="save" class="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700">保存并应用</button>
+            <button @click="$emit('close')" class="px-3 py-1 border rounded text-sm hover:bg-slate-100">关闭</button>
+            <button v-if="currentTab && currentTab.group === 'priority'"
+                    @click="save" class="px-3 py-1 bg-blue-600 text-white rounded text-sm hover:bg-blue-700">保存排序</button>
           </div>
         </div>
       </div>
