@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>2026 物理类志愿填报助手</title>
-  <link rel="stylesheet" href="assets/style.css?v=v20-refine-restructure">
+  <link rel="stylesheet" href="assets/style.css?v=v21-refine-tighten">
   <script src="https://unpkg.com/vue@3.4.21/dist/vue.global.prod.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/chart.js@4.4.2/dist/chart.umd.js"></script>
@@ -156,8 +156,8 @@
             <input type="checkbox" :checked="ui.useRefinedQuery"
                    @change="ui.useRefinedQuery = $event.target.checked"
                    class="cursor-pointer">
-            <span>🎯 用修正位次查询
-              <span v-if="ui.useRefinedQuery" class="text-blue-600 font-bold">(已启用 等价{{refinedScore26}}分)</span>
+            <span>🎯 用修正位次
+              <span v-if="ui.useRefinedQuery" class="text-blue-600 font-bold">(等价{{refinedScore26}}分)</span>
             </span>
           </label>
           <!-- 同分位置 quick 控件 (仅 启用修正后 显示) -->
@@ -437,8 +437,6 @@
             @reset-transfer-lists="resetTransferLists()"
             @toggle-ignore-heat="ui.analysisIgnoreHeat = $event"
             @set-pos="setSamePosPct($event)"
-            @apply-refine="applyRankRefine()"
-            @open-settings-refine="ui.settingsInitialTab = 'refine'; ui.showPrioritySettings = true"
             @set-anchor="v => ui.analysisAnchor25 = v"
             @set-rank="v => ui.analysisAnchorRank26 = v"
             @toggle-school="n => {
@@ -551,7 +549,6 @@
         @update-transfer-accepts="store.transferAccepts = $event"
         @reset-transfer-lists="resetTransferLists()"
         @set-pos="setSamePosPct($event)"
-        @apply-refine="applyRankRefine()"
         @update:totalVolunteers="ui.totalVolunteers = $event"
         @update:ratioChong="ui.ratioChong = $event"
         @update:ratioWen="ui.ratioWen = $event"
@@ -575,6 +572,6 @@
     </template>
   </div>
 
-  <script src="assets/app.js?v=v20-refine-restructure"></script>
+  <script src="assets/app.js?v=v21-refine-tighten"></script>
 </body>
 </html>

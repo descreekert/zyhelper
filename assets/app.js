@@ -2845,7 +2845,7 @@ const PrioritySettings = {
           "initialTab"],
   emits: ["close", "save", "reset",
           "update-transfer-targets", "update-transfer-accepts", "reset-transfer-lists",
-          "set-pos", "apply-refine",
+          "set-pos",
           "update:totalVolunteers", "update:ratioChong", "update:ratioWen", "update:ratioBao",
           "update-cwb-ranges", "reset-cwb-ranges"],
   setup(props, { emit }) {
@@ -2980,17 +2980,17 @@ const PrioritySettings = {
   template: `
     <div class="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
          @click.self="$emit('close')">
-      <div class="bg-white rounded-lg shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+      <div class="bg-white rounded-lg shadow-2xl w-full max-w-6xl max-h-[90vh] flex flex-col">
         <div class="flex items-center justify-between p-3 border-b">
           <h3 class="font-bold text-lg">⚙ 设置</h3>
           <button @click="$emit('close')" class="text-2xl leading-none text-slate-400 hover:text-red-500">×</button>
         </div>
-        <!-- Tabs (含 排序 group + 配置 group) -->
-        <div class="flex border-b overflow-x-auto flex-shrink-0">
+        <!-- Tabs (含 排序 group + 配置 group); flex-wrap 保证窄屏所有 tab 都可见 -->
+        <div class="flex flex-wrap border-b flex-shrink-0">
           <button v-for="t in tabs" :key="t.key"
                   @click="activeTab = t.key"
-                  class="px-4 py-2 text-sm border-b-2 whitespace-nowrap flex-shrink-0"
-                  :class="activeTab === t.key ? 'border-blue-600 text-blue-600 font-bold' : 'border-transparent text-slate-500 hover:bg-slate-50'">
+                  class="px-3 py-2 text-sm border-b-2 whitespace-nowrap flex-shrink-0"
+                  :class="activeTab === t.key ? 'border-blue-600 text-blue-600 font-bold bg-blue-50' : 'border-transparent text-slate-500 hover:bg-slate-50'">
             {{ t.label }}<span v-if="t.group==='priority'"> ({{ editing[t.key].length }})</span>
           </button>
         </div>
@@ -3217,21 +3217,17 @@ const PrioritySettings = {
               </div>
 
               <!-- Step 3 -->
-              <div class="pt-3 border-t flex items-center justify-between flex-wrap gap-2">
+              <div class="pt-3 border-t">
                 <div>
                   <b class="text-slate-700">修正后:</b>
                   25 等位 <b class="text-purple-700">{{rankRefine.Y_final}}</b>
                   / 位次 <b class="text-purple-700">{{rankRefine.R25_final}}</b>
                 </div>
-                <button @click="$emit('apply-refine')"
-                        class="px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 font-bold">
-                  一键应用 → 分析页 anchor25 / 实际预测位次
-                </button>
               </div>
               <div class="text-[10px] text-slate-400">
                 说明: 中外合作 plan 用 effective_ref25 = ref25 -15 (民族班 -10);
                 修正口径 = 目标+可接受 × 1.0 + 其他 × 0.2.
-                "用修正位次查询" 开启时, 主查询和分析页 自动用 修正后值, 无需点 一键应用.
+                顶部 "🎯 用修正位次" 开启时, 主查询 / 左侧筛选 / 分析 全部自动用 修正后值.
               </div>
             </div>
           </template>
@@ -3258,7 +3254,7 @@ const VoluntaryAnalysis = {
           "targets", "accepts", "ignoreHeat", "rankRefine", "samePosPct", "useRefinedQuery"],
   emits: ["close", "set-anchor", "set-rank", "toggle-school", "toggle-score", "toggle-tier", "toggle-enroll-score", "toggle-major", "toggle-city",
           "update-targets", "update-accepts", "reset-transfer-lists", "toggle-ignore-heat",
-          "set-pos", "apply-refine", "open-settings-refine"],
+          "set-pos"],
   setup(props, { emit }) {
     const maxScoreCount = computed(() => {
       if (!props.analysis) return 1;
@@ -3378,18 +3374,6 @@ const VoluntaryAnalysis = {
               </label>
             </div>
 
-            <!-- 位次精修 摘要 (折叠面板已移到 ⚙ 设置 → 🎯 位次精修 tab) -->
-            <div v-if="rankRefine" class="border rounded mt-2 px-3 py-2 bg-slate-50 text-xs flex items-center justify-between flex-wrap gap-2">
-              <div>
-                <span class="text-slate-500">🎯 位次精修 (同分 {{samePosPct}}%):</span>
-                修正后 25 等位 <b class="text-purple-700">{{rankRefine.Y_final}}</b> / 位次 <b class="text-purple-700">{{rankRefine.R25_final}}</b>
-                <span class="text-[10px] text-slate-400 ml-2">
-                  ({{rankRefine.totalShift >= 0 ? '位次 -' + rankRefine.totalShift.toFixed(0) : '位次 +' + (-rankRefine.totalShift).toFixed(0)}})
-                </span>
-              </div>
-              <button @click="$emit('open-settings-refine')"
-                      class="text-xs text-blue-600 hover:underline">⚙ 调整 / 应用</button>
-            </div>
           </div>
             <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 mt-2 text-xs">
               <div v-for="k in ['chong','wen','bao','out']" :key="k"
@@ -5745,21 +5729,46 @@ const __app = createApp({
       scoreRank.value ? computeChongWenBao(queryScore26.value, scoreRank.value, ui.equivSource, store.cwbRanges) : null);
 
     // 监听 cwb 变化 → 自动填充 3 段范围 (用户没手改时)
+    // 用 snapshot 比对: 当前值 === 上次填的值 → 视为"未手改", 覆盖; 否则尊重用户手改, 跳过.
+    let lastAutoScoreRanges = null;
+    let lastAutoRankRanges  = null;
+    function sameRanges(a, b) {
+      if (!a || !b || a.length !== b.length) return false;
+      for (let i = 0; i < a.length; i++) {
+        if (a[i].tier !== b[i].tier || a[i].low !== b[i].low || a[i].high !== b[i].high) return false;
+      }
+      return true;
+    }
     watch(cwb, (val) => {
       if (!val) return;
       const r = val.ranges;
-      store.filters.scoreRanges = [
+      const nextScore = [
         { tier: "chong", low: r.chong.scoreLow, high: r.chong.scoreHigh },
         { tier: "wen",   low: r.wen.scoreLow,   high: r.wen.scoreHigh },
         { tier: "bao",   low: r.bao.scoreLow,   high: r.bao.scoreHigh },
       ];
-      // 位次范围只在用户启用时有意义, 但先填好
+      // 首次填 (snapshot 为空 且 当前空) 或 当前 === 上次自动填 → 覆盖; 否则尊重用户手改
+      const scoreUnchanged = !lastAutoScoreRanges
+        ? !store.filters.scoreRanges || !store.filters.scoreRanges.length
+        : sameRanges(store.filters.scoreRanges, lastAutoScoreRanges);
+      if (scoreUnchanged) {
+        store.filters.scoreRanges = nextScore;
+        lastAutoScoreRanges = nextScore.map(x => ({ ...x }));
+      }
+      // 位次范围
       if (r.chong.rankLow != null) {
-        store.filters.rankRanges = [
+        const nextRank = [
           { tier: "chong", low: r.chong.rankLow, high: r.chong.rankHigh },
           { tier: "wen",   low: r.wen.rankLow,   high: r.wen.rankHigh },
           { tier: "bao",   low: r.bao.rankLow,   high: r.bao.rankHigh },
         ];
+        const rankUnchanged = !lastAutoRankRanges
+          ? !store.filters.rankRanges || !store.filters.rankRanges.length
+          : sameRanges(store.filters.rankRanges, lastAutoRankRanges);
+        if (rankUnchanged) {
+          store.filters.rankRanges = nextRank;
+          lastAutoRankRanges = nextRank.map(x => ({ ...x }));
+        }
       }
     });
 
@@ -7237,12 +7246,6 @@ const __app = createApp({
       };
     });
 
-    function applyRankRefine() {
-      const r = rankRefine.value;
-      if (!r) return;
-      ui.analysisAnchor25 = r.Y_final;
-      ui.analysisAnchorRank26 = r.R25_final;
-    }
     function setSamePosPct(v) {
       ui.samePosPct = Math.max(0, Math.min(100, Math.round(+v || 0)));
     }
@@ -8080,7 +8083,7 @@ const __app = createApp({
       store, ui, loading, loadingMsg, loadingPct,
       scoreRank, meta, priority, currentPage, cwb, tierMap, paneTargets, activeTier, filteredTierCounts, recommendData,
       admitProbFor, userRank25Anchor, transferOf, resetTransferLists,
-      rankRefine, applyRankRefine, setSamePosPct, refinedScore26, resetCwbRanges,
+      rankRefine, setSamePosPct, refinedScore26, resetCwbRanges,
       transferTargetSet, transferAcceptSet,
       ratioSumOk, resetRatios,
       filtered, sorted, paged, planByIdMap, compareIdSet, keywordCandidatePool,
