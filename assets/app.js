@@ -3301,6 +3301,37 @@ const VoluntaryAnalysis = {
     });
     const totalEnroll25 = computed(() => (props.analysis?.enrollChangeByScore25 || []).reduce((s, r) => s + r.n25, 0));
     const totalEnroll26 = computed(() => (props.analysis?.enrollChangeByScore25 || []).reduce((s, r) => s + r.n26, 0));
+
+    // 按学校 招生变化 — filter / sort / 展开
+    const ecSchoolSort = ref("abs");      // abs / inc / dec / rank
+    const ecSchoolTier = ref("all");      // all / 985 / 211 / 双一流 / 省重点
+    const ecSchoolKw = ref("");
+    const schEcExpanded = reactive({});
+    const filteredSchoolEc = computed(() => {
+      const src = props.analysis?.enrollChangeBySchool || [];
+      if (!src.length) return [];
+      const kw = ecSchoolKw.value.trim().toLowerCase();
+      let list = src.filter(r => {
+        if (ecSchoolTier.value !== "all" && !(r.schoolTag || "").includes(ecSchoolTier.value)) return false;
+        if (kw) {
+          const hay = (r.schoolName + " " + (r.city || "")).toLowerCase();
+          if (!hay.includes(kw)) return false;
+        }
+        return true;
+      });
+      const sk = ecSchoolSort.value;
+      if (sk === "abs") list = list.slice().sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta) || (a.schoolRank - b.schoolRank));
+      else if (sk === "inc") list = list.slice().sort((a, b) => b.delta - a.delta);
+      else if (sk === "dec") list = list.slice().sort((a, b) => a.delta - b.delta);
+      else if (sk === "rank") list = list.slice().sort((a, b) => a.schoolRank - b.schoolRank);
+      return list;
+    });
+    const schoolEcSum = computed(() => {
+      const list = filteredSchoolEc.value;
+      const n25 = list.reduce((s, r) => s + r.n25, 0);
+      const n26 = list.reduce((s, r) => s + r.n26, 0);
+      return { n25, n26, delta: n26 - n25 };
+    });
     watch(() => props.analysis, (a) => {
       if (a) {
         anchorInput.value = String(a.anchor25 || "");
@@ -3326,7 +3357,8 @@ const VoluntaryAnalysis = {
     return { maxScoreCount, maxSchoolCount, byScoreCompact,
              anchorInput, commitAnchor, resetAnchor,
              rankInput, commitRank, resetRank,
-             ecBucket, ecExpanded, currentEnrollChange, totalEnroll25, totalEnroll26 };
+             ecBucket, ecExpanded, currentEnrollChange, totalEnroll25, totalEnroll26,
+             ecSchoolSort, ecSchoolTier, ecSchoolKw, schEcExpanded, filteredSchoolEc, schoolEcSum };
   },
   template: `
     <div :class="embedded ? 'bg-white rounded shadow border text-sm' : 'fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4'"
@@ -4089,6 +4121,122 @@ const VoluntaryAnalysis = {
             </div>
           </section>
           </div><!-- /grid: 招生维度 + 招生变化 -->
+
+          <!-- 🏫 按学校 25→26 招生变化 (985/211/双一流/省重点) -->
+          <section v-if="analysis.enrollChangeBySchool && analysis.enrollChangeBySchool.length" class="overflow-hidden">
+            <div class="text-xs text-slate-500 mb-1 flex items-center flex-wrap gap-2">
+              <span>🏫 25→26 按学校 招生变化 <span class="text-slate-400">(985 / 211 / 双一流 / 省重点; 共 {{analysis.enrollChangeBySchool.length}} 所)</span></span>
+              <span class="ml-2">排序:
+                <button @click="ecSchoolSort='abs'" class="px-1.5 py-0.5 rounded text-[10px]" :class="ecSchoolSort==='abs' ? 'bg-blue-500 text-white' : 'bg-slate-100'">|Δ| 降</button>
+                <button @click="ecSchoolSort='inc'" class="px-1.5 py-0.5 rounded text-[10px]" :class="ecSchoolSort==='inc' ? 'bg-blue-500 text-white' : 'bg-slate-100'">扩招</button>
+                <button @click="ecSchoolSort='dec'" class="px-1.5 py-0.5 rounded text-[10px]" :class="ecSchoolSort==='dec' ? 'bg-blue-500 text-white' : 'bg-slate-100'">缩招</button>
+                <button @click="ecSchoolSort='rank'" class="px-1.5 py-0.5 rounded text-[10px]" :class="ecSchoolSort==='rank' ? 'bg-blue-500 text-white' : 'bg-slate-100'">软科</button>
+              </span>
+              <span class="ml-2">档:
+                <button @click="ecSchoolTier='all'" class="px-1.5 py-0.5 rounded text-[10px]" :class="ecSchoolTier==='all' ? 'bg-blue-500 text-white' : 'bg-slate-100'">全部</button>
+                <button @click="ecSchoolTier='985'" class="px-1.5 py-0.5 rounded text-[10px]" :class="ecSchoolTier==='985' ? 'bg-blue-500 text-white' : 'bg-slate-100'">985</button>
+                <button @click="ecSchoolTier='211'" class="px-1.5 py-0.5 rounded text-[10px]" :class="ecSchoolTier==='211' ? 'bg-blue-500 text-white' : 'bg-slate-100'">211</button>
+                <button @click="ecSchoolTier='双一流'" class="px-1.5 py-0.5 rounded text-[10px]" :class="ecSchoolTier==='双一流' ? 'bg-blue-500 text-white' : 'bg-slate-100'">双一流</button>
+                <button @click="ecSchoolTier='省重点'" class="px-1.5 py-0.5 rounded text-[10px]" :class="ecSchoolTier==='省重点' ? 'bg-blue-500 text-white' : 'bg-slate-100'">省重点</button>
+              </span>
+              <input v-model="ecSchoolKw" placeholder="🔍 学校名/城市" class="border rounded px-2 py-0.5 text-[11px] w-32">
+              <span class="ml-auto text-[10px] text-slate-400">显示 {{ filteredSchoolEc.length }} 所 / 合计 25 招 {{schoolEcSum.n25}} → 26 招 {{schoolEcSum.n26}} (Δ {{schoolEcSum.delta > 0 ? '+' : ''}}{{schoolEcSum.delta}})</span>
+            </div>
+            <div class="border rounded bg-white" style="max-height:480px;overflow-y:auto">
+              <table class="w-full text-[11px]">
+                <thead class="sticky top-0 bg-slate-100 z-10">
+                  <tr>
+                    <th class="px-1 py-1 w-6"></th>
+                    <th class="px-1 py-1 text-center w-8">#</th>
+                    <th class="px-1 py-1 text-left">学校</th>
+                    <th class="px-1 py-1 text-center">城市</th>
+                    <th class="px-1 py-1 text-center" title="985/211/双一流/省重点">档</th>
+                    <th class="px-1 py-1 text-center" title="软科排名">软科</th>
+                    <th class="px-1 py-1 text-center">25 招</th>
+                    <th class="px-1 py-1 text-center">26 招</th>
+                    <th class="px-1 py-1 text-center">Δ</th>
+                    <th class="px-1 py-1 text-center">Δ%</th>
+                    <th class="px-1 py-1 text-center" title="25/26 招生专业条目数">25/26 条</th>
+                    <th class="px-1 py-1 text-center" title="新增 / 停招 / 中外合作">新/停/外</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template v-for="(r, i) in filteredSchoolEc" :key="'sch-ec-'+r.schoolName">
+                    <tr :class="r.delta > 0 ? 'hover:bg-red-50' : r.delta < 0 ? 'hover:bg-green-50' : 'hover:bg-slate-50'">
+                      <td class="border-t px-1 py-0.5 text-center cursor-pointer text-slate-400"
+                          @click="schEcExpanded[r.schoolName] ? (schEcExpanded[r.schoolName]=false) : (schEcExpanded[r.schoolName]=true)">
+                        {{ schEcExpanded[r.schoolName] ? '▾' : '▸' }}
+                      </td>
+                      <td class="border-t px-1 py-0.5 text-center text-slate-500">{{ i+1 }}</td>
+                      <td class="border-t px-1 py-0.5"><b>{{r.schoolName}}</b></td>
+                      <td class="border-t px-1 py-0.5 text-center text-slate-500">{{r.city || '—'}}</td>
+                      <td class="border-t px-1 py-0.5 text-center text-[10px]">
+                        <span v-if="(r.schoolTag||'').includes('985')" class="text-red-600 font-bold">985</span>
+                        <span v-else-if="(r.schoolTag||'').includes('211')" class="text-orange-600 font-bold">211</span>
+                        <span v-else-if="(r.schoolTag||'').includes('双一流')" class="text-purple-600 font-bold">双一流</span>
+                        <span v-else-if="(r.schoolTag||'').includes('省重点')" class="text-blue-600">省重点</span>
+                      </td>
+                      <td class="border-t px-1 py-0.5 text-center text-slate-500">{{ r.schoolRank < 9999 ? r.schoolRank : '—' }}</td>
+                      <td class="border-t px-1 py-0.5 text-center">{{r.n25 || '—'}}</td>
+                      <td class="border-t px-1 py-0.5 text-center">{{r.n26 || '—'}}</td>
+                      <td class="border-t px-1 py-0.5 text-center font-bold"
+                          :class="r.delta > 0 ? 'text-red-600' : r.delta < 0 ? 'text-green-700' : 'text-slate-400'">
+                        {{ r.delta > 0 ? '+' + r.delta : r.delta || '0' }}
+                      </td>
+                      <td class="border-t px-1 py-0.5 text-center text-[10px]"
+                          :class="r.delta > 0 ? 'text-red-500' : r.delta < 0 ? 'text-green-600' : 'text-slate-400'">
+                        {{ r.n25 > 0 ? (r.deltaPct >= 0 ? '+' : '') + (r.deltaPct * 100).toFixed(0) + '%' : (r.n26 > 0 ? '新' : '—') }}
+                      </td>
+                      <td class="border-t px-1 py-0.5 text-center text-slate-500">{{r.cnt25}}/{{r.cnt26}}</td>
+                      <td class="border-t px-1 py-0.5 text-center text-[10px]">
+                        <span v-if="r.cntNew" class="text-red-600 mr-1">{{r.cntNew}}新</span>
+                        <span v-if="r.cntStopped" class="text-slate-500 mr-1">{{r.cntStopped}}停</span>
+                        <span v-if="r.cntZwhz" class="text-blue-600">{{r.cntZwhz}}外</span>
+                        <span v-if="!r.cntNew && !r.cntStopped && !r.cntZwhz" class="text-slate-300">—</span>
+                      </td>
+                    </tr>
+                    <tr v-if="schEcExpanded[r.schoolName]" class="bg-slate-50">
+                      <td colspan="12" class="border-t px-2 py-1">
+                        <table class="w-full text-[10px]">
+                          <thead><tr class="bg-slate-100">
+                            <th class="px-1 py-0.5 text-left">专业</th>
+                            <th class="px-1 py-0.5 text-center w-12">代号</th>
+                            <th class="px-1 py-0.5 text-center w-10">25</th>
+                            <th class="px-1 py-0.5 text-center w-10">26</th>
+                            <th class="px-1 py-0.5 text-center w-12">Δ</th>
+                            <th class="px-1 py-0.5 text-center w-12">标</th>
+                          </tr></thead>
+                          <tbody>
+                            <tr v-for="pl in [...r.plans].sort((a,b)=>Math.abs(b.delta)-Math.abs(a.delta))" :key="'spl-'+pl.majorCode+'-'+pl.majorName" class="border-t">
+                              <td class="px-1 py-0.5">{{pl.majorName}}</td>
+                              <td class="px-1 py-0.5 text-center text-slate-500">{{pl.majorCode || '—'}}</td>
+                              <td class="px-1 py-0.5 text-center">{{pl.n25 || '—'}}</td>
+                              <td class="px-1 py-0.5 text-center">{{pl.n26 || '—'}}</td>
+                              <td class="px-1 py-0.5 text-center font-bold"
+                                  :class="pl.delta > 0 ? 'text-red-600' : pl.delta < 0 ? 'text-green-700' : 'text-slate-400'">
+                                {{pl.delta > 0 ? '+' + pl.delta : pl.delta || '0'}}
+                              </td>
+                              <td class="px-1 py-0.5 text-center text-[9px]">
+                                <span v-if="pl.isNew" class="text-red-600 mr-0.5">新</span>
+                                <span v-if="pl.isStopped" class="text-slate-500 mr-0.5">停</span>
+                                <span v-if="pl.isZ" class="text-blue-600">外</span>
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+            <div class="text-[10px] text-slate-400 mt-1">
+              📌 仅含 985 / 211 / 双一流 / 省重点 学校.
+              扩招 = Δ 为正 (招生数增加); 缩招 = Δ 为负.
+              "标" 列: 新=新增专业 / 停=停招专业 / 外=中外合作办学.
+              点 ▸ 展开该校所有专业明细 (按 |Δ| 降序).
+            </div>
+          </section>
 
           <!-- Insights -->
           <section v-if="analysis.insights.length">
@@ -4869,9 +5017,66 @@ const VoluntaryReport = {
           </table>
         </section>
 
-        <!-- 16. 转专业风险扫描 -->
+        <!-- 16. 按学校 25→26 招生变化 (985/211/双一流/省重点, |Δ| Top 30) -->
+        <section v-if="analysis.enrollChangeBySchool && analysis.enrollChangeBySchool.length"
+                 class="mb-6 page-break-before">
+          <h2 class="text-lg font-bold mb-2 bg-blue-50 px-2 py-1 border-l-4 border-blue-600">16. 按学校 25→26 招生变化 (985 / 211 / 双一流 / 省重点, |Δ| Top 30)</h2>
+          <div class="text-xs text-slate-500 mb-1">
+            共 {{ analysis.enrollChangeBySchool.length }} 所重点校;
+            合计 25 招 {{ analysis.enrollChangeBySchool.reduce((s,r)=>s+r.n25,0) }} → 26 招 {{ analysis.enrollChangeBySchool.reduce((s,r)=>s+r.n26,0) }}
+            (Δ {{ (analysis.enrollChangeBySchool.reduce((s,r)=>s+r.delta,0) > 0 ? '+' : '') + analysis.enrollChangeBySchool.reduce((s,r)=>s+r.delta,0) }})
+          </div>
+          <table class="w-full text-[10px] border-collapse">
+            <thead><tr class="bg-slate-100">
+              <th class="border px-1 py-1 w-6">#</th>
+              <th class="border px-1 py-1">学校</th>
+              <th class="border px-1 py-1 w-12">城市</th>
+              <th class="border px-1 py-1 w-12">档</th>
+              <th class="border px-1 py-1 w-10">软科</th>
+              <th class="border px-1 py-1 w-10">25 招</th>
+              <th class="border px-1 py-1 w-10">26 招</th>
+              <th class="border px-1 py-1 w-10">Δ</th>
+              <th class="border px-1 py-1 w-10">Δ%</th>
+              <th class="border px-1 py-1 w-12">25/26 条</th>
+              <th class="border px-1 py-1">新/停/外</th>
+            </tr></thead>
+            <tbody>
+              <tr v-for="(r, i) in analysis.enrollChangeBySchool.slice(0, 30)" :key="'pdf-sch-ec-'+r.schoolName">
+                <td class="border px-1 py-0.5 text-center">{{ i+1 }}</td>
+                <td class="border px-1 py-0.5"><b>{{r.schoolName}}</b></td>
+                <td class="border px-1 py-0.5 text-center">{{r.city || '—'}}</td>
+                <td class="border px-1 py-0.5 text-center">
+                  <span v-if="(r.schoolTag||'').includes('985')">985</span>
+                  <span v-else-if="(r.schoolTag||'').includes('211')">211</span>
+                  <span v-else-if="(r.schoolTag||'').includes('双一流')">双一流</span>
+                  <span v-else-if="(r.schoolTag||'').includes('省重点')">省</span>
+                </td>
+                <td class="border px-1 py-0.5 text-center">{{ r.schoolRank < 9999 ? r.schoolRank : '—' }}</td>
+                <td class="border px-1 py-0.5 text-center">{{r.n25 || '—'}}</td>
+                <td class="border px-1 py-0.5 text-center">{{r.n26 || '—'}}</td>
+                <td class="border px-1 py-0.5 text-center font-bold"
+                    :class="r.delta > 0 ? 'text-red-600' : r.delta < 0 ? 'text-green-700' : ''">
+                  {{ r.delta > 0 ? '+' + r.delta : r.delta || '0' }}
+                </td>
+                <td class="border px-1 py-0.5 text-center"
+                    :class="r.delta > 0 ? 'text-red-500' : r.delta < 0 ? 'text-green-600' : ''">
+                  {{ r.n25 > 0 ? (r.deltaPct >= 0 ? '+' : '') + (r.deltaPct * 100).toFixed(0) + '%' : (r.n26 > 0 ? '新' : '—') }}
+                </td>
+                <td class="border px-1 py-0.5 text-center">{{r.cnt25}}/{{r.cnt26}}</td>
+                <td class="border px-1 py-0.5 text-center text-[9px]">
+                  <span v-if="r.cntNew" class="text-red-600 mr-1">{{r.cntNew}}新</span>
+                  <span v-if="r.cntStopped" class="text-slate-500 mr-1">{{r.cntStopped}}停</span>
+                  <span v-if="r.cntZwhz" class="text-blue-600">{{r.cntZwhz}}外</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="text-[9px] text-slate-400 mt-1">仅含 985 / 211 / 双一流 / 省重点 学校; 按 |Δ| 降序前 30. 更全数据见 web app 分析页.</div>
+        </section>
+
+        <!-- 17. 转专业风险扫描 -->
         <section class="mb-6 page-break-before">
-          <h2 class="text-lg font-bold mb-2 bg-blue-50 px-2 py-1 border-l-4 border-blue-600">16. 转专业风险扫描</h2>
+          <h2 class="text-lg font-bold mb-2 bg-blue-50 px-2 py-1 border-l-4 border-blue-600">17. 转专业风险扫描</h2>
           <transfer-risk-section :analysis="analysis" :targets="targets" :accepts="accepts" :compact="true"></transfer-risk-section>
         </section>
       </div>
@@ -5725,13 +5930,36 @@ const __app = createApp({
       (ui.useRefinedQuery && refinedScore26.value != null) ? refinedScore26.value : ui.myScore);
 
     // 冲稳保区间 (响应顶部分数 + 等位基准 + 修正开关)
-    const cwb = computed(() =>
-      scoreRank.value ? computeChongWenBao(queryScore26.value, scoreRank.value, ui.equivSource, store.cwbRanges) : null);
+    // 启用 useRefinedQuery + rankRefine 时: 直接以 rankRefine.Y_final 为 anchor25, 不走 equivFromScore26 round-trip
+    const cwb = computed(() => {
+      if (!scoreRank.value) return null;
+      const useRefined = ui.useRefinedQuery && rankRefine.value && rankRefine.value.Y_final != null;
+      if (useRefined) {
+        const Y = rankRefine.value.Y_final;
+        const cfg = store.cwbRanges || DEFAULT_CWB_RANGES;
+        const ranges = {
+          chong: { scoreLow: Y + cfg.chong.lo, scoreHigh: Y + cfg.chong.hi, label: "冲" },
+          wen:   { scoreLow: Y + cfg.wen.lo,   scoreHigh: Y + cfg.wen.hi,   label: "稳" },
+          bao:   { scoreLow: Y + cfg.bao.lo,   scoreHigh: Y + cfg.bao.hi,   label: "保" },
+        };
+        for (const k of Object.keys(ranges)) {
+          const r = ranges[k];
+          r.rankHigh = rank25FromScore25(r.scoreLow,  scoreRank.value);
+          r.rankLow  = rank25FromScore25(r.scoreHigh, scoreRank.value);
+        }
+        if (ranges.chong.rankHigh && ranges.wen.rankLow && ranges.chong.rankHigh < ranges.wen.rankLow - 1) ranges.chong.rankHigh = ranges.wen.rankLow - 1;
+        if (ranges.wen.rankHigh && ranges.bao.rankLow && ranges.wen.rankHigh < ranges.bao.rankLow - 1) ranges.wen.rankHigh = ranges.bao.rankLow - 1;
+        return { equivScore25: Y, equivRank25: rankRefine.value.R25_final, ranges };
+      }
+      return computeChongWenBao(queryScore26.value, scoreRank.value, ui.equivSource, store.cwbRanges);
+    });
 
     // 监听 cwb 变化 → 自动填充 3 段范围 (用户没手改时)
     // 用 snapshot 比对: 当前值 === 上次填的值 → 视为"未手改", 覆盖; 否则尊重用户手改, 跳过.
+    // 注意 LS 持久化已经会恢复上次保存的 scoreRanges, 但那也是"上次自动填", 不是用户手改 — 用首帧 force-sync 覆盖.
     let lastAutoScoreRanges = null;
     let lastAutoRankRanges  = null;
+    let cwbFirstFire = true;
     function sameRanges(a, b) {
       if (!a || !b || a.length !== b.length) return false;
       for (let i = 0; i < a.length; i++) {
@@ -5747,30 +5975,35 @@ const __app = createApp({
         { tier: "wen",   low: r.wen.scoreLow,   high: r.wen.scoreHigh },
         { tier: "bao",   low: r.bao.scoreLow,   high: r.bao.scoreHigh },
       ];
-      // 首次填 (snapshot 为空 且 当前空) 或 当前 === 上次自动填 → 覆盖; 否则尊重用户手改
-      const scoreUnchanged = !lastAutoScoreRanges
-        ? !store.filters.scoreRanges || !store.filters.scoreRanges.length
-        : sameRanges(store.filters.scoreRanges, lastAutoScoreRanges);
+      // 首次 fire (页面加载后) → 强制覆盖 (LS 的旧值视为旧 auto-fill);
+      // 后续 fire → 若当前 === 上次自动填, 覆盖; 否则尊重手改.
+      const scoreUnchanged = cwbFirstFire
+        ? true
+        : !lastAutoScoreRanges
+          ? (!store.filters.scoreRanges || !store.filters.scoreRanges.length)
+          : sameRanges(store.filters.scoreRanges, lastAutoScoreRanges);
       if (scoreUnchanged) {
         store.filters.scoreRanges = nextScore;
         lastAutoScoreRanges = nextScore.map(x => ({ ...x }));
       }
-      // 位次范围
       if (r.chong.rankLow != null) {
         const nextRank = [
           { tier: "chong", low: r.chong.rankLow, high: r.chong.rankHigh },
           { tier: "wen",   low: r.wen.rankLow,   high: r.wen.rankHigh },
           { tier: "bao",   low: r.bao.rankLow,   high: r.bao.rankHigh },
         ];
-        const rankUnchanged = !lastAutoRankRanges
-          ? !store.filters.rankRanges || !store.filters.rankRanges.length
-          : sameRanges(store.filters.rankRanges, lastAutoRankRanges);
+        const rankUnchanged = cwbFirstFire
+          ? true
+          : !lastAutoRankRanges
+            ? (!store.filters.rankRanges || !store.filters.rankRanges.length)
+            : sameRanges(store.filters.rankRanges, lastAutoRankRanges);
         if (rankUnchanged) {
           store.filters.rankRanges = nextRank;
           lastAutoRankRanges = nextRank.map(x => ({ ...x }));
         }
       }
-    });
+      cwbFirstFire = false;
+    }, { immediate: true });
 
     // 排序后的 priority 数据 (overrides 优先, 否则用 priority.json 默认 sort 字段)
     const sortedPriority = computed(() => {
@@ -6326,9 +6559,59 @@ const __app = createApp({
       const enrollChangeBucket20 = bucketEnrollChange(enrollChangeByScore25, 20, anchor25);
       const enrollChangeBucket10 = bucketEnrollChange(enrollChangeByScore25, 10, anchor25);
 
+      // 按学校 25→26 招生变化 (仅 985/211/双一流/省重点)
+      const TIER_KEYS = ["985", "211", "双一流", "省重点"];
+      const isTargetTier = (tag) => {
+        if (!tag) return false;
+        return TIER_KEYS.some(k => tag.includes(k));
+      };
+      const schoolEcMap = new Map();
+      for (const p of store.allPlans) {
+        if (!isTargetTier(p.schoolTag)) continue;
+        const n25 = p.enrollNum25 || 0;
+        const n26 = p.enrollNum26 || 0;
+        const key = p.schoolName;
+        if (!schoolEcMap.has(key)) {
+          schoolEcMap.set(key, {
+            schoolName: key,
+            schoolTag: p.schoolTag,
+            city: p.city,
+            schoolRank: p.schoolRank ?? 9999,
+            n25: 0, n26: 0,
+            cnt25: 0, cnt26: 0,
+            cntNew: 0, cntStopped: 0, cntZwhz: 0,
+            plans: [],
+          });
+        }
+        const r = schoolEcMap.get(key);
+        r.n25 += n25; r.n26 += n26;
+        if (n25 > 0) r.cnt25++;
+        if (n26 > 0) r.cnt26++;
+        if (p.isNew === "新增") r.cntNew++;
+        if (p.isStopped) r.cntStopped++;
+        if ((p.majorName26 || "").includes("中外合作办学")) r.cntZwhz++;
+        r.plans.push({
+          majorCode: p.majorCode26,
+          majorName: p.majorName26 || p.majorName25,
+          n25, n26,
+          delta: n26 - n25,
+          isNew: p.isNew === "新增",
+          isStopped: !!p.isStopped,
+          isZ: (p.majorName26 || "").includes("中外合作办学"),
+        });
+      }
+      const enrollChangeBySchool = Array.from(schoolEcMap.values())
+        .map(r => ({
+          ...r,
+          delta: r.n26 - r.n25,
+          deltaPct: r.n25 > 0 ? (r.n26 - r.n25) / r.n25 : (r.n26 > 0 ? 1 : 0),
+        }))
+        .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta) || (a.schoolRank - b.schoolRank));
+
       return {
         items, tiers, byScore, bySchool, byMajor, byCity, ranges, enrollByScore25,
         enrollChangeByScore25, enrollChangeBucket20, enrollChangeBucket10,
+        enrollChangeBySchool,
         my26: ui.myScore, autoAnchor25: autoAnchor, anchor25, anchorRank25,
         myRank26: ui.myRank, userRank26,
         total, totalEnroll, insights, transferSummary,
