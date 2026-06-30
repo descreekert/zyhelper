@@ -18,6 +18,12 @@ const LS_KEY_PRESET= "zyhelper_presets_v2";   // v2: 含 subjects + allowed 关�
 const LS_KEY_UI    = "zyhelper_ui_v1";
 const LS_KEY_TRANSFER_TARGETS = "zyhelper_transfer_targets_v1";  // 目标专业列表 (无需转)
 const LS_KEY_TRANSFER_ACCEPTS = "zyhelper_transfer_accepts_v1";  // 可接受转专业列表
+const LS_KEY_CWB_RANGES = "zyhelper_cwb_ranges_v1";              // 冲稳保 段偏移
+const DEFAULT_CWB_RANGES = {
+  chong: { lo: 6,   hi: 20 },
+  wen:   { lo: -5,  hi: 5  },
+  bao:   { lo: -20, hi: -6 },
+};
 
 // 默认: 用户最初输入的两份清单 (可在 UI 编辑覆盖)
 const DEFAULT_TRANSFER_TARGETS = [
@@ -358,18 +364,16 @@ function rank26FromScore26(score26, scoreRank) {
 
 // 冲稳保: 用 26 分数 X → 先转 25 等位分 Y → 在 Y 上做 delta → 用 25 一分一段反查位次
 // 因为筛选用的是 25 参考数据 (ref25Score / ref25Rank), 必须用 25 标尺
-function computeChongWenBao(score26, scoreRank, equivSource = "25") {
+function computeChongWenBao(score26, scoreRank, equivSource = "25", cwbCfg = null) {
   if (!score26) return null;
   const { score: Y, rank: equivRank } = equivFromScore26(score26, scoreRank, equivSource);
   if (Y == null) return null;
-  // 统一 冲稳保 标准 (与分析页一致, 相对 25 等位分):
-  //   冲: +6  ~ +20
-  //   稳: -5  ~ +5
-  //   保: -20 ~ -6
+  // 冲稳保段偏移 (相对 25 等位分): 默认 +6/+20/-5/+5/-20/-6, 可在 ⚙ 设置 改
+  const cfg = cwbCfg || DEFAULT_CWB_RANGES;
   const ranges = {
-    chong: { scoreLow: Y + 6,  scoreHigh: Y + 20, label: "冲" },
-    wen:   { scoreLow: Y - 5,  scoreHigh: Y + 5,  label: "稳" },
-    bao:   { scoreLow: Y - 20, scoreHigh: Y - 6,  label: "保" },
+    chong: { scoreLow: Y + cfg.chong.lo, scoreHigh: Y + cfg.chong.hi, label: "冲" },
+    wen:   { scoreLow: Y + cfg.wen.lo,   scoreHigh: Y + cfg.wen.hi,   label: "稳" },
+    bao:   { scoreLow: Y + cfg.bao.lo,   scoreHigh: Y + cfg.bao.hi,   label: "保" },
   };
   for (const k of Object.keys(ranges)) {
     const r = ranges[k];
@@ -727,6 +731,10 @@ const store = reactive({
   voluntaryBackup:  loadLS(LS_KEY_VOL_BACKUP, {}),
   // 用户自定义排序覆盖 (null = 用 priority.json 默认; Array<name> = 自定义顺序)
   priorityOverrides: loadLS(LS_KEY_PRIORITY_OVR, { schools: null, cities: null, majorClasses: null, majors: null }),
+  cwbRanges: (() => {
+    const v = loadLS(LS_KEY_CWB_RANGES, null);
+    return v && v.chong && v.wen && v.bao ? v : JSON.parse(JSON.stringify(DEFAULT_CWB_RANGES));
+  })(),
   transferTargets: (() => {
     const lst = loadLS(LS_KEY_TRANSFER_TARGETS, DEFAULT_TRANSFER_TARGETS.slice());
     let migrated = false;
@@ -825,6 +833,7 @@ watch(() => store.priorityOverrides, v => saveLS(LS_KEY_PRIORITY_OVR, v), { deep
 watch(() => store.planOverrides, v => saveLS(LS_KEY_PLAN_OVR, v), { deep: true });
 watch(() => store.transferTargets, v => saveLS(LS_KEY_TRANSFER_TARGETS, v), { deep: true });
 watch(() => store.transferAccepts, v => saveLS(LS_KEY_TRANSFER_ACCEPTS, v), { deep: true });
+watch(() => store.cwbRanges, v => saveLS(LS_KEY_CWB_RANGES, v), { deep: true });
 watch(ui, v => saveLS(LS_KEY_UI, { ...v, detailPlan: null }), { deep: true });
 
 // ========== 组件 ==========
@@ -2830,10 +2839,13 @@ const FavoritesBar = {
 
 // === 排序设置 modal ===
 const PrioritySettings = {
-  props: ["priority", "overrides", "filters", "transferTargets", "transferAccepts", "samePosPct"],
+  props: ["priority", "overrides", "filters", "transferTargets", "transferAccepts", "samePosPct",
+          "totalVolunteers", "ratioChong", "ratioWen", "ratioBao", "cwbRanges"],
   emits: ["close", "save", "reset",
           "update-transfer-targets", "update-transfer-accepts", "reset-transfer-lists",
-          "set-pos"],
+          "set-pos",
+          "update:totalVolunteers", "update:ratioChong", "update:ratioWen", "update:ratioBao",
+          "update-cwb-ranges", "reset-cwb-ranges"],
   setup(props, { emit }) {
     const activeTab = ref("schools");
     const tabs = [
@@ -2841,7 +2853,9 @@ const PrioritySettings = {
       { key: "cities",       label: "🏙 城市",   nameKey: "city", filterKey: "cityPriorityMax",     mode: "max",   group: "priority" },
       { key: "majorClasses", label: "📚 专业类", nameKey: "name", filterKey: "majorClassPriorityMax", mode: "max", group: "priority" },
       { key: "majors",       label: "🔖 专业",   nameKey: "name", filterKey: "majorPriorityMax",     mode: "max", group: "priority" },
-      { key: "transfer",     label: "🎓 转专业",  group: "config" },
+      { key: "ratio",        label: "📊 志愿分布",  group: "config" },
+      { key: "cwbseg",       label: "📐 冲稳保段",  group: "config" },
+      { key: "transfer",     label: "🎓 转专业",   group: "config" },
       { key: "refine",       label: "🎯 位次精修", group: "config" },
     ];
     // 转专业 编辑文本
@@ -3016,6 +3030,102 @@ const PrioritySettings = {
                           class="px-1 disabled:opacity-30 hover:bg-blue-50" title="置底">⇊</button>
                 </div>
               </template>
+            </div>
+          </template>
+
+          <!-- ====== 志愿分布 比例 tab ====== -->
+          <template v-else-if="activeTab === 'ratio'">
+            <div class="text-xs text-slate-500 mb-3">
+              <b>志愿分布 比例</b> 用于推荐 + 顶部"冲稳保占比" 显示. 比例之和需等于 100%.
+            </div>
+            <div class="border rounded p-4 bg-slate-50 space-y-3 text-sm max-w-md">
+              <label class="flex items-center justify-between">
+                <span class="font-bold w-24">总志愿数:</span>
+                <input type="number" :value="totalVolunteers" min="1" max="200"
+                       @input="$emit('update:totalVolunteers', +$event.target.value || 1)"
+                       class="w-24 border rounded px-2 py-1 text-center font-bold text-blue-700">
+              </label>
+              <div class="space-y-2 pt-2 border-t">
+                <label class="flex items-center justify-between">
+                  <span class="text-red-700 font-bold w-12">冲 %</span>
+                  <input type="number" :value="Math.round(ratioChong*100)" min="0" max="100"
+                         @input="$emit('update:ratioChong', (+$event.target.value || 0)/100)"
+                         class="w-20 border rounded px-2 py-1 text-center">
+                  <span class="text-slate-500 ml-3 w-20 text-right">{{ Math.round(totalVolunteers * ratioChong) }} 个</span>
+                </label>
+                <label class="flex items-center justify-between">
+                  <span class="text-amber-700 font-bold w-12">稳 %</span>
+                  <input type="number" :value="Math.round(ratioWen*100)" min="0" max="100"
+                         @input="$emit('update:ratioWen', (+$event.target.value || 0)/100)"
+                         class="w-20 border rounded px-2 py-1 text-center">
+                  <span class="text-slate-500 ml-3 w-20 text-right">{{ Math.round(totalVolunteers * ratioWen) }} 个</span>
+                </label>
+                <label class="flex items-center justify-between">
+                  <span class="text-green-700 font-bold w-12">保 %</span>
+                  <input type="number" :value="Math.round(ratioBao*100)" min="0" max="100"
+                         @input="$emit('update:ratioBao', (+$event.target.value || 0)/100)"
+                         class="w-20 border rounded px-2 py-1 text-center">
+                  <span class="text-slate-500 ml-3 w-20 text-right">{{ Math.round(totalVolunteers * ratioBao) }} 个</span>
+                </label>
+              </div>
+              <div class="text-xs pt-2 border-t"
+                   :class="Math.round((ratioChong+ratioWen+ratioBao)*100)===100 ? 'text-green-700' : 'text-red-600 font-bold'">
+                合计 {{ Math.round((ratioChong+ratioWen+ratioBao)*100) }}%
+                <span v-if="Math.round((ratioChong+ratioWen+ratioBao)*100)!==100">⚠ 应为 100%</span>
+              </div>
+              <div class="text-[10px] text-slate-400 pt-1">默认: 总 112 项 (辽宁物理类常见), 冲 25% / 稳 45% / 保 30%</div>
+            </div>
+          </template>
+
+          <!-- ====== 冲稳保 段偏移 tab ====== -->
+          <template v-else-if="activeTab === 'cwbseg'">
+            <div class="text-xs text-slate-500 mb-3">
+              <b>冲稳保 分数段偏移</b> (相对 25 等位分): 用于 顶部志愿分布 chips / 主表 tier 着色 /
+              分析页 划档 / 录取率算法. 修改立即生效.
+              <button @click="$emit('reset-cwb-ranges')" class="ml-2 text-amber-600 hover:underline">重置默认</button>
+            </div>
+            <div class="border rounded p-4 bg-slate-50 space-y-3 text-sm max-w-md">
+              <div class="space-y-2">
+                <div class="flex items-center gap-2">
+                  <span class="font-bold w-12 text-red-700">冲档</span>
+                  <span class="text-slate-500">: anchor25 +</span>
+                  <input type="number" :value="cwbRanges.chong.lo"
+                         @input="$emit('update-cwb-ranges', {...cwbRanges, chong:{...cwbRanges.chong, lo:+$event.target.value || 0}})"
+                         class="w-16 border rounded px-2 py-1 text-center">
+                  <span>~</span>
+                  <input type="number" :value="cwbRanges.chong.hi"
+                         @input="$emit('update-cwb-ranges', {...cwbRanges, chong:{...cwbRanges.chong, hi:+$event.target.value || 0}})"
+                         class="w-16 border rounded px-2 py-1 text-center">
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="font-bold w-12 text-amber-700">稳档</span>
+                  <span class="text-slate-500">: anchor25 +</span>
+                  <input type="number" :value="cwbRanges.wen.lo"
+                         @input="$emit('update-cwb-ranges', {...cwbRanges, wen:{...cwbRanges.wen, lo:+$event.target.value || 0}})"
+                         class="w-16 border rounded px-2 py-1 text-center">
+                  <span>~</span>
+                  <input type="number" :value="cwbRanges.wen.hi"
+                         @input="$emit('update-cwb-ranges', {...cwbRanges, wen:{...cwbRanges.wen, hi:+$event.target.value || 0}})"
+                         class="w-16 border rounded px-2 py-1 text-center">
+                </div>
+                <div class="flex items-center gap-2">
+                  <span class="font-bold w-12 text-green-700">保档</span>
+                  <span class="text-slate-500">: anchor25 +</span>
+                  <input type="number" :value="cwbRanges.bao.lo"
+                         @input="$emit('update-cwb-ranges', {...cwbRanges, bao:{...cwbRanges.bao, lo:+$event.target.value || 0}})"
+                         class="w-16 border rounded px-2 py-1 text-center">
+                  <span>~</span>
+                  <input type="number" :value="cwbRanges.bao.hi"
+                         @input="$emit('update-cwb-ranges', {...cwbRanges, bao:{...cwbRanges.bao, hi:+$event.target.value || 0}})"
+                         class="w-16 border rounded px-2 py-1 text-center">
+                </div>
+              </div>
+              <div class="text-xs text-slate-500 pt-2 border-t">
+                默认 ( 推荐): 冲 <b>+6 ~ +20</b> / 稳 <b>-5 ~ +5</b> / 保 <b>-20 ~ -6</b>
+              </div>
+              <div class="text-[10px] text-slate-400">
+                语义: 例 anchor25=618, 冲 +6~+20 → 把 25 等位分在 624-638 的志愿当作"冲".
+              </div>
             </div>
           </template>
 
@@ -5636,7 +5746,7 @@ const __app = createApp({
 
     // 冲稳保区间 (响应顶部分数 + 等位基准 + 修正开关)
     const cwb = computed(() =>
-      scoreRank.value ? computeChongWenBao(queryScore26.value, scoreRank.value, ui.equivSource) : null);
+      scoreRank.value ? computeChongWenBao(queryScore26.value, scoreRank.value, ui.equivSource, store.cwbRanges) : null);
 
     // 监听 cwb 变化 → 自动填充 3 段范围 (用户没手改时)
     watch(cwb, (val) => {
@@ -5789,11 +5899,12 @@ const __app = createApp({
         const enroll = p.enrollNum26 || p.enrollNum25 || 0;
         items.push({ id, plan: p, score25: s25, rank25: r25, enroll });
       }
-      // 统一 冲稳保 标准 (与主查询 / cwb 一致): 冲 +6~+20 / 稳 -5~+5 / 保 -20~-6
+      // 冲稳保段偏移 (与主查询 / cwb 一致, 来自 store.cwbRanges, 默认 +6/+20/-5/+5/-20/-6)
+      const cfg = store.cwbRanges || DEFAULT_CWB_RANGES;
       const ranges = {
-        chong: { lo: anchor25 + 6,  hi: anchor25 + 20 },
-        wen:   { lo: anchor25 - 5,  hi: anchor25 + 5  },
-        bao:   { lo: anchor25 - 20, hi: anchor25 - 6  },
+        chong: { lo: anchor25 + cfg.chong.lo,  hi: anchor25 + cfg.chong.hi },
+        wen:   { lo: anchor25 + cfg.wen.lo,    hi: anchor25 + cfg.wen.hi   },
+        bao:   { lo: anchor25 + cfg.bao.lo,    hi: anchor25 + cfg.bao.hi   },
       };
       const tierOf = (s) => {
         if (s == null) return "out";
@@ -7028,6 +7139,9 @@ const __app = createApp({
       store.transferTargets = DEFAULT_TRANSFER_TARGETS.slice();
       store.transferAccepts = DEFAULT_TRANSFER_ACCEPTS.slice();
     }
+    function resetCwbRanges() {
+      store.cwbRanges = JSON.parse(JSON.stringify(DEFAULT_CWB_RANGES));
+    }
 
     // ===== 位次精修 (同分位置 + 上方扩招 → 修正 25 等位分/位次) =====
     // effective_ref25 — 把 中外合作 -15, 民族班 -10 (LOW qualifier 实际录低于挂牌)
@@ -7952,7 +8066,7 @@ const __app = createApp({
       store, ui, loading, loadingMsg, loadingPct,
       scoreRank, meta, priority, currentPage, cwb, tierMap, paneTargets, activeTier, filteredTierCounts, recommendData,
       admitProbFor, userRank25Anchor, transferOf, resetTransferLists,
-      rankRefine, applyRankRefine, setSamePosPct, refinedScore26,
+      rankRefine, applyRankRefine, setSamePosPct, refinedScore26, resetCwbRanges,
       transferTargetSet, transferAcceptSet,
       ratioSumOk, resetRatios,
       filtered, sorted, paged, planByIdMap, compareIdSet, keywordCandidatePool,

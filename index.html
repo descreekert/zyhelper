@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>2026 物理类志愿填报助手</title>
-  <link rel="stylesheet" href="assets/style.css?v=v19-settings">
+  <link rel="stylesheet" href="assets/style.css?v=v19-settings-v2">
   <script src="https://unpkg.com/vue@3.4.21/dist/vue.global.prod.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/chart.js@4.4.2/dist/chart.umd.js"></script>
@@ -114,57 +114,9 @@
         <!-- 第 2 行: 冲稳保按钮独占一行 + 数据信息 -->
         <div v-if="cwb" class="px-4 pb-2 flex items-center gap-2 flex-wrap text-xs whitespace-nowrap">
           <span class="text-slate-500 whitespace-nowrap">志愿分布:</span>
-          <!-- 比例调节 popover -->
-          <div class="relative ratio-popover">
-            <button @click="ui.showRatioPanel = !ui.showRatioPanel"
-                    class="px-1.5 py-0.5 rounded border text-slate-500 hover:bg-slate-100"
-                    title="调节比例">⚙</button>
-            <div v-if="ui.showRatioPanel"
-                 class="absolute left-0 top-7 z-30 bg-white border rounded shadow-lg p-3 w-64 text-xs">
-              <div class="flex items-center justify-between mb-2">
-                <span class="font-bold">冲稳保比例</span>
-                <button @click="ui.showRatioPanel = false" class="text-slate-400 hover:text-red-500">×</button>
-              </div>
-              <label class="flex items-center justify-between mb-2">
-                <span>总志愿数</span>
-                <input type="number" v-model.number="ui.totalVolunteers" min="1" max="200"
-                       class="w-20 border rounded px-2 py-0.5 text-center">
-              </label>
-              <div class="space-y-1">
-                <label class="flex items-center justify-between">
-                  <span class="text-red-700">冲 %</span>
-                  <input type="number" :value="Math.round(ui.ratioChong*100)"
-                         @input="ui.ratioChong = (+$event.target.value || 0) / 100"
-                         min="0" max="100"
-                         class="w-16 border rounded px-2 py-0.5 text-center">
-                  <span class="text-slate-400 w-12 text-right">{{ Math.round(ui.totalVolunteers * ui.ratioChong) }} 个</span>
-                </label>
-                <label class="flex items-center justify-between">
-                  <span class="text-amber-700">稳 %</span>
-                  <input type="number" :value="Math.round(ui.ratioWen*100)"
-                         @input="ui.ratioWen = (+$event.target.value || 0) / 100"
-                         min="0" max="100"
-                         class="w-16 border rounded px-2 py-0.5 text-center">
-                  <span class="text-slate-400 w-12 text-right">{{ Math.round(ui.totalVolunteers * ui.ratioWen) }} 个</span>
-                </label>
-                <label class="flex items-center justify-between">
-                  <span class="text-green-700">保 %</span>
-                  <input type="number" :value="Math.round(ui.ratioBao*100)"
-                         @input="ui.ratioBao = (+$event.target.value || 0) / 100"
-                         min="0" max="100"
-                         class="w-16 border rounded px-2 py-0.5 text-center">
-                  <span class="text-slate-400 w-12 text-right">{{ Math.round(ui.totalVolunteers * ui.ratioBao) }} 个</span>
-                </label>
-              </div>
-              <div class="mt-2 pt-2 border-t flex justify-between items-center">
-                <span :class="ratioSumOk ? 'text-green-600' : 'text-red-600'" class="text-xs">
-                  合计 {{ Math.round((ui.ratioChong + ui.ratioWen + ui.ratioBao) * 100) }}%
-                  {{ ratioSumOk ? '✓' : '⚠ 应 = 100%' }}
-                </span>
-                <button @click="resetRatios" class="text-blue-500 hover:underline">默认 25/45/30</button>
-              </div>
-            </div>
-          </div>
+          <button @click="ui.showPrioritySettings = true; ui.showMoreMenu = false"
+                  class="px-1.5 py-0.5 rounded border text-slate-500 hover:bg-slate-100"
+                  title="比例/冲稳保段/转专业/位次 调节 (⚙ 设置)">⚙</button>
           <button @click="onApplyTier('chong', cwb.ranges.chong)"
                   class="px-2 py-1 rounded border"
                   :class="activeTier === 'chong' ? 'bg-red-600 border-red-700 text-white ring-2 ring-red-300' : 'bg-red-50 border-red-200 hover:bg-red-100'"
@@ -548,7 +500,7 @@
         </main>
       </div>
 
-      <!-- 设置 modal (排序 + 转专业 + 位次精修) -->
+      <!-- 设置 modal (排序 + 志愿分布 + 冲稳保段 + 转专业 + 位次精修) -->
       <priority-settings
         v-if="ui.showPrioritySettings && priority"
         :priority="priority"
@@ -557,6 +509,11 @@
         :transfer-targets="store.transferTargets"
         :transfer-accepts="store.transferAccepts"
         :same-pos-pct="ui.samePosPct"
+        :total-volunteers="ui.totalVolunteers"
+        :ratio-chong="ui.ratioChong"
+        :ratio-wen="ui.ratioWen"
+        :ratio-bao="ui.ratioBao"
+        :cwb-ranges="store.cwbRanges"
         @close="ui.showPrioritySettings = false"
         @save="savePriorityOverrides"
         @reset="resetPriorityOverrides"
@@ -564,6 +521,12 @@
         @update-transfer-accepts="store.transferAccepts = $event"
         @reset-transfer-lists="resetTransferLists()"
         @set-pos="setSamePosPct($event)"
+        @update:totalVolunteers="ui.totalVolunteers = $event"
+        @update:ratioChong="ui.ratioChong = $event"
+        @update:ratioWen="ui.ratioWen = $event"
+        @update:ratioBao="ui.ratioBao = $event"
+        @update-cwb-ranges="store.cwbRanges = $event"
+        @reset-cwb-ranges="resetCwbRanges()"
       ></priority-settings>
 
       <!-- Detail drawer -->
@@ -581,6 +544,6 @@
     </template>
   </div>
 
-  <script src="assets/app.js?v=v19-settings"></script>
+  <script src="assets/app.js?v=v19-settings-v2"></script>
 </body>
 </html>
