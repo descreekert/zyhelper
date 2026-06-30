@@ -3050,6 +3050,16 @@ const VoluntaryAnalysis = {
     });
     const anchorInput = ref("");
     const rankInput = ref("");
+    const ecBucket = ref("b20");   // 招生变化 区间宽度: b20 / b10 / all
+    const ecExpanded = reactive({});  // {i: bool}
+    const currentEnrollChange = computed(() => {
+      if (!props.analysis) return [];
+      if (ecBucket.value === "b20") return props.analysis.enrollChangeBucket20 || [];
+      if (ecBucket.value === "b10") return props.analysis.enrollChangeBucket10 || [];
+      return props.analysis.enrollChangeByScore25 || [];
+    });
+    const totalEnroll25 = computed(() => (props.analysis?.enrollChangeByScore25 || []).reduce((s, r) => s + r.n25, 0));
+    const totalEnroll26 = computed(() => (props.analysis?.enrollChangeByScore25 || []).reduce((s, r) => s + r.n26, 0));
     watch(() => props.analysis, (a) => {
       if (a) {
         anchorInput.value = String(a.anchor25 || "");
@@ -3074,7 +3084,8 @@ const VoluntaryAnalysis = {
     }
     return { maxScoreCount, maxSchoolCount, byScoreCompact,
              anchorInput, commitAnchor, resetAnchor,
-             rankInput, commitRank, resetRank };
+             rankInput, commitRank, resetRank,
+             ecBucket, ecExpanded, currentEnrollChange, totalEnroll25, totalEnroll26 };
   },
   template: `
     <div :class="embedded ? 'bg-white rounded shadow border text-sm' : 'fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4'"
@@ -3185,6 +3196,100 @@ const VoluntaryAnalysis = {
                   说明: 中外合作 plan 用 effective_ref25 = ref25 -15 (民族班 -10),
                   分数低的中外合作 自然不入"上方"; 修正口径 = 目标+可接受 全部 + 其他 × 0.2
                 </div>
+
+                <!-- 招生变化 详情 (二级 折叠) -->
+                <details class="border rounded mt-2">
+                  <summary class="px-2 py-1 text-xs cursor-pointer hover:bg-slate-100 font-bold text-slate-600">
+                    📈 25→26 招生变化 明细
+                    <span class="text-[10px] font-normal text-slate-500 ml-1">点击展开 (含分段统计 + 行可展开看具体 plan)</span>
+                  </summary>
+                  <div class="p-2 bg-white border-t text-[11px]">
+                    <!-- 区间 toggle -->
+                    <div class="flex items-center gap-1 mb-1 text-[10px]">
+                      <span class="text-slate-500">分段:</span>
+                      <button @click="ecBucket='b20'" class="px-2 py-0.5 rounded" :class="ecBucket==='b20' ? 'bg-blue-500 text-white' : 'bg-slate-100'">20 分一段</button>
+                      <button @click="ecBucket='b10'" class="px-2 py-0.5 rounded" :class="ecBucket==='b10' ? 'bg-blue-500 text-white' : 'bg-slate-100'">10 分一段</button>
+                      <button @click="ecBucket='all'" class="px-2 py-0.5 rounded" :class="ecBucket==='all' ? 'bg-blue-500 text-white' : 'bg-slate-100'">1 分</button>
+                      <span class="ml-2 text-slate-400">含 anchor25 ({{analysis.anchor25}}) 的段 紫底</span>
+                    </div>
+                    <table class="w-full text-[10px] border-collapse">
+                      <thead><tr class="bg-slate-100">
+                        <th class="border px-1 py-0.5 w-6"></th>
+                        <th class="border px-1 py-0.5 text-center">25 等位段</th>
+                        <th class="border px-1 py-0.5 text-center">25 招</th>
+                        <th class="border px-1 py-0.5 text-center">26 招</th>
+                        <th class="border px-1 py-0.5 text-center">Δ 总</th>
+                        <th class="border px-1 py-0.5 text-center" title="目标+可接受">Δ 目</th>
+                        <th class="border px-1 py-0.5 text-center" title="中外合作">Δ 中外</th>
+                        <th class="border px-1 py-0.5 text-center" title="其他">Δ 其他</th>
+                      </tr></thead>
+                      <tbody>
+                        <template v-for="(r, i) in currentEnrollChange" :key="ecBucket+'-'+(r.lo ?? r.score25)">
+                          <tr :class="(r.containsAnchor || r.score25 === analysis.anchor25) ? 'bg-purple-50' : ((r.lo ?? r.score25) >= analysis.anchor25 ? 'bg-blue-50' : '')">
+                            <td class="border px-1 py-0.5 text-center cursor-pointer text-slate-400"
+                                @click="ecExpanded[i] ? (ecExpanded[i]=false) : (ecExpanded[i]=true)">
+                              {{ ecExpanded[i] ? '▾' : '▸' }}
+                            </td>
+                            <td class="border px-1 py-0.5 text-center font-bold">
+                              <span v-if="r.lo != null">{{r.lo}}-{{r.hi}}</span>
+                              <span v-else>{{r.score25}}</span>
+                            </td>
+                            <td class="border px-1 py-0.5 text-center">{{r.n25 || '—'}}</td>
+                            <td class="border px-1 py-0.5 text-center">{{r.n26 || '—'}}</td>
+                            <td class="border px-1 py-0.5 text-center font-bold"
+                                :class="r.delta > 0 ? 'text-red-600' : r.delta < 0 ? 'text-green-700' : 'text-slate-400'">
+                              {{ r.delta > 0 ? '+' + r.delta : r.delta || '0' }}
+                            </td>
+                            <td class="border px-1 py-0.5 text-center">{{ r.delta_target > 0 ? '+' + r.delta_target : r.delta_target || '0' }}</td>
+                            <td class="border px-1 py-0.5 text-center text-slate-500">{{ r.delta_zwhz > 0 ? '+' + r.delta_zwhz : r.delta_zwhz || '0' }}</td>
+                            <td class="border px-1 py-0.5 text-center text-slate-400">{{ r.delta_other > 0 ? '+' + r.delta_other : r.delta_other || '0' }}</td>
+                          </tr>
+                          <tr v-if="ecExpanded[i]" class="bg-slate-50">
+                            <td colspan="8" class="border px-2 py-1">
+                              <table class="w-full text-[10px]">
+                                <thead><tr class="bg-slate-100">
+                                  <th class="px-1 py-0.5 text-left">学校 · 专业</th>
+                                  <th class="px-1 py-0.5 text-center w-8">25</th>
+                                  <th class="px-1 py-0.5 text-center w-8">26</th>
+                                  <th class="px-1 py-0.5 text-center w-8">Δ</th>
+                                  <th class="px-1 py-0.5 text-center w-10">标</th>
+                                </tr></thead>
+                                <tbody>
+                                  <!-- 区间桶 用 r.rows 平铺出所有 plan; 单 score 桶用 r.plans -->
+                                  <template v-for="pl in (r.rows ? r.rows.flatMap(rr => rr.plans) : r.plans)" :key="'pl-'+pl.schoolName+'-'+pl.majorName">
+                                    <tr class="border-t">
+                                      <td class="px-1 py-0.5">
+                                        <span class="font-bold">{{pl.schoolName}}</span>
+                                        <span class="text-slate-500"> · {{pl.majorName}}</span>
+                                      </td>
+                                      <td class="px-1 py-0.5 text-center">{{pl.n25 || '—'}}</td>
+                                      <td class="px-1 py-0.5 text-center">{{pl.n26 || '—'}}</td>
+                                      <td class="px-1 py-0.5 text-center font-bold"
+                                          :class="pl.delta > 0 ? 'text-red-600' : pl.delta < 0 ? 'text-green-700' : 'text-slate-400'">
+                                        {{pl.delta > 0 ? '+' + pl.delta : pl.delta || '0'}}
+                                      </td>
+                                      <td class="px-1 py-0.5 text-center text-[9px]">
+                                        <span v-if="pl.isNew" class="text-red-600 mr-0.5">新</span>
+                                        <span v-if="pl.isStopped" class="text-slate-500 mr-0.5">停</span>
+                                        <span v-if="pl.isZ" class="text-blue-600 mr-0.5">外</span>
+                                        <span v-if="pl.isTarget" class="text-green-700">目</span>
+                                      </td>
+                                    </tr>
+                                  </template>
+                                </tbody>
+                              </table>
+                            </td>
+                          </tr>
+                        </template>
+                      </tbody>
+                    </table>
+                    <div class="text-[10px] text-slate-400 mt-1">
+                      合计: 25 招 {{ totalEnroll25 }} → 26 招 {{ totalEnroll26 }}
+                      (Δ {{ totalEnroll26 - totalEnroll25 > 0 ? '+' : '' }}{{ totalEnroll26 - totalEnroll25 }})
+                      · 标: 新=新增 plan / 停=26 停招 / 外=中外合作 / 目=用户目标专业
+                    </div>
+                  </div>
+                </details>
               </div>
             </details>
           </div>
@@ -3726,66 +3831,6 @@ const VoluntaryAnalysis = {
                     </tr>
                   </template>
                 </tbody>
-              </table>
-            </div>
-          </section>
-
-          <!-- 25→26 招生变化 (按 25 等位分 1 分一档) -->
-          <section v-if="analysis.enrollChangeByScore25 && analysis.enrollChangeByScore25.length">
-            <div class="text-xs text-slate-500 mb-1">
-              📈 25→26 招生变化 (按 25 等位分聚合, {{ analysis.enrollChangeByScore25.length }} 个分段) — 用户上方 (≥ anchor25 {{ analysis.anchor25 }}) 用蓝底高亮
-            </div>
-            <div class="border rounded bg-white overflow-x-auto" style="max-height:400px;overflow-y:auto">
-              <table class="w-full text-[11px]">
-                <thead class="sticky top-0 bg-slate-100 z-10">
-                  <tr>
-                    <th class="px-2 py-1 text-center w-14">25 等位</th>
-                    <th class="px-2 py-1 text-center w-12">25 招</th>
-                    <th class="px-2 py-1 text-center w-12">26 招</th>
-                    <th class="px-2 py-1 text-center w-14">Δ 总</th>
-                    <th class="px-2 py-1 text-center w-14" title="目标+可接受 专业">Δ 目标</th>
-                    <th class="px-2 py-1 text-center w-14" title="中外合作 单列">Δ 中外</th>
-                    <th class="px-2 py-1 text-center w-14" title="不在目标 也不在可接受">Δ 其他</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="r in analysis.enrollChangeByScore25" :key="r.score25"
-                      :class="r.score25 >= analysis.anchor25 ? 'bg-blue-50' : ''">
-                    <td class="border-t px-2 py-0.5 text-center font-bold"
-                        :class="r.score25 == analysis.anchor25 ? 'text-purple-700' : ''">{{ r.score25 }}</td>
-                    <td class="border-t px-2 py-0.5 text-center">{{ r.n25 || '—' }}</td>
-                    <td class="border-t px-2 py-0.5 text-center">{{ r.n26 || '—' }}</td>
-                    <td class="border-t px-2 py-0.5 text-center font-bold"
-                        :class="r.delta > 0 ? 'text-red-600' : r.delta < 0 ? 'text-green-700' : 'text-slate-400'">
-                      {{ r.delta > 0 ? '+' + r.delta : r.delta || '0' }}
-                    </td>
-                    <td class="border-t px-2 py-0.5 text-center"
-                        :class="r.delta_target > 0 ? 'text-red-600' : r.delta_target < 0 ? 'text-green-700' : 'text-slate-400'">
-                      {{ r.delta_target > 0 ? '+' + r.delta_target : r.delta_target || '0' }}
-                    </td>
-                    <td class="border-t px-2 py-0.5 text-center"
-                        :class="r.delta_zwhz > 0 ? 'text-red-600' : r.delta_zwhz < 0 ? 'text-green-700' : 'text-slate-400'">
-                      {{ r.delta_zwhz > 0 ? '+' + r.delta_zwhz : r.delta_zwhz || '0' }}
-                    </td>
-                    <td class="border-t px-2 py-0.5 text-center text-slate-500">
-                      {{ r.delta_other > 0 ? '+' + r.delta_other : r.delta_other || '0' }}
-                    </td>
-                  </tr>
-                </tbody>
-                <tfoot class="bg-slate-50 font-bold sticky bottom-0">
-                  <tr>
-                    <td class="border-t px-2 py-1">合计</td>
-                    <td class="border-t px-2 py-1 text-center">{{ analysis.enrollChangeByScore25.reduce((s,r)=>s+r.n25,0) }}</td>
-                    <td class="border-t px-2 py-1 text-center">{{ analysis.enrollChangeByScore25.reduce((s,r)=>s+r.n26,0) }}</td>
-                    <td class="border-t px-2 py-1 text-center"
-                        :class="(analysis.enrollChangeByScore25.reduce((s,r)=>s+r.delta,0)) > 0 ? 'text-red-600' : 'text-green-700'">
-                      {{ (analysis.enrollChangeByScore25.reduce((s,r)=>s+r.delta,0)) > 0 ? '+' : '' }}{{ analysis.enrollChangeByScore25.reduce((s,r)=>s+r.delta,0) }}
-                    </td>
-                    <td class="border-t px-2 py-1 text-center">{{ analysis.enrollChangeByScore25.reduce((s,r)=>s+r.delta_target,0) > 0 ? '+' : '' }}{{ analysis.enrollChangeByScore25.reduce((s,r)=>s+r.delta_target,0) }}</td>
-                    <td class="border-t px-2 py-1 text-center">{{ analysis.enrollChangeByScore25.reduce((s,r)=>s+r.delta_zwhz,0) > 0 ? '+' : '' }}{{ analysis.enrollChangeByScore25.reduce((s,r)=>s+r.delta_zwhz,0) }}</td>
-                    <td class="border-t px-2 py-1 text-center text-slate-500">{{ analysis.enrollChangeByScore25.reduce((s,r)=>s+r.delta_other,0) > 0 ? '+' : '' }}{{ analysis.enrollChangeByScore25.reduce((s,r)=>s+r.delta_other,0) }}</td>
-                  </tr>
-                </tfoot>
               </table>
             </div>
           </section>
@@ -4613,31 +4658,28 @@ const VoluntaryReport = {
           </div>
         </section>
 
-        <!-- 15. 25→26 招生变化 -->
-        <section v-if="analysis.enrollChangeByScore25 && analysis.enrollChangeByScore25.length"
+        <!-- 15. 25→26 招生变化 (按 25 等位分 20 分区间) -->
+        <section v-if="analysis.enrollChangeBucket20 && analysis.enrollChangeBucket20.length"
                  class="mb-6 page-break-before">
-          <h2 class="text-lg font-bold mb-2 bg-blue-50 px-2 py-1 border-l-4 border-blue-600">15. 25→26 招生变化 (按 25 等位分)</h2>
+          <h2 class="text-lg font-bold mb-2 bg-blue-50 px-2 py-1 border-l-4 border-blue-600">15. 25→26 招生变化 (20 分区间, 含 anchor 段加灰底)</h2>
           <div class="text-[10px] text-slate-500 mb-1">
             合计: 25 招 {{ analysis.enrollChangeByScore25.reduce((s,r)=>s+r.n25,0) }} → 26 招 {{ analysis.enrollChangeByScore25.reduce((s,r)=>s+r.n26,0) }}
-            (Δ {{ analysis.enrollChangeByScore25.reduce((s,r)=>s+r.delta,0) > 0 ? '+' : '' }}{{ analysis.enrollChangeByScore25.reduce((s,r)=>s+r.delta,0) }};
-            目标 Δ {{ analysis.enrollChangeByScore25.reduce((s,r)=>s+r.delta_target,0) > 0 ? '+' : '' }}{{ analysis.enrollChangeByScore25.reduce((s,r)=>s+r.delta_target,0) }};
-            中外 Δ {{ analysis.enrollChangeByScore25.reduce((s,r)=>s+r.delta_zwhz,0) > 0 ? '+' : '' }}{{ analysis.enrollChangeByScore25.reduce((s,r)=>s+r.delta_zwhz,0) }})
-            · 用户 anchor25 {{ analysis.anchor25 }} 以上的分段 加灰底
+            · 用户 anchor25 {{ analysis.anchor25 }}
           </div>
           <table class="w-full text-[10px] border-collapse">
             <thead><tr class="bg-slate-100">
-              <th class="border px-1 py-1">25 等位</th>
+              <th class="border px-1 py-1">25 等位段</th>
               <th class="border px-1 py-1">25 招</th>
               <th class="border px-1 py-1">26 招</th>
               <th class="border px-1 py-1">Δ 总</th>
-              <th class="border px-1 py-1">Δ 目标</th>
-              <th class="border px-1 py-1">Δ 中外</th>
-              <th class="border px-1 py-1">Δ 其他</th>
+              <th class="border px-1 py-1" title="目标+可接受">Δ 目标</th>
+              <th class="border px-1 py-1" title="中外合作">Δ 中外</th>
+              <th class="border px-1 py-1" title="其他">Δ 其他</th>
             </tr></thead>
             <tbody>
-              <tr v-for="r in analysis.enrollChangeByScore25" :key="'ec'+r.score25"
-                  :class="r.score25 >= analysis.anchor25 ? 'bg-slate-100' : ''">
-                <td class="border px-1 py-0.5 text-center font-bold">{{ r.score25 }}</td>
+              <tr v-for="r in analysis.enrollChangeBucket20" :key="'ec20-'+r.lo"
+                  :class="r.containsAnchor ? 'bg-purple-50' : (r.lo >= analysis.anchor25 ? 'bg-slate-100' : '')">
+                <td class="border px-1 py-0.5 text-center font-bold">{{ r.lo }}-{{ r.hi }}</td>
                 <td class="border px-1 py-0.5 text-center">{{ r.n25 || '—' }}</td>
                 <td class="border px-1 py-0.5 text-center">{{ r.n26 || '—' }}</td>
                 <td class="border px-1 py-0.5 text-center font-bold"
@@ -5960,22 +6002,22 @@ const __app = createApp({
           plans: r?.plans || [],
         });
       }
-      // 25→26 招生人数 变化 (按 25 等位分 1 分一档)
-      // 每档: 25/26 名额, Δ, 中外合作单列, 目标+可接受 单列
+      // 25→26 招生人数 变化 (按 25 等位分 1 分一档 + 区间聚合)
+      // 每档: 25/26 名额, Δ总/中外/目标/其他, 含 plans 明细 (可展开)
       const enrollChangeMap = new Map();
       for (const p of store.allPlans) {
         const s25 = p.ref25Score ?? p.score25;
         if (s25 == null) continue;
-        const eff = effectiveRef25(p);
         const n25 = p.enrollNum25 || 0;
         const n26 = p.enrollNum26 || 0;
+        if (!n25 && !n26) continue;
         if (!enrollChangeMap.has(s25)) {
           enrollChangeMap.set(s25, {
             score25: s25, n25: 0, n26: 0,
             n25_zwhz: 0, n26_zwhz: 0,
             n25_target: 0, n26_target: 0,
             n25_other: 0, n26_other: 0,
-            eff_score: null, eff_n25: 0, eff_n26: 0,   // effective ref25 桶 (修正后)
+            plans: [],
           });
         }
         const r = enrollChangeMap.get(s25);
@@ -5983,28 +6025,73 @@ const __app = createApp({
         const isZ = (p.majorName26 || "").includes("中外合作办学");
         if (isZ) { r.n25_zwhz += n25; r.n26_zwhz += n26; }
         const tr = classifyTransfer(p, _tSet, _aSet);
-        if (tr.level === "ok" || tr.level === "warn") {
-          r.n25_target += n25; r.n26_target += n26;
-        } else {
-          r.n25_other += n25; r.n26_other += n26;
-        }
-        // effective bucket — 用 effective_ref25 单独再聚合 (供"按真实段位看"参考)
-        if (eff != null) {
-          if (!enrollChangeMap.has("eff:" + eff)) {
-            enrollChangeMap.set("eff:" + eff, { score25: eff, eff_n25: 0, eff_n26: 0, _isEff: true });
-          }
-          const er = enrollChangeMap.get("eff:" + eff);
-          er.eff_n25 += n25; er.eff_n26 += n26;
-        }
+        const cat = (tr.level === "ok" || tr.level === "warn") ? "target" : "other";
+        if (cat === "target") { r.n25_target += n25; r.n26_target += n26; }
+        else { r.n25_other += n25; r.n26_other += n26; }
+        r.plans.push({
+          schoolName: p.schoolName, majorName: p.majorName26 || p.majorName25,
+          n25, n26, delta: n26 - n25,
+          isZ, isTarget: cat === "target",
+          isNew: p.isNew === "新增",
+          isStopped: !!p.isStopped,
+        });
       }
       const enrollChangeByScore25 = Array.from(enrollChangeMap.values())
-        .filter(r => !r._isEff)
-        .map(r => ({ ...r, delta: r.n26 - r.n25, delta_zwhz: r.n26_zwhz - r.n25_zwhz, delta_target: r.n26_target - r.n25_target, delta_other: r.n26_other - r.n25_other }))
+        .map(r => ({
+          ...r,
+          delta: r.n26 - r.n25,
+          delta_zwhz: r.n26_zwhz - r.n25_zwhz,
+          delta_target: r.n26_target - r.n25_target,
+          delta_other: r.n26_other - r.n25_other,
+        }))
         .sort((a, b) => b.score25 - a.score25);
+
+      // 区间聚合 (20 分一段, 与 anchor25 对齐)
+      function bucketEnrollChange(rowsByScore, bucketSize, anchorScore) {
+        const center = anchorScore || 600;
+        const align = Math.floor(center / bucketSize) * bucketSize;
+        const buckets = new Map();
+        for (const r of rowsByScore) {
+          const lo = Math.floor(r.score25 / bucketSize) * bucketSize;
+          // 对齐到 anchor: 比如 anchor=618, bucket=20, align=600 → buckets at 600,620,640,...
+          //   lo = floor(618/20)*20 = 600 — 618 落在 600-619 桶
+          //   lo = floor(620/20)*20 = 620 — 620 落在 620-639 桶
+          const key = lo;
+          if (!buckets.has(key)) {
+            buckets.set(key, {
+              lo, hi: lo + bucketSize - 1,
+              n25: 0, n26: 0,
+              n25_zwhz: 0, n26_zwhz: 0,
+              n25_target: 0, n26_target: 0,
+              n25_other: 0, n26_other: 0,
+              rows: [],
+              containsAnchor: false,
+            });
+          }
+          const b = buckets.get(key);
+          b.n25 += r.n25; b.n26 += r.n26;
+          b.n25_zwhz += r.n25_zwhz; b.n26_zwhz += r.n26_zwhz;
+          b.n25_target += r.n25_target; b.n26_target += r.n26_target;
+          b.n25_other += r.n25_other; b.n26_other += r.n26_other;
+          b.rows.push(r);
+          if (anchorScore != null && r.score25 === anchorScore) b.containsAnchor = true;
+        }
+        return Array.from(buckets.values())
+          .map(b => ({
+            ...b,
+            delta: b.n26 - b.n25,
+            delta_zwhz: b.n26_zwhz - b.n25_zwhz,
+            delta_target: b.n26_target - b.n25_target,
+            delta_other: b.n26_other - b.n25_other,
+          }))
+          .sort((a, b) => b.lo - a.lo);
+      }
+      const enrollChangeBucket20 = bucketEnrollChange(enrollChangeByScore25, 20, anchor25);
+      const enrollChangeBucket10 = bucketEnrollChange(enrollChangeByScore25, 10, anchor25);
 
       return {
         items, tiers, byScore, bySchool, byMajor, byCity, ranges, enrollByScore25,
-        enrollChangeByScore25,
+        enrollChangeByScore25, enrollChangeBucket20, enrollChangeBucket10,
         my26: ui.myScore, autoAnchor25: autoAnchor, anchor25, anchorRank25,
         myRank26: ui.myRank, userRank26,
         total, totalEnroll, insights, transferSummary,
@@ -6870,12 +6957,15 @@ const __app = createApp({
       // group ranks: (prevCum+1) .. cum; pos=0 → 顶 (prevCum+1); pos=100 → 底 (cum)
       const R26 = prevCum + 1 + Math.max(0, cnt - 1) * (posPct / 100);
 
-      // 反查 25 等位: 在 osr25 找 cum25 >= R26 的第一个 score
-      let Y0 = null, R25_0 = null;
+      // 反查 25 等位: Y0 = osr25 找 cum25 >= R26 的第一个 score (反查分)
+      // R25_0 = R26 (位次绝对值, 不跳跃; 跳的是 score 不是 rank)
+      let Y0 = null;
       for (const [s, _c, cu] of osr25) {
-        if (cu >= R26) { Y0 = s; R25_0 = cu; break; }
+        if (cu >= R26) { Y0 = s; break; }
       }
+      if (Y0 == null) Y0 = osr25.length ? osr25[osr25.length - 1][0] : null;
       if (Y0 == null) return null;
+      const R25_0 = Math.round(R26);
 
       // Step 2: 上方扩招 (effective_ref25 >= Y0)
       const T = transferTargetSet.value;
@@ -6898,9 +6988,8 @@ const __app = createApp({
         }
       }
       const totalShift = sumA * 1.0 + sumB * 0.2;
+      // R25_final = R25_0 - totalShift; totalShift>0 (扩招) → R25 减小 (位次提前)
       const R25_final = Math.round(R25_0 - totalShift);
-
-      // 反查 Y_final
       let Y_final = null;
       for (const [s, _c, cu] of osr25) {
         if (cu >= R25_final) { Y_final = s; break; }
