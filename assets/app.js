@@ -3088,7 +3088,7 @@ const PrioritySettings = {
               <div class="space-y-2">
                 <div class="flex items-center gap-2">
                   <span class="font-bold w-12 text-red-700">冲档</span>
-                  <span class="text-slate-500">: anchor25 +</span>
+                  <span class="text-slate-500">: 25 等位分 +</span>
                   <input type="number" :value="cwbRanges.chong.lo"
                          @input="$emit('update-cwb-ranges', {...cwbRanges, chong:{...cwbRanges.chong, lo:+$event.target.value || 0}})"
                          class="w-16 border rounded px-2 py-1 text-center">
@@ -3099,7 +3099,7 @@ const PrioritySettings = {
                 </div>
                 <div class="flex items-center gap-2">
                   <span class="font-bold w-12 text-amber-700">稳档</span>
-                  <span class="text-slate-500">: anchor25 +</span>
+                  <span class="text-slate-500">: 25 等位分 +</span>
                   <input type="number" :value="cwbRanges.wen.lo"
                          @input="$emit('update-cwb-ranges', {...cwbRanges, wen:{...cwbRanges.wen, lo:+$event.target.value || 0}})"
                          class="w-16 border rounded px-2 py-1 text-center">
@@ -3110,7 +3110,7 @@ const PrioritySettings = {
                 </div>
                 <div class="flex items-center gap-2">
                   <span class="font-bold w-12 text-green-700">保档</span>
-                  <span class="text-slate-500">: anchor25 +</span>
+                  <span class="text-slate-500">: 25 等位分 +</span>
                   <input type="number" :value="cwbRanges.bao.lo"
                          @input="$emit('update-cwb-ranges', {...cwbRanges, bao:{...cwbRanges.bao, lo:+$event.target.value || 0}})"
                          class="w-16 border rounded px-2 py-1 text-center">
@@ -3124,7 +3124,7 @@ const PrioritySettings = {
                 默认 ( 推荐): 冲 <b>+6 ~ +20</b> / 稳 <b>-5 ~ +5</b> / 保 <b>-20 ~ -6</b>
               </div>
               <div class="text-[10px] text-slate-400">
-                语义: 例 anchor25=618, 冲 +6~+20 → 把 25 等位分在 624-638 的志愿当作"冲".
+                语义: 例 25 等位分=618, 冲 +6~+20 → 把 25 等位分在 624-638 的志愿当作"冲".
               </div>
             </div>
           </template>
@@ -3386,7 +3386,7 @@ const VoluntaryAnalysis = {
                   </div>
                   <button @click="$emit('apply-refine')"
                           class="px-3 py-1 bg-blue-600 text-white rounded text-xs hover:bg-blue-700 font-bold">
-                    一键应用 → anchor25 / 实际预测位次
+                    一键应用 → 25 等位分 / 实际预测位次
                   </button>
                 </div>
                 <div class="text-[10px] text-slate-400">
@@ -3407,7 +3407,7 @@ const VoluntaryAnalysis = {
                       <button @click="ecBucket='b20'" class="px-2 py-0.5 rounded" :class="ecBucket==='b20' ? 'bg-blue-500 text-white' : 'bg-slate-100'">20 分一段</button>
                       <button @click="ecBucket='b10'" class="px-2 py-0.5 rounded" :class="ecBucket==='b10' ? 'bg-blue-500 text-white' : 'bg-slate-100'">10 分一段</button>
                       <button @click="ecBucket='all'" class="px-2 py-0.5 rounded" :class="ecBucket==='all' ? 'bg-blue-500 text-white' : 'bg-slate-100'">1 分</button>
-                      <span class="ml-2 text-slate-400">含 anchor25 ({{analysis.anchor25}}) 的段 紫底</span>
+                      <span class="ml-2 text-slate-400">含 你的 25 等位分 ({{analysis.anchor25}}) 的段 紫底</span>
                     </div>
                     <table class="w-full text-[10px] border-collapse">
                       <thead><tr class="bg-slate-100">
@@ -3595,7 +3595,7 @@ const VoluntaryAnalysis = {
                     <td class="px-2 py-0.5 text-center">
                       <span v-if="it.admit && it.admit.prob != null"
                             :class="probColorClass(it.admit.prob)"
-                            title="按 anchor25+5 分位次粗估">
+                            title="按 25 等位分+5 分位次粗估">
                         {{ (it.admit.prob * 100).toFixed(0) }}%<span class="text-[9px] text-amber-600 ml-0.5">(估)</span>
                       </span>
                       <span v-else class="text-slate-400">新?</span>
@@ -3657,8 +3657,8 @@ const VoluntaryAnalysis = {
                     <th class="px-2 py-1.5 text-left w-12">25 分</th>
                     <th class="px-2 py-1.5 text-center w-8">档</th>
                     <th class="px-2 py-1.5 text-center w-12" title="25 一分一段累计位次">25位次</th>
-                    <th class="px-2 py-1.5 text-center w-14" title="该分 - anchor25 (正=上冲, 负=下保)">Δ分</th>
-                    <th class="px-2 py-1.5 text-center w-14" title="anchor25位次 - 该分位次 (正=上冲, 负=下保)">Δ位次</th>
+                    <th class="px-2 py-1.5 text-center w-14" title="该 25 等位分 - 你的 25 等位分 (正=上冲, 负=下保)">Δ分</th>
+                    <th class="px-2 py-1.5 text-center w-14" title="你的 25 等位分位次 - 该 25 等位分位次 (正=上冲, 负=下保)">Δ位次</th>
                     <th class="px-2 py-1.5 text-center w-8">N</th>
                     <th class="px-2 py-1.5 text-center w-12">26招生</th>
                     <th class="px-2 py-1.5 text-center w-12" title="26 同分人数 (一分一段本分人数)">26同分</th>
@@ -4389,7 +4389,7 @@ const VoluntaryReport = {
           <div class="text-sm space-y-2">
             <div>
               <b>填报分数范围:</b> 25 等位分 [{{ summary.scoreMin }} - {{ summary.scoreMax }}]
-              ({{ summary.scoreMax - summary.scoreMin }} 分跨度) | 锚点 {{ analysis.anchor25 }} 分
+              ({{ summary.scoreMax - summary.scoreMin }} 分跨度) | 25 等位分 {{ analysis.anchor25 }} 分
             </div>
             <div>
               <b>冲稳保结构:</b>
@@ -4861,7 +4861,7 @@ const VoluntaryReport = {
           <h2 class="text-lg font-bold mb-2 bg-blue-50 px-2 py-1 border-l-4 border-blue-600">15. 25→26 招生变化 (20 分区间, 含 anchor 段加灰底)</h2>
           <div class="text-[10px] text-slate-500 mb-1">
             合计: 25 招 {{ analysis.enrollChangeByScore25.reduce((s,r)=>s+r.n25,0) }} → 26 招 {{ analysis.enrollChangeByScore25.reduce((s,r)=>s+r.n26,0) }}
-            · 用户 anchor25 {{ analysis.anchor25 }}
+            · 你的 25 等位分 {{ analysis.anchor25 }}
           </div>
           <table class="w-full text-[10px] border-collapse">
             <thead><tr class="bg-slate-100">
@@ -5879,7 +5879,7 @@ const __app = createApp({
     // V9: 志愿分析
     // 锚点: 用户 25 等位分 (从 myScore 26 自动转, 也可在 modal 手调 ui.analysisAnchor25)
     // tier 规则 (用 plan.ref25Score 比 anchor25):
-    //   冲: anchor25 +6 ~ +20
+    //   冲: 25 等位分 +6 ~ +20
     //   稳: anchor25 -5 ~ +5
     //   保: anchor25 -20 ~ -6
     // 同时统计 26 计划人数 (enrollNum26 || enrollNum25)
