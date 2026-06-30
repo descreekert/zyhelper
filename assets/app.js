@@ -789,6 +789,7 @@ const ui = reactive({
   analysisExpandedCities: [],    // 城市行展开
   analysisIgnoreHeat: false,     // 分析页: 录取率忽略专业热度调整
   samePosPct: 50,                // 同分组位置 (0=上 100=下, 默认 中)
+  useRefinedQuery: false,        // 主查询 / 冲稳保 使用 修正后位次
   detailPlan: null,
   myScore: 0,
   myRank: 0,
@@ -5532,9 +5533,24 @@ const __app = createApp({
       else document.removeEventListener("mousedown", onDocMouseDown);
     });
 
-    // 冲稳保区间 (响应顶部分数 + 等位基准)
+    // 修正后等价 26 分 (用 rankRefine.R25_final 反查 osr26 同位次的 score)
+    // 给 主查询 / 冲稳保 / 顶部位次显示 提供"修正后等价 26 输入"
+    const refinedScore26 = computed(() => {
+      const r = rankRefine.value;
+      if (!r || !scoreRank.value) return null;
+      const osr26 = scoreRank.value.oneScoreOneRank?.["2026"] || [];
+      for (const [s, _c, cu] of osr26) {
+        if (cu >= r.R25_final) return s;
+      }
+      return osr26.length ? osr26[osr26.length - 1][0] : null;
+    });
+    // 主查询 用的 26 分: 默认 ui.myScore (原始); toggle on 时 用 refinedScore26
+    const queryScore26 = computed(() =>
+      (ui.useRefinedQuery && refinedScore26.value != null) ? refinedScore26.value : ui.myScore);
+
+    // 冲稳保区间 (响应顶部分数 + 等位基准 + 修正开关)
     const cwb = computed(() =>
-      scoreRank.value ? computeChongWenBao(ui.myScore, scoreRank.value, ui.equivSource) : null);
+      scoreRank.value ? computeChongWenBao(queryScore26.value, scoreRank.value, ui.equivSource) : null);
 
     // 监听 cwb 变化 → 自动填充 3 段范围 (用户没手改时)
     watch(cwb, (val) => {
@@ -7849,7 +7865,7 @@ const __app = createApp({
       store, ui, loading, loadingMsg, loadingPct,
       scoreRank, meta, priority, currentPage, cwb, tierMap, paneTargets, activeTier, filteredTierCounts, recommendData,
       admitProbFor, userRank25Anchor, transferOf, resetTransferLists,
-      rankRefine, applyRankRefine, setSamePosPct,
+      rankRefine, applyRankRefine, setSamePosPct, refinedScore26,
       transferTargetSet, transferAcceptSet,
       ratioSumOk, resetRatios,
       filtered, sorted, paged, planByIdMap, compareIdSet, keywordCandidatePool,

@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>2026 物理类志愿填报助手</title>
-  <link rel="stylesheet" href="assets/style.css?v=v18-refine-v2">
+  <link rel="stylesheet" href="assets/style.css?v=v18-refine-query">
   <script src="https://unpkg.com/vue@3.4.21/dist/vue.global.prod.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/chart.js@4.4.2/dist/chart.umd.js"></script>
@@ -187,6 +187,16 @@
             <span :class="activeTier === 'bao' ? 'text-green-100' : 'text-slate-500'" v-if="cwb.ranges.bao.rankLow">({{ cwb.ranges.bao.rankLow }}-{{ cwb.ranges.bao.rankHigh }})</span>
           </button>
           <span class="flex-1"></span>
+          <!-- 使用 修正后位次 做主查询 toggle (仅 rankRefine 可用时显示) -->
+          <label v-if="rankRefine" class="flex items-center gap-1 cursor-pointer text-slate-600 mr-3"
+                 :title="'勾选: 主查询 / 冲稳保 / 筛选 全部 用 修正后位次 (R25_final=' + rankRefine.R25_final + ', 等价 26 分=' + refinedScore26 + ')'">
+            <input type="checkbox" :checked="ui.useRefinedQuery"
+                   @change="ui.useRefinedQuery = $event.target.checked"
+                   class="cursor-pointer">
+            <span>🎯 用修正位次查询
+              <span v-if="ui.useRefinedQuery" class="text-blue-600 font-bold">(已启用 等价{{refinedScore26}}分)</span>
+            </span>
+          </label>
           <span class="text-slate-400">
             数据生成: {{ meta.generatedAt }} · 总 {{ meta.totalPlans }}
           </span>
@@ -564,6 +574,6 @@
     </template>
   </div>
 
-  <script src="assets/app.js?v=v18-refine-v2"></script>
+  <script src="assets/app.js?v=v18-refine-query"></script>
 </body>
 </html>
