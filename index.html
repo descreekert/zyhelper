@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>2026 物理类志愿填报助手</title>
-  <link rel="stylesheet" href="assets/style.css?v=v19-cn">
+  <link rel="stylesheet" href="assets/style.css?v=v19-pos-quick">
   <script src="https://unpkg.com/vue@3.4.21/dist/vue.global.prod.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://unpkg.com/chart.js@4.4.2/dist/chart.umd.js"></script>
@@ -137,7 +137,7 @@
           </button>
           <span class="flex-1"></span>
           <!-- 使用 修正后位次 做主查询 toggle (仅 rankRefine 可用时显示) -->
-          <label v-if="rankRefine" class="flex items-center gap-1 cursor-pointer text-slate-600 mr-3"
+          <label v-if="rankRefine" class="flex items-center gap-1 cursor-pointer text-slate-600 mr-2"
                  :title="'勾选: 主查询 / 冲稳保 / 筛选 全部 用 修正后位次 (R25_final=' + rankRefine.R25_final + ', 等价 26 分=' + refinedScore26 + ')'">
             <input type="checkbox" :checked="ui.useRefinedQuery"
                    @change="ui.useRefinedQuery = $event.target.checked"
@@ -146,6 +146,21 @@
               <span v-if="ui.useRefinedQuery" class="text-blue-600 font-bold">(已启用 等价{{refinedScore26}}分)</span>
             </span>
           </label>
+          <!-- 同分位置 quick 控件 (仅 启用修正后 显示) -->
+          <span v-if="rankRefine && ui.useRefinedQuery" class="flex items-center gap-1 text-slate-600 mr-3"
+                title="你在 26 同分人群中的相对位置. 0%=上部 (最强), 50%=中部 (默认), 100%=下部. 调整影响 等价 26 分.">
+            <span>同分位置:</span>
+            <button @click="setSamePosPct(0)" class="px-1.5 py-0.5 border rounded text-[10px]"
+                    :class="ui.samePosPct==0 ? 'bg-blue-500 text-white' : 'bg-white hover:bg-slate-100'">上</button>
+            <input type="range" min="0" max="100" step="1" :value="ui.samePosPct"
+                   @input="setSamePosPct(+$event.target.value)"
+                   class="accent-blue-500" style="width:80px">
+            <button @click="setSamePosPct(50)" class="px-1.5 py-0.5 border rounded text-[10px]"
+                    :class="ui.samePosPct==50 ? 'bg-blue-500 text-white' : 'bg-white hover:bg-slate-100'">中</button>
+            <button @click="setSamePosPct(100)" class="px-1.5 py-0.5 border rounded text-[10px]"
+                    :class="ui.samePosPct==100 ? 'bg-blue-500 text-white' : 'bg-white hover:bg-slate-100'">下</button>
+            <span class="font-bold text-blue-600 w-8 text-right">{{ ui.samePosPct }}%</span>
+          </span>
           <span class="text-slate-400">
             数据生成: {{ meta.generatedAt }} · 总 {{ meta.totalPlans }}
           </span>
@@ -541,6 +556,6 @@
     </template>
   </div>
 
-  <script src="assets/app.js?v=v19-cn"></script>
+  <script src="assets/app.js?v=v19-pos-quick"></script>
 </body>
 </html>
