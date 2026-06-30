@@ -362,10 +362,14 @@ function computeChongWenBao(score26, scoreRank, equivSource = "25") {
   if (!score26) return null;
   const { score: Y, rank: equivRank } = equivFromScore26(score26, scoreRank, equivSource);
   if (Y == null) return null;
+  // 统一 冲稳保 标准 (与分析页一致, 相对 25 等位分):
+  //   冲: +6  ~ +20
+  //   稳: -5  ~ +5
+  //   保: -20 ~ -6
   const ranges = {
-    chong: { scoreLow: Y + 6,  scoreHigh: Y + 23, label: "冲" },
-    wen:   { scoreLow: Y - 10, scoreHigh: Y + 5,  label: "稳" },
-    bao:   { scoreLow: Y - 27, scoreHigh: Y - 11, label: "保" },
+    chong: { scoreLow: Y + 6,  scoreHigh: Y + 20, label: "冲" },
+    wen:   { scoreLow: Y - 5,  scoreHigh: Y + 5,  label: "稳" },
+    bao:   { scoreLow: Y - 20, scoreHigh: Y - 6,  label: "保" },
   };
   for (const k of Object.keys(ranges)) {
     const r = ranges[k];
@@ -3409,7 +3413,7 @@ const VoluntaryAnalysis = {
               </table>
             </div>
             <div class="text-[10px] text-slate-400 mt-1">
-              本分析规则: 冲 +6~+15 / 稳 -5~+5 / 保 -20~-6 (相对 25 等位分).
+              本分析规则: 冲 +6~+20 / 稳 -5~+5 / 保 -20~-6 (相对 25 等位分).
               录取比率 = 招生人数 (志愿单内 26 计划) / 同分人数 (26 一分一段, 按 25→26 等位映射)
             </div>
           </section>
@@ -5683,7 +5687,7 @@ const __app = createApp({
     // V9: 志愿分析
     // 锚点: 用户 25 等位分 (从 myScore 26 自动转, 也可在 modal 手调 ui.analysisAnchor25)
     // tier 规则 (用 plan.ref25Score 比 anchor25):
-    //   冲: anchor25 +6 ~ +15
+    //   冲: anchor25 +6 ~ +20
     //   稳: anchor25 -5 ~ +5
     //   保: anchor25 -20 ~ -6
     // 同时统计 26 计划人数 (enrollNum26 || enrollNum25)
@@ -5703,8 +5707,9 @@ const __app = createApp({
         const enroll = p.enrollNum26 || p.enrollNum25 || 0;
         items.push({ id, plan: p, score25: s25, rank25: r25, enroll });
       }
+      // 统一 冲稳保 标准 (与主查询 / cwb 一致): 冲 +6~+20 / 稳 -5~+5 / 保 -20~-6
       const ranges = {
-        chong: { lo: anchor25 + 6,  hi: anchor25 + 15 },
+        chong: { lo: anchor25 + 6,  hi: anchor25 + 20 },
         wen:   { lo: anchor25 - 5,  hi: anchor25 + 5  },
         bao:   { lo: anchor25 - 20, hi: anchor25 - 6  },
       };
