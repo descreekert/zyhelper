@@ -4463,7 +4463,22 @@ const AdmitTopSummary = {
       const s = it.plan?.majorName26 || it.plan?.majorName25 || "";
       return s.length > 22 ? s.slice(0, 22) + "…" : s;
     }
-    return { tierMeta, shortMajor };
+    // Δ 格式化: +N分/+M位次 (+ 冲, - 保, byScore convention).
+    // 颜色: 都正→红 (冲), 都负→绿 (保), 混合→琥珀 (跨档).
+    function fmtDelta(it) {
+      const d = it?.delta; if (!d || (d.score == null && d.rank == null)) return null;
+      const s = d.score, r = d.rank;
+      const fs = s != null ? (s > 0 ? `+${s}` : String(s)) : "·";
+      const fr = r != null ? (r > 0 ? `+${r}` : String(r)) : "·";
+      let cls = "text-slate-500";
+      if (s != null && r != null) {
+        if (s > 0 && r > 0) cls = "text-red-600";        // 冲
+        else if (s < 0 && r < 0) cls = "text-green-700"; // 保
+        else if (s !== 0 || r !== 0) cls = "text-amber-600"; // 混
+      }
+      return { text: `${fs}分 / ${fr}位`, cls };
+    }
+    return { tierMeta, shortMajor, fmtDelta };
   },
   template: `
     <div class="admit-top-summary space-y-3">
@@ -4485,9 +4500,12 @@ const AdmitTopSummary = {
                   <b>{{ it.plan.schoolName }}</b><br/>
                   <span class="text-slate-600 text-[10px]">{{ shortMajor(it) }}</span>
                 </span>
-                <b class="shrink-0" :class="probColorClass(it.admit?.prob)">
-                  {{ (it.admit.prob*100).toFixed(0) }}%<span v-if="it.admit.isEstimated" class="text-[9px] text-amber-600">(估)</span>
-                </b>
+                <span class="shrink-0 text-right leading-tight">
+                  <b :class="probColorClass(it.admit?.prob)">
+                    {{ (it.admit.prob*100).toFixed(0) }}%<span v-if="it.admit.isEstimated" class="text-[9px] text-amber-600">(估)</span>
+                  </b>
+                  <div v-if="fmtDelta(it)" class="text-[9px] mt-0.5" :class="fmtDelta(it).cls">{{ fmtDelta(it).text }}</div>
+                </span>
               </li>
             </ol>
             <div v-else class="text-[10px] text-slate-400">该档无志愿</div>
@@ -4523,6 +4541,7 @@ const AdmitTopSummary = {
                     </div>
                     <div class="font-bold text-[11px]">{{ b.items[i-1].plan.schoolName }}</div>
                     <div class="text-slate-600 text-[10px]">{{ shortMajor(b.items[i-1]) }}</div>
+                    <div v-if="fmtDelta(b.items[i-1])" class="text-[9px] mt-0.5" :class="fmtDelta(b.items[i-1]).cls">{{ fmtDelta(b.items[i-1]).text }}</div>
                   </template>
                   <span v-else class="text-slate-300 text-[10px]">—</span>
                 </td>
@@ -4566,6 +4585,7 @@ const AdmitTrendChart = {
             isNew: p.isNew === "新增",
             heat: it.admit?.heat || null,
             isEst: !!it.admit?.isEstimated,
+            delta: it.delta || null,    // {score, rank} vs anchor (+ 冲, - 保)
             // name 兼容旧用法
             name: (p.schoolName || "") + " · " + (p.majorName26 || p.majorName25 || ""),
           };
@@ -4888,11 +4908,19 @@ const AdmitTrendChart = {
                     :class="hoverPoint.heat.idx >= 6 ? 'bg-red-500/40 text-red-100' : 'bg-amber-500/40 text-amber-100'">🔥{{hoverPoint.heat.name}}</span>
             </div>
             <div class="text-[11px] text-slate-300 mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
-              <span v-if="hoverPoint.score25">25 分 <b class="text-white">{{hoverPoint.score25}}</b></span>
-              <span v-if="hoverPoint.rank25">25 位 <b class="text-white">{{hoverPoint.rank25}}</b></span>
+              <span v-if="hoverPoint.score25">25 分 <b class="text-white">{{hoverPoint.score25}}</b><span v-if="hoverPoint.delta?.score != null"
+                    :class="hoverPoint.delta.score > 0 ? 'text-red-300' : hoverPoint.delta.score < 0 ? 'text-green-300' : 'text-slate-400'">
+                ({{ hoverPoint.delta.score > 0 ? '+' : '' }}{{ hoverPoint.delta.score }})</span></span>
+              <span v-if="hoverPoint.rank25">25 位 <b class="text-white">{{hoverPoint.rank25}}</b><span v-if="hoverPoint.delta?.rank != null"
+                    :class="hoverPoint.delta.rank > 0 ? 'text-red-300' : hoverPoint.delta.rank < 0 ? 'text-green-300' : 'text-slate-400'">
+                ({{ hoverPoint.delta.rank > 0 ? '+' : '' }}{{ hoverPoint.delta.rank }})</span></span>
               <span v-if="hoverPoint.avgRank && hoverPoint.avgRank !== hoverPoint.rank25">平均位 <b class="text-white">{{hoverPoint.avgRank}}</b></span>
               <span v-if="hoverPoint.enroll26">26 计划 <b class="text-white">{{hoverPoint.enroll26}}</b></span>
               <span v-if="hoverPoint.tuition">学费 <b class="text-white">¥{{hoverPoint.tuition}}</b></span>
+            </div>
+            <div v-if="hoverPoint.delta?.score != null || hoverPoint.delta?.rank != null"
+                 class="text-[10px] text-slate-400 mt-0.5 italic">
+              Δ vs 你的 anchor — 正 = 上冲, 负 = 下保
             </div>
           </div>
         </div>
@@ -5436,12 +5464,19 @@ const __app = createApp({
       if (totalEnroll && tiers.bao.enroll < totalEnroll * 0.15) {
         insights.push({ level: "warn", text: `保档 26 计划人数仅 ${tiers.bao.enroll} (占 ${(tiers.bao.enroll/totalEnroll*100).toFixed(0)}%), 保底名额偏少` });
       }
-      // 给每个 item 算 录取率 + 转专业风险
+      // 给每个 item 算 录取率 + 转专业风险 + Δ (vs anchor)
       const _tSet = transferTargetSet.value;
       const _aSet = transferAcceptSet.value;
       for (const it of items) {
         it.admit = computeAdmitProb(it.plan, { userRank25: anchorRank25, scoreRank: scoreRank.value, supplyMap: supplyMap.value, ignoreHeat: !!ui.analysisIgnoreHeat });
         it.transfer = classifyTransfer(it.plan, _tSet, _aSet);
+        // Δ 用 byScore 同 convention: + = 冲 (plan 比你强), - = 保 (plan 比你弱)
+        //   Δ分   = plan ref25Score - anchor25
+        //   Δ位次 = anchor25 位次 - plan ref25Rank
+        it.delta = {
+          score: (it.score25 != null && anchor25 != null) ? (it.score25 - anchor25) : null,
+          rank:  (it.rank25 != null && anchorRank25 != null) ? (anchorRank25 - it.rank25) : null,
+        };
       }
       // 转专业 汇总
       const transferSummary = { ok: [], warn: [], error: [] };
