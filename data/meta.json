@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-06-29T11:37:43",
+  "generatedAt": "2026-06-30T12:07:06",
   "source": "/Users/banlibo/Desktop/高考/new/2026高考-物理-志愿_2026.xlsx",
   "totalPlans": 12728,
   "stoppedCount": 1871,
@@ -445,8 +445,12 @@
       "财经"
     ],
     "refConfidences": [
+      "中",
       "中外合作估",
+      "低",
       "无",
+      "本校同类估",
+      "本校同门类估",
       "本校高分估",
       "高"
     ],

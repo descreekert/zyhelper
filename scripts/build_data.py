@@ -365,29 +365,50 @@ def load_score_rank(wb):
             table.append([score, cnt or 0, cum or 0])
         one_score[year] = table
 
-    # 等位分计算: col 6-17
-    # 2026分数 2026位次 2026线差 25等位分 25等位次 24等位分 24等位次 23等位分 23等位次 22等位分 22等位次 平均等位次
-    equiv = []  # list of dict
-    for r in rows[2:]:   # row 3 起
-        if len(r) < 17:
-            break
-        score_2026 = to_int(r[5])
-        if score_2026 is None:
-            continue
-        equiv.append({
-            "score26": score_2026,
-            "rank26":  to_int(r[6]),
-            "lineDiff26": to_int(r[7]),
-            "score25": to_int(r[8]),
-            "rank25":  to_int(r[9]),
-            "score24": to_int(r[10]),
-            "rank24":  to_int(r[11]),
-            "score23": to_int(r[12]),
-            "rank23":  to_int(r[13]),
-            "score22": to_int(r[14]),
-            "rank22":  to_int(r[15]),
-            "rankAvg": to_int(r[16]),
-        })
+    # 等位分: 不再依赖 Excel XLOOKUP 公式缓存 (会被 openpyxl save 清掉),
+    # 用 Python 直接从一分一段表算:
+    #   score26 → rank26 = osr26[score26].cumRank
+    #   rank26 → score_Y = osr_Y 表中 cumRank >= rank26 的第一个 score (即等位分)
+    #   rank_Y = osr_Y[score_Y].cumRank
+    def score_to_rank(year, score):
+        """正向: year 一分一段 给定 score, 返回 cumRank (优先精确, 否则取 >=该分 的最近一档)"""
+        t = one_score.get(str(year)) or []
+        last_cum = None
+        for s, _cnt, cum in t:   # t 是降序 score → 升序 cumRank
+            if s == score: return cum
+            if s < score:  return last_cum
+            last_cum = cum
+        return last_cum
+
+    def rank_to_score(year, rank):
+        """反向: year 一分一段 给定 cumRank, 返回 第一个 cumRank >= rank 的 score (即等位分)"""
+        if rank is None: return None
+        t = one_score.get(str(year)) or []
+        for s, _cnt, cum in t:
+            if cum >= rank: return s
+        return t[-1][0] if t else None
+
+    baseline_2026 = baseline.get("2026")
+    equiv = []
+    osr26 = one_score.get("2026") or []
+    for s26, _cnt, cum26 in osr26:
+        # 跳过 cumRank=0 或 score 为空
+        if s26 is None or cum26 is None: continue
+        row = {
+            "score26": s26,
+            "rank26":  cum26,
+            "lineDiff26": (s26 - baseline_2026) if baseline_2026 else None,
+        }
+        # 各年等位: 用 rank26 在 osr_Y 反查同位次的 score, 再用该 score 查 osr_Y 的精确 cumRank
+        for yr in (25, 24, 23, 22):
+            sY = rank_to_score(2000 + yr, cum26)
+            rY = score_to_rank(2000 + yr, sY) if sY is not None else None
+            row[f"score{yr}"] = sY
+            row[f"rank{yr}"]  = rY
+        # 平均位次 = 25/24/23 三年的均值 (排空)
+        rs = [row[k] for k in ("rank25", "rank24", "rank23") if row.get(k) is not None]
+        row["rankAvg"] = round(sum(rs) / len(rs)) if rs else None
+        equiv.append(row)
 
     return {
         "baseline": baseline,
