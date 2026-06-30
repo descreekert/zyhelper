@@ -786,6 +786,7 @@ const ui = reactive({
   analysisExpandedTiers: [],     // 冲稳保卡片展开 ['chong','wen','bao','out']
   analysisExpandedEnrollScores: [],  // 招生维度分数展开 (25 score list)
   analysisExpandedMajors: [],    // 报考专业行展开 (mainName 列表)
+  analysisExpandedCities: [],    // 城市行展开
   analysisIgnoreHeat: false,     // 分析页: 录取率忽略专业热度调整
   detailPlan: null,
   myScore: 0,
@@ -3007,9 +3008,9 @@ const PrioritySettings = {
 
 // V9: 志愿分析 (普通视图 + 兼容 modal). prop.embedded=true 时去掉 modal 外壳
 const VoluntaryAnalysis = {
-  props: ["analysis", "listName", "anchorOverride", "rankOverride", "expandedSchools", "expandedScores", "expandedTiers", "expandedEnrollScores", "expandedMajors", "embedded",
+  props: ["analysis", "listName", "anchorOverride", "rankOverride", "expandedSchools", "expandedScores", "expandedTiers", "expandedEnrollScores", "expandedMajors", "expandedCities", "embedded",
           "targets", "accepts", "ignoreHeat"],
-  emits: ["close", "set-anchor", "set-rank", "toggle-school", "toggle-score", "toggle-tier", "toggle-enroll-score", "toggle-major",
+  emits: ["close", "set-anchor", "set-rank", "toggle-school", "toggle-score", "toggle-tier", "toggle-enroll-score", "toggle-major", "toggle-city",
           "update-targets", "update-accepts", "reset-transfer-lists", "toggle-ignore-heat"],
   setup(props, { emit }) {
     const maxScoreCount = computed(() => {
@@ -3570,6 +3571,90 @@ const VoluntaryAnalysis = {
             </div>
           </section>
 
+          <!-- 按 城市 聚合 -->
+          <section v-if="analysis.byCity && analysis.byCity.length">
+            <div class="text-xs text-slate-500 mb-1">每个城市 ({{ analysis.byCity.length }} 个) — 点行展开详情</div>
+            <div class="border rounded bg-white">
+              <table class="w-full text-xs">
+                <thead class="sticky top-0 bg-slate-100">
+                  <tr>
+                    <th class="px-2 py-1 text-left">城市</th>
+                    <th class="px-2 py-1 text-center w-10">N</th>
+                    <th class="px-2 py-1 text-center w-12">学校</th>
+                    <th class="px-2 py-1 text-center w-12">26计划</th>
+                    <th class="px-2 py-1 text-center w-8 text-red-600">冲</th>
+                    <th class="px-2 py-1 text-center w-8 text-amber-600">稳</th>
+                    <th class="px-2 py-1 text-center w-8 text-green-600">保</th>
+                    <th class="px-2 py-1 text-center w-16" title="该城市所有志愿录取率最大值">最佳录取率</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <template v-for="c in analysis.byCity" :key="c.name">
+                    <tr class="border-t hover:bg-slate-50 cursor-pointer"
+                        @click="$emit('toggle-city', c.name)">
+                      <td class="px-2 py-0.5">
+                        <span class="text-slate-400 mr-1">{{ expandedCities.includes(c.name) ? '▾' : '▸' }}</span>
+                        {{ c.name }}
+                      </td>
+                      <td class="px-2 py-0.5 text-center font-bold">{{ c.count }}</td>
+                      <td class="px-2 py-0.5 text-center">{{ c.schoolCount }}</td>
+                      <td class="px-2 py-0.5 text-center">{{ c.enroll }}</td>
+                      <td class="px-2 py-0.5 text-center text-red-600">{{ c.tiers.chong || '-' }}</td>
+                      <td class="px-2 py-0.5 text-center text-amber-600">{{ c.tiers.wen || '-' }}</td>
+                      <td class="px-2 py-0.5 text-center text-green-600">{{ c.tiers.bao || '-' }}</td>
+                      <td class="px-2 py-0.5 text-center font-bold"
+                          :class="probColorClass(c.maxAdmitProb)"
+                          :title="c.maxAdmitItem ? ('最高: ' + c.maxAdmitItem.plan.schoolName + ' · ' + (c.maxAdmitItem.plan.majorName26 || c.maxAdmitItem.plan.majorName25)) : ''">
+                        <span v-if="c.maxAdmitProb != null">{{ (c.maxAdmitProb*100).toFixed(0) }}%</span>
+                        <span v-else class="text-slate-300">—</span>
+                      </td>
+                    </tr>
+                    <tr v-if="expandedCities.includes(c.name)" class="bg-slate-50">
+                      <td colspan="8" class="px-2 py-1">
+                        <table class="w-full text-[11px] bg-white border rounded">
+                          <thead>
+                            <tr class="bg-slate-100">
+                              <th class="px-2 py-1 text-left w-8">档</th>
+                              <th class="px-2 py-1 text-left">学校</th>
+                              <th class="px-2 py-1 text-left">26 招生专业</th>
+                              <th class="px-2 py-1 text-center w-16">25 分/位</th>
+                              <th class="px-2 py-1 text-center w-12">26 计划</th>
+                              <th class="px-2 py-1 text-center w-12">录取率</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr v-for="it in c.items" :key="it.id" class="border-t"
+                                :class="it.plan.isNew==='新增' ? 'bg-yellow-50/50' : ''">
+                              <td class="px-2 py-0.5 text-center">
+                                <span v-if="analysis.ranges.chong.lo <= it.score25 && it.score25 <= analysis.ranges.chong.hi" class="text-red-600 font-bold">冲</span>
+                                <span v-else-if="analysis.ranges.wen.lo <= it.score25 && it.score25 <= analysis.ranges.wen.hi" class="text-amber-600 font-bold">稳</span>
+                                <span v-else-if="analysis.ranges.bao.lo <= it.score25 && it.score25 <= analysis.ranges.bao.hi" class="text-green-600 font-bold">保</span>
+                                <span v-else class="text-slate-400">外</span>
+                              </td>
+                              <td class="px-2 py-0.5">{{ it.plan.schoolName }}</td>
+                              <td class="px-2 py-0.5">
+                                <span v-if="it.plan.isNew==='新增'" class="badge-new">新</span>
+                                <span v-else-if="it.plan.diff" class="badge-diff" :title="it.plan.diff">变</span>
+                                {{ it.plan.majorName26 || it.plan.majorName25 }}
+                              </td>
+                              <td class="px-2 py-0.5 text-center"><b>{{ it.score25 || '—' }}</b>/{{ it.rank25 || '—' }}</td>
+                              <td class="px-2 py-0.5 text-center">{{ it.enroll || '—' }}</td>
+                              <td class="px-2 py-0.5 text-center font-bold"
+                                  :class="probColorClass(it.admit?.prob)">
+                                <span v-if="it.admit?.prob != null">{{ (it.admit.prob*100).toFixed(0) }}%</span>
+                                <span v-else class="text-slate-400">—</span>
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
           <!-- 招生维度聚合 (2026 全体 plans, 不限志愿单) -->
           <section v-if="analysis.enrollByScore25 && analysis.enrollByScore25.length">
             <div class="text-xs text-slate-500 mb-1">
@@ -3806,6 +3891,16 @@ const VoluntaryReport = {
       return [...m.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]))
         .map(([n, list]) => ({ major: n, items: list }));
     });
+    const itemsByCity = computed(() => {
+      const m = new Map();
+      for (const it of items.value) {
+        const c = it.plan.city || "(未知)";
+        if (!m.has(c)) m.set(c, []);
+        m.get(c).push(it);
+      }
+      return [...m.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]))
+        .map(([c, list]) => ({ city: c, items: list }));
+    });
     function printReport() {
       window.print();
     }
@@ -3867,9 +3962,23 @@ const VoluntaryReport = {
       for (const it of (g.items || [])) s.add(it.plan.schoolName);
       return s.size;
     }
-    return { todayStr, items, summary, itemsByScore, itemsBySchool, itemsByMajor,
+    function cityMaxProb(g) {
+      let m = null;
+      for (const it of (g.items || [])) {
+        const p = it.admit?.prob;
+        if (p == null) continue;
+        if (m == null || p > m) m = p;
+      }
+      return m;
+    }
+    function citySchoolCount(g) {
+      const s = new Set();
+      for (const it of (g.items || [])) s.add(it.plan.schoolName);
+      return s.size;
+    }
+    return { todayStr, items, summary, itemsByScore, itemsBySchool, itemsByMajor, itemsByCity,
              enrollAtScore, schoolsAtScore, itemsAtScore, supplyRatioAt, schoolMaxProb,
-             majorMaxProb, majorSchoolCount,
+             majorMaxProb, majorSchoolCount, cityMaxProb, citySchoolCount,
              printReport, tierLabel, fmtProb };
   },
   template: `
@@ -4312,9 +4421,66 @@ const VoluntaryReport = {
           </div>
         </section>
 
-        <!-- 13. 转专业风险扫描 -->
+        <!-- 13. 城市总览 -->
         <section class="mb-6 page-break-before">
-          <h2 class="text-lg font-bold mb-2 bg-blue-50 px-2 py-1 border-l-4 border-blue-600">13. 转专业风险扫描</h2>
+          <h2 class="text-lg font-bold mb-2 bg-blue-50 px-2 py-1 border-l-4 border-blue-600">13. 城市总览 ({{ itemsByCity.length }} 个城市)</h2>
+          <table class="w-full text-[10px] border-collapse">
+            <thead><tr class="bg-slate-100">
+              <th class="border px-1 py-1 text-left">城市</th>
+              <th class="border px-1 py-1">N 项</th>
+              <th class="border px-1 py-1">学校</th>
+              <th class="border px-1 py-1">26 招生</th>
+              <th class="border px-1 py-1">冲</th>
+              <th class="border px-1 py-1">稳</th>
+              <th class="border px-1 py-1">保</th>
+              <th class="border px-1 py-1">最佳录取率</th>
+            </tr></thead>
+            <tbody>
+              <tr v-for="g in itemsByCity" :key="g.city">
+                <td class="border px-1 py-0.5">{{ g.city }}</td>
+                <td class="border px-1 py-0.5 text-center font-bold">{{ g.items.length }}</td>
+                <td class="border px-1 py-0.5 text-center">{{ citySchoolCount(g) }}</td>
+                <td class="border px-1 py-0.5 text-center">{{ g.items.reduce((s, i) => s + i.enroll, 0) }}</td>
+                <td class="border px-1 py-0.5 text-center text-red-600">{{ g.items.filter(i => tierLabel(i.score25)==='冲').length || '-' }}</td>
+                <td class="border px-1 py-0.5 text-center text-amber-700">{{ g.items.filter(i => tierLabel(i.score25)==='稳').length || '-' }}</td>
+                <td class="border px-1 py-0.5 text-center text-green-700">{{ g.items.filter(i => tierLabel(i.score25)==='保').length || '-' }}</td>
+                <td class="border px-1 py-0.5 text-center font-bold" :class="probColorClass(cityMaxProb(g))">
+                  <span v-if="cityMaxProb(g) != null">{{ (cityMaxProb(g)*100).toFixed(0) }}%</span>
+                  <span v-else class="text-slate-300">—</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <!-- 14. 城市详情 -->
+        <section class="mb-6 page-break-before">
+          <h2 class="text-lg font-bold mb-2 bg-blue-50 px-2 py-1 border-l-4 border-blue-600">14. 城市详情 — 每城市 志愿列表</h2>
+          <div v-for="g in itemsByCity" :key="'cc-'+g.city" class="mb-3 page-break-inside-avoid">
+            <div class="font-bold text-sm bg-slate-100 px-2 py-1">
+              {{ g.city }} · {{ g.items.length }} 项 · 涉及 {{ citySchoolCount(g) }} 校 · 26 招生 {{ g.items.reduce((s, i) => s + i.enroll, 0) }} 人
+            </div>
+            <table class="w-full text-[10px] border-collapse">
+              <tbody>
+                <tr v-for="it in g.items" :key="it.id" :class="it.plan.isNew==='新增'?'bg-yellow-50':''">
+                  <td class="border px-1 py-0.5 text-center w-8">{{ tierLabel(it.score25) }}</td>
+                  <td class="border px-1 py-0.5">{{ it.plan.schoolName }}</td>
+                  <td class="border px-1 py-0.5">{{ it.plan.majorName26 || it.plan.majorName25 }}</td>
+                  <td class="border px-1 py-0.5 text-center w-16">{{ it.score25 }}/{{ it.rank25 }}</td>
+                  <td class="border px-1 py-0.5 text-center w-10">{{ it.enroll }}人</td>
+                  <td class="border px-1 py-0.5 text-center w-12 font-bold"
+                      :class="probColorClass(it.admit?.prob)">
+                    {{ fmtProb(it.admit) }}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- 15. 转专业风险扫描 -->
+        <section class="mb-6 page-break-before">
+          <h2 class="text-lg font-bold mb-2 bg-blue-50 px-2 py-1 border-l-4 border-blue-600">15. 转专业风险扫描</h2>
           <transfer-risk-section :analysis="analysis" :targets="targets" :accepts="accepts" :compact="true"></transfer-risk-section>
         </section>
       </div>
@@ -5514,6 +5680,38 @@ const __app = createApp({
           .slice(0, 5),
       }));
 
+      // 按 城市 聚合
+      const cityMap = new Map();
+      for (const it of items) {
+        const c = it.plan.city || "(未知)";
+        if (!cityMap.has(c)) cityMap.set(c, {
+          name: c, count: 0, enroll: 0,
+          tiers: { chong: 0, wen: 0, bao: 0, out: 0 },
+          schools: new Set(),
+          items: [],
+        });
+        const row = cityMap.get(c);
+        row.count++;
+        row.enroll += it.enroll;
+        row.tiers[tierOf(it.score25)]++;
+        row.schools.add(it.plan.schoolName);
+        row.items.push(it);
+      }
+      const byCity = Array.from(cityMap.values()).sort((a, b) =>
+        b.count - a.count || a.name.localeCompare(b.name));
+      for (const r of byCity) {
+        r.schoolCount = r.schools.size;
+        delete r.schools;
+        let maxP = null, maxIt = null;
+        for (const it of r.items) {
+          const p = it.admit?.prob;
+          if (p == null) continue;
+          if (maxP == null || p > maxP) { maxP = p; maxIt = it; }
+        }
+        r.maxAdmitProb = maxP;
+        r.maxAdmitItem = maxIt;
+      }
+
       // 按 报考专业 聚合 (用 mainName 收敛同主名不同备注变体)
       const majorMap = new Map();
       for (const it of items) {
@@ -5579,7 +5777,7 @@ const __app = createApp({
         });
       }
       return {
-        items, tiers, byScore, bySchool, byMajor, ranges, enrollByScore25,
+        items, tiers, byScore, bySchool, byMajor, byCity, ranges, enrollByScore25,
         my26: ui.myScore, autoAnchor25: autoAnchor, anchor25, anchorRank25,
         myRank26: ui.myRank, userRank26,
         total, totalEnroll, insights, transferSummary,
