@@ -4535,7 +4535,7 @@ const TransferRiskSection = {
         </div>
       </div>
 
-      <!-- 清单编辑 -->
+      <!-- 清单编辑 (分析页 互动模式) -->
       <div v-if="!compact && showEditor" class="mb-3 grid grid-cols-1 md:grid-cols-2 gap-3 border rounded p-3 bg-slate-50">
         <div>
           <div class="text-xs font-bold text-green-700 mb-1">目标专业 (无需转专业)</div>
@@ -4550,6 +4550,18 @@ const TransferRiskSection = {
                     class="w-full border rounded text-xs p-1.5 font-mono"
                     placeholder="每行一个专业名"></textarea>
           <div class="text-[10px] text-slate-400 mt-1">大类志愿中若有此列专业, 标为"需转".</div>
+        </div>
+      </div>
+
+      <!-- 清单只读 (PDF compact 模式) -->
+      <div v-if="compact" class="mb-3 grid grid-cols-1 md:grid-cols-2 gap-3 border rounded p-2 bg-slate-50 text-[10px] leading-snug">
+        <div>
+          <div class="font-bold text-green-700 mb-1">✓ 目标专业 (无需转, 共 {{(targets || []).length}} 个)</div>
+          <div class="text-slate-700">{{ (targets || []).join('、') || '(空)' }}</div>
+        </div>
+        <div>
+          <div class="font-bold text-amber-700 mb-1">⚠ 可接受转入 (共 {{(accepts || []).length}} 个)</div>
+          <div class="text-slate-700">{{ (accepts || []).join('、') || '(空)' }}</div>
         </div>
       </div>
 
